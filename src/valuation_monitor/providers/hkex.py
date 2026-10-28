@@ -1,11 +1,18 @@
-"""港交所披露易（HKEXnews）：检索并下载上市公司的业绩公告原文 PDF。"""
+"""港交所披露易（HKEXnews）：检索并下载上市公司的业绩公告原文 PDF。
+
+下载过的公告保存在 filings/<股票代码>/ 目录（随代码一起提交到仓库），
+目录中的 index.json 记录每份公告的标题、发布时间和原文链接。
+已经存在的 PDF 不会重复下载；无法访问披露易时，直接使用本地已保存的公告。
+"""
 
 from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 import pandas as pd
 
@@ -32,8 +39,9 @@ def stock_code(symbol: str) -> str:
 
 
 class HkexProvider:
-    def __init__(self, http: HttpClient):
+    def __init__(self, http: HttpClient, archive_dir: str | Path = "filings"):
         self.http = http
+        self.archive_dir = Path(archive_dir)
 
     def _stock_id(self, code: str) -> int:
         raw = self.http.get_bytes(
@@ -49,6 +57,46 @@ class HkexProvider:
 
     def results_announcements(self, symbol: str, since: datetime) -> list[Filing]:
         """返回 since 之后发布的全部业绩公告（英文版），按发布时间升序。"""
+        folder = self.archive_dir / symbol.upper()
+        index_path = folder / "index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
+        by_url = {e["url"]: e for e in index}
+
+        try:
+            found = self._search(symbol, since)
+        except Exception as e:
+            if not index:
+                raise
+            print(f"{symbol}: 无法访问披露易（{e}），使用本地已保存的 {len(index)} 份公告", file=sys.stderr)
+            found = [e for e in index if pd.Timestamp(e["published"]) >= pd.Timestamp(since)]
+
+        filings = []
+        added = False
+        for entry in found:
+            saved = by_url.get(entry["url"])
+            if saved is None:
+                published = pd.Timestamp(entry["published"])
+                saved = {**entry, "file": f"{published:%Y-%m-%d}_{entry['url'].rsplit('/', 1)[-1]}"}
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / saved["file"]).write_bytes(self.http.get_bytes(saved["url"], cache=False))
+                index.append(saved)
+                by_url[saved["url"]] = saved
+                added = True
+            filings.append(
+                Filing(
+                    title=saved["title"],
+                    published=pd.Timestamp(saved["published"]),
+                    url=saved["url"],
+                    pdf=(folder / saved["file"]).read_bytes(),
+                )
+            )
+
+        if added:
+            index.sort(key=lambda e: e["published"])
+            index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return sorted(filings, key=lambda f: f.published)
+
+    def _search(self, symbol: str, since: datetime) -> list[dict]:
         data = self.http.get_json(
             f"{BASE_URL}/search/titleSearchServlet.do",
             params={
@@ -72,18 +120,10 @@ class HkexProvider:
         if data.get("hasNextRow"):
             raise RuntimeError("披露易检索结果超过一页，需要缩小时间范围")
 
-        filings = []
+        found = []
         for row in json.loads(data["result"]):
             title = " ".join(row["TITLE"].split())
-            if not RESULTS_TITLE_RE.match(title):
-                continue
-            url = BASE_URL + row["FILE_LINK"]
-            filings.append(
-                Filing(
-                    title=title,
-                    published=pd.Timestamp(datetime.strptime(row["DATE_TIME"], "%d/%m/%Y %H:%M")),
-                    url=url,
-                    pdf=self.http.get_bytes(url, immutable=True),
-                )
-            )
-        return sorted(filings, key=lambda f: f.published)
+            if RESULTS_TITLE_RE.match(title):
+                published = datetime.strptime(row["DATE_TIME"], "%d/%m/%Y %H:%M")
+                found.append({"title": title, "published": published.isoformat(), "url": BASE_URL + row["FILE_LINK"]})
+        return found

@@ -39,7 +39,9 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 - `--export-eps DIR`：导出从公告中提取的逐季度 EPS，用于核对。
 - `--refresh`：忽略缓存。
 
-行情和公告列表缓存 12 小时，公告 PDF 下载后永久缓存，都存放在 `.cache/` 目录。首次运行要下载约 50 份 PDF（约 20MB）。
+行情和公告列表缓存 12 小时，存放在 `.cache/` 目录。
+
+业绩公告 PDF 原文保存在 `filings/<股票代码>/` 目录，已随代码提交到仓库（腾讯 2014 年以来的 49 份，约 20MB）。`index.json` 记录了每份公告的标题、发布时间和披露易原文链接。程序运行时只会下载新发布的公告；无法访问披露易时，会直接使用本地已保存的公告。以后开发其他功能（如从公告中提取营收、净资产）时，可以直接读取这些文件。
 
 ## 判断方法
 
@@ -95,6 +97,7 @@ src/valuation_monitor/
   metrics/                         指标（base.py 定义接口，pe.py 实现 PE）
   analysis.py                      历史分位和档位判断
   report.py                        文字报告与走势图
+filings/0700.HK/                   已下载的业绩公告 PDF 原文和 index.json
 tests/                             单元测试（离线，不访问网络）
 ```
 

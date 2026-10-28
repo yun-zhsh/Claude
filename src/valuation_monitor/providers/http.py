@@ -21,11 +21,13 @@ class HttpClient:
         self.session = requests.Session()
         self.session.headers["User-Agent"] = USER_AGENT
 
-    def get_bytes(self, url: str, params: dict | None = None, immutable: bool = False, retries: int = 3) -> bytes:
-        """immutable=True 表示内容不会变（如已发布的公告 PDF），缓存永不过期，--refresh 也不重新下载。"""
+    def get_bytes(
+        self, url: str, params: dict | None = None, immutable: bool = False, cache: bool = True, retries: int = 3
+    ) -> bytes:
+        """immutable=True 表示内容不会变，缓存永不过期，--refresh 也不重新下载；cache=False 不读写缓存（调用方自己保存）。"""
         key = hashlib.sha256(json.dumps([url, params], sort_keys=True).encode()).hexdigest()[:24]
         path = self.cache_dir / key
-        if path.exists() and (
+        if cache and path.exists() and (
             immutable or (not self.refresh and time.time() - path.stat().st_mtime < self.ttl_seconds)
         ):
             return path.read_bytes()
@@ -41,8 +43,9 @@ class HttpClient:
                     raise
                 time.sleep(2**attempt)
 
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        path.write_bytes(data)
+        if cache:
+            self.cache_dir.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
         return data
 
     def get_json(self, url: str, params: dict | None = None) -> dict:
