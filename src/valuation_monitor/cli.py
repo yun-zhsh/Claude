@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import sys
 
+import pandas as pd
+
 from valuation_monitor.analysis import evaluate
 from valuation_monitor.config import load_config
 from valuation_monitor.data import DataLoader
@@ -27,9 +29,10 @@ def main(argv: list[str] | None = None) -> int:
     config = load_config(args.config)
     http = HttpClient(cache_dir=args.cache_dir, refresh=args.refresh)
     earnings_store = EarningsStore(args.data_dir)
+    price_store = PriceStore(TencentQuoteProvider(http), YahooProvider(http), args.data_dir)
     loader = DataLoader(
         config,
-        PriceStore(TencentQuoteProvider(http), YahooProvider(http), args.data_dir),
+        price_store,
         HkexProvider(http, f"{args.data_dir}/filings"),
         earnings_store,
     )
@@ -51,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         for issue in earnings.discrepancies():
             print(f"  ⚠ {issue}")
         print(f"  EPS 明细  {earnings_store.paths(stock.symbol)['quarterly']}")
+        print(f"  股价核对  {price_summary(price_store.final_path(stock.symbol), config.lookback_years)}")
         print()
 
         for key in stock.metrics:
@@ -67,3 +71,15 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  走势图    {plot(stock, metric, series, v, args.plot)}")
             print()
     return 1 if failed else 0
+
+
+STATUS_LABELS = {"agree": "一致", "mismatch": "不一致", "tencent_only": "仅腾讯", "yahoo_only": "仅 Yahoo"}
+
+
+def price_summary(final_path, lookback_years: int) -> str:
+    """回看区间内腾讯证券与 Yahoo 的股价核对结果。"""
+    final = pd.read_csv(final_path, index_col="date", parse_dates=True)
+    final = final[final.index >= final.index[-1] - pd.DateOffset(years=lookback_years)]
+    counts = final["status"].value_counts()
+    parts = [f"{STATUS_LABELS[k]} {counts[k]} 天" for k in STATUS_LABELS if k in counts]
+    return f"腾讯证券 vs Yahoo（还原除权调整后）：{'，'.join(parts)}（明细见 {final_path}）"

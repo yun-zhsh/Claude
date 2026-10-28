@@ -1,4 +1,8 @@
-"""Yahoo Finance：日线收盘价（已做拆股复权、未做分红复权）和拆股记录；汇率用 XXXYYY=X 代码获取。"""
+"""Yahoo Finance：日线行情、拆股记录；汇率用 XXXYYY=X 代码获取。
+
+注意 Yahoo 的 close 不是原始成交价：除拆股外，它还会把实物分派等当作除权回溯调整；
+adjclose 在此基础上再按现金分红调整。两者在发生新的除权事件后都会整体改变。
+"""
 
 from __future__ import annotations
 
@@ -18,6 +22,7 @@ class PriceHistory:
     splits: pd.Series  # 索引为拆股生效日，值为拆股比例（如 5:1 记为 5.0）
     currency: str
     timezone: str = "UTC"  # 交易所时区
+    bars: pd.DataFrame | None = None  # open, high, low, close, adjclose, volume
 
 
 class YahooProvider:
@@ -43,9 +48,13 @@ class YahooProvider:
         def to_dates(ts) -> pd.DatetimeIndex:
             return pd.to_datetime(ts, unit="s", utc=True).tz_convert(tz).tz_localize(None).normalize()
 
-        close = pd.Series(r["indicators"]["quote"][0]["close"], index=to_dates(r.get("timestamp", [])), dtype=float)
-        close = close.dropna()
-        close = close[~close.index.duplicated(keep="last")].sort_index()
+        quote = r["indicators"]["quote"][0] if r.get("timestamp") else {}
+        columns = {c: quote.get(c, []) for c in ("open", "high", "low", "close")}
+        columns["adjclose"] = (r["indicators"].get("adjclose") or [{}])[0].get("adjclose", columns["close"])
+        columns["volume"] = quote.get("volume", [])
+        bars = pd.DataFrame(columns, index=to_dates(r.get("timestamp", [])), dtype=float).dropna(subset=["close"])
+        bars = bars[~bars.index.duplicated(keep="last")].sort_index()
+        close = bars["close"]
 
         raw_splits = (r.get("events") or {}).get("splits") or {}
         splits = pd.Series(
@@ -54,4 +63,4 @@ class YahooProvider:
             dtype=float,
         ).sort_index()
 
-        return PriceHistory(close=close, splits=splits, currency=r["meta"]["currency"], timezone=tz)
+        return PriceHistory(close=close, splits=splits, currency=r["meta"]["currency"], timezone=tz, bars=bars)

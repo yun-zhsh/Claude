@@ -25,8 +25,8 @@ class TencentQuoteProvider:
     def __init__(self, http: HttpClient):
         self.http = http
 
-    def daily_close(self, symbol: str, start: datetime) -> pd.Series:
-        """start 至今的日线收盘价，索引为交易日。"""
+    def daily_bars(self, symbol: str, start: datetime) -> pd.DataFrame:
+        """start 至今的日线（open, high, low, close, volume），索引为交易日。"""
         code = f"hk{stock_code(symbol)}"
         parts = []
         for year in range(pd.Timestamp(start).year, datetime.now().year + 1):
@@ -37,6 +37,13 @@ class TencentQuoteProvider:
             if data.get("code") != 0 or not isinstance(data.get("data"), dict):
                 raise RuntimeError(f"腾讯行情接口返回错误: {data.get('msg')}")
             rows = data["data"][code].get("day", [])
-            parts.append(pd.Series({pd.Timestamp(r[0]): float(r[2]) for r in rows}, dtype=float))
-        close = pd.concat(parts)
-        return close[~close.index.duplicated(keep="last")].sort_index()
+            # 每行依次为：日期、开盘、收盘、最高、最低、成交量（之后可能还有除权信息等）
+            parts.append(
+                pd.DataFrame(
+                    [[float(x) for x in (r[1], r[3], r[4], r[2], r[5])] for r in rows],
+                    index=pd.to_datetime([r[0] for r in rows]),
+                    columns=["open", "high", "low", "close", "volume"],
+                )
+            )
+        bars = pd.concat(parts)
+        return bars[~bars.index.duplicated(keep="last")].sort_index()
