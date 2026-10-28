@@ -1,4 +1,4 @@
-"""Yahoo Finance：日线收盘价（已做拆股复权、未做分红复权）、拆股记录、汇率。"""
+"""Yahoo Finance：日线收盘价（已做拆股复权、未做分红复权）和拆股记录；汇率用 XXXYYY=X 代码获取。"""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ class PriceHistory:
     close: pd.Series  # 索引为交易日（无时区的日期），值为收盘价
     splits: pd.Series  # 索引为拆股生效日，值为拆股比例（如 5:1 记为 5.0）
     currency: str
+    timezone: str = "UTC"  # 交易所时区
 
 
 class YahooProvider:
@@ -53,10 +54,4 @@ class YahooProvider:
             dtype=float,
         ).sort_index()
 
-        return PriceHistory(close=close, splits=splits, currency=r["meta"]["currency"])
-
-    def fx_history(self, from_ccy: str, to_ccy: str, start: datetime) -> pd.Series:
-        """1 单位 from_ccy 兑换多少 to_ccy 的日线序列。"""
-        if from_ccy == to_ccy:
-            return pd.Series(dtype=float)
-        return self.price_history(f"{from_ccy}{to_ccy}=X", start).close
+        return PriceHistory(close=close, splits=splits, currency=r["meta"]["currency"], timezone=tz)

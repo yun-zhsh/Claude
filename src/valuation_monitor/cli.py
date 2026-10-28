@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
 
 from valuation_monitor.analysis import evaluate
 from valuation_monitor.config import load_config
@@ -10,22 +9,30 @@ from valuation_monitor.data import DataLoader
 from valuation_monitor.metrics import METRICS
 from valuation_monitor.providers.hkex import HkexProvider
 from valuation_monitor.providers.http import HttpClient
+from valuation_monitor.providers.tencent import TencentQuoteProvider
 from valuation_monitor.providers.yahoo import YahooProvider
 from valuation_monitor.report import format_text, plot
+from valuation_monitor.store import EarningsStore, PriceStore
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="valuation-monitor", description="监控股票估值处于历史高位还是低位")
     parser.add_argument("-c", "--config", default="config.yaml", help="配置文件路径（默认 config.yaml）")
     parser.add_argument("--plot", metavar="DIR", help="把指标走势图保存到该目录")
-    parser.add_argument("--export-eps", metavar="DIR", help="把从公告中提取的逐季度 EPS 导出为 CSV，便于核对")
-    parser.add_argument("--refresh", action="store_true", help="忽略缓存，重新下载行情和公告列表")
+    parser.add_argument("--data-dir", default="data", help="行情、公告、EPS 的保存目录（默认 data）")
+    parser.add_argument("--refresh", action="store_true", help="忽略 12 小时的网络请求缓存")
     parser.add_argument("--cache-dir", default=".cache", help="数据缓存目录（默认 .cache）")
     args = parser.parse_args(argv)
 
     config = load_config(args.config)
     http = HttpClient(cache_dir=args.cache_dir, refresh=args.refresh)
-    loader = DataLoader(config, YahooProvider(http), HkexProvider(http))
+    earnings_store = EarningsStore(args.data_dir)
+    loader = DataLoader(
+        config,
+        PriceStore(TencentQuoteProvider(http), YahooProvider(http), args.data_dir),
+        HkexProvider(http, f"{args.data_dir}/filings"),
+        earnings_store,
+    )
 
     failed = False
     for stock in config.stocks:
@@ -43,12 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         for issue in earnings.discrepancies():
             print(f"  ⚠ {issue}")
-        if args.export_eps:
-            out = Path(args.export_eps)
-            out.mkdir(parents=True, exist_ok=True)
-            path = out / f"{stock.symbol}_eps.csv"
-            earnings.quarters_frame().to_csv(path, index=False, encoding="utf-8-sig")
-            print(f"  EPS 明细  {path}")
+        print(f"  EPS 明细  {earnings_store.paths(stock.symbol)['quarterly']}")
         print()
 
         for key in stock.metrics:

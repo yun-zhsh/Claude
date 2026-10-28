@@ -8,9 +8,9 @@ from datetime import datetime
 import pandas as pd
 
 from valuation_monitor.config import Config, StockConfig
-from valuation_monitor.filings import EarningsHistory, build_history, parse_announcement
+from valuation_monitor.filings import EarningsHistory
 from valuation_monitor.providers.hkex import HkexProvider
-from valuation_monitor.providers.yahoo import YahooProvider
+from valuation_monitor.store import EarningsStore, PriceStore
 
 
 @dataclass
@@ -24,22 +24,23 @@ class StockData:
 
 
 class DataLoader:
-    def __init__(self, config: Config, yahoo: YahooProvider, hkex: HkexProvider):
+    def __init__(self, config: Config, prices: PriceStore, hkex: HkexProvider, earnings: EarningsStore):
         self.config = config
-        self.yahoo = yahoo
+        self.prices = prices
         self.hkex = hkex
+        self.earnings = earnings
 
     def load(self, stock: StockConfig) -> StockData:
         # 行情多取一年；公告多取两年，保证回看窗口起点就能凑齐 4 个季度算 TTM
         now = datetime.now()
-        prices = self.yahoo.price_history(stock.symbol, now - pd.DateOffset(years=self.config.lookback_years + 1))
+        prices = self.prices.prices(stock.symbol, now - pd.DateOffset(years=self.config.lookback_years + 1))
         filings = self.hkex.results_announcements(stock.symbol, now - pd.DateOffset(years=self.config.lookback_years + 2))
-        earnings = build_history([parse_announcement(f, prices.splits) for f in filings])
+        earnings = self.earnings.load(stock.symbol, filings, prices.splits)
 
         if earnings.currency == prices.currency:
             fx = pd.Series(1.0, index=prices.close.index)
         else:
-            raw_fx = self.yahoo.fx_history(earnings.currency, prices.currency, prices.close.index[0])
+            raw_fx = self.prices.fx(earnings.currency, prices.currency, prices.close.index[0])
             fx = raw_fx.reindex(raw_fx.index.union(prices.close.index)).sort_index().ffill()
             fx = fx.reindex(prices.close.index)
 
