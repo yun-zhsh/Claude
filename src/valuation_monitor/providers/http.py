@@ -1,4 +1,4 @@
-"""带磁盘缓存和重试的 JSON 请求。"""
+"""带磁盘缓存和重试的 HTTP 请求。"""
 
 from __future__ import annotations
 
@@ -21,23 +21,29 @@ class HttpClient:
         self.session = requests.Session()
         self.session.headers["User-Agent"] = USER_AGENT
 
-    def get_json(self, url: str, params: dict | None = None, retries: int = 3) -> dict:
+    def get_bytes(self, url: str, params: dict | None = None, immutable: bool = False, retries: int = 3) -> bytes:
+        """immutable=True 表示内容不会变（如已发布的公告 PDF），缓存永不过期，--refresh 也不重新下载。"""
         key = hashlib.sha256(json.dumps([url, params], sort_keys=True).encode()).hexdigest()[:24]
-        path = self.cache_dir / f"{key}.json"
-        if not self.refresh and path.exists() and time.time() - path.stat().st_mtime < self.ttl_seconds:
-            return json.loads(path.read_text(encoding="utf-8"))
+        path = self.cache_dir / key
+        if path.exists() and (
+            immutable or (not self.refresh and time.time() - path.stat().st_mtime < self.ttl_seconds)
+        ):
+            return path.read_bytes()
 
         for attempt in range(retries):
             try:
-                resp = self.session.get(url, params=params, timeout=30)
+                resp = self.session.get(url, params=params, timeout=60)
                 resp.raise_for_status()
-                data = resp.json()
+                data = resp.content
                 break
-            except (requests.RequestException, ValueError):
+            except requests.RequestException:
                 if attempt == retries - 1:
                     raise
                 time.sleep(2**attempt)
 
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        path.write_bytes(data)
         return data
+
+    def get_json(self, url: str, params: dict | None = None) -> dict:
+        return json.loads(self.get_bytes(url, params))

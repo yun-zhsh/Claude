@@ -13,13 +13,10 @@ levels:
   - { upper: 90, label: 高估 }
   - { upper: 100, label: 极度高估 }
 
-# 财报发布滞后天数：报告期结束后多少天才视为“市场已知”，避免用到未来数据
-publish_lag_days:
-  annual: 90   # 年报
-  interim: 60  # 季报 / 中报
-
+# 可用指标：
+#   pe           PE (TTM)，按 IFRS 口径的归母净利润
+#   pe_non_ifrs  PE Non-IFRS (TTM)，按公司披露的 Non-IFRS 利润，剔除投资收益等一次性项目
 stocks:
-  - symbol: 0700.HK        # Yahoo Finance 代码
+  - symbol: 0700.HK   # Yahoo Finance 代码
     name: 腾讯控股
-    report_currency: CNY   # 财报（EPS）币种；股价币种自动从行情数据获取
-    metrics: [pe]
+    metrics: [pe, pe_non_ifrs]
