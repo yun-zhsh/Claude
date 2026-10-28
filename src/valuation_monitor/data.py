@@ -1,0 +1,53 @@
+"""把各数据源的原始数据整理成指标计算需要的形式。"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+
+import pandas as pd
+
+from valuation_monitor.config import Config, StockConfig
+from valuation_monitor.filings import EarningsHistory, build_history, parse_announcement
+from valuation_monitor.providers.hkex import HkexProvider
+from valuation_monitor.providers.yahoo import YahooProvider
+
+
+@dataclass
+class StockData:
+    stock: StockConfig
+    close: pd.Series  # 交易日收盘价，股价币种
+    price_currency: str
+    fx: pd.Series  # 与 close 同索引：1 单位财报币种 = 多少股价币种
+    fundamentals: pd.DataFrame  # report_date, available_date, eps_ttm, non_ifrs_eps_ttm（财报币种）
+    earnings: EarningsHistory | None = None
+
+
+class DataLoader:
+    def __init__(self, config: Config, yahoo: YahooProvider, hkex: HkexProvider):
+        self.config = config
+        self.yahoo = yahoo
+        self.hkex = hkex
+
+    def load(self, stock: StockConfig) -> StockData:
+        # 行情多取一年；公告多取两年，保证回看窗口起点就能凑齐 4 个季度算 TTM
+        now = datetime.now()
+        prices = self.yahoo.price_history(stock.symbol, now - pd.DateOffset(years=self.config.lookback_years + 1))
+        filings = self.hkex.results_announcements(stock.symbol, now - pd.DateOffset(years=self.config.lookback_years + 2))
+        earnings = build_history([parse_announcement(f, prices.splits) for f in filings])
+
+        if earnings.currency == prices.currency:
+            fx = pd.Series(1.0, index=prices.close.index)
+        else:
+            raw_fx = self.yahoo.fx_history(earnings.currency, prices.currency, prices.close.index[0])
+            fx = raw_fx.reindex(raw_fx.index.union(prices.close.index)).sort_index().ffill()
+            fx = fx.reindex(prices.close.index)
+
+        return StockData(
+            stock=stock,
+            close=prices.close,
+            price_currency=prices.currency,
+            fx=fx,
+            fundamentals=earnings.ttm,
+            earnings=earnings,
+        )
