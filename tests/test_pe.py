@@ -118,3 +118,11 @@ def test_parse_config_us_stock():
 def test_non_gaap_pe_uses_non_gaap_eps():
     data = make_data({"2024-06-01": 100.0}, fx=2.0, ttm_rows=[("2024-01-01", 10.0, 20.0)])
     assert METRICS["pe_non_gaap"].compute(data).iloc[0] == pytest.approx(100 / (20 * 2.0))
+
+
+def test_parse_config_korean_stock():
+    kr = parse_config({"stocks": [{"symbol": "005930.KS", "name": "三星电子", "metrics": ["pe"]}]}).stocks[0]
+    assert (kr.market, kr.filing_format, kr.cik) == ("KR", "kifrs_statements", None)
+    assert not kr.cross_checks_prices and "三星" in kr.filing_source
+    with pytest.raises(ValueError, match="不匹配"):
+        parse_config({"stocks": [{"symbol": "005930.KS", "filing_format": "highlights"}]})

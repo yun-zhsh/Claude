@@ -1,0 +1,492 @@
+[
+  {
+    "year": 2014,
+    "quarter": 3,
+    "published": "2014-10-30T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2014_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2014Q3_2014_con_quarter03_bs.pdf",
+      "soi": "2014Q3_2014_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2014,
+    "quarter": 4,
+    "published": "2015-01-29T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2014_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2014Q4_2014_con_quarter04_bs.pdf",
+      "soi": "2014Q4_2014_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2015,
+    "quarter": 1,
+    "published": "2015-04-29T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2015_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2015Q1_2015_con_quarter01_bs.pdf",
+      "soi": "2015Q1_2015_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2015,
+    "quarter": 2,
+    "published": "2015-07-30T09:30:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2015_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2015Q2_2015_con_quarter02_bs.pdf",
+      "soi": "2015Q2_2015_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2015,
+    "quarter": 3,
+    "published": "2015-10-29T09:30:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2015_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2015Q3_2015_con_quarter03_bs.pdf",
+      "soi": "2015Q3_2015_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2015,
+    "quarter": 4,
+    "published": "2016-01-28T09:30:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2015_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2015Q4_2015_con_quarter04_bs.pdf",
+      "soi": "2015Q4_2015_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2016,
+    "quarter": 1,
+    "published": "2016-04-28T09:30:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2016_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2016Q1_2016_con_quarter01_bs.pdf",
+      "soi": "2016Q1_2016_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2016,
+    "quarter": 2,
+    "published": "2016-07-28T09:30:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2016_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2016Q2_2016_con_quarter02_bs.pdf",
+      "soi": "2016Q2_2016_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2016,
+    "quarter": 3,
+    "published": "2016-10-27T09:30:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2016_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2016Q3_2016_con_quarter03_bs.pdf",
+      "soi": "2016Q3_2016_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2016,
+    "quarter": 4,
+    "published": "2017-01-24T09:30:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2016_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2016Q4_2016_con_quarter04_bs.pdf",
+      "soi": "2016Q4_2016_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2017,
+    "quarter": 1,
+    "published": "2017-04-27T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2017_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2017Q1_2017_con_quarter01_bs.pdf",
+      "soi": "2017Q1_2017_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2017,
+    "quarter": 2,
+    "published": "2017-07-27T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2017_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2017Q2_2017_con_quarter02_bs.pdf",
+      "soi": "2017Q2_2017_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2017,
+    "quarter": 3,
+    "published": "2017-10-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2017_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2017Q3_2017_con_quarter03_bs.pdf",
+      "soi": "2017Q3_2017_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2017,
+    "quarter": 4,
+    "published": "2018-01-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2017_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2017Q4_2017_con_quarter04_bs.pdf",
+      "soi": "2017Q4_2017_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2018,
+    "quarter": 1,
+    "published": "2018-04-26T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2018_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2018Q1_2018_con_quarter01_bs.pdf",
+      "soi": "2018Q1_2018_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2018,
+    "quarter": 2,
+    "published": "2018-07-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2018_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2018Q2_2018_con_quarter02_bs.pdf",
+      "soi": "2018Q2_2018_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2018,
+    "quarter": 3,
+    "published": "2018-10-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2018_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2018Q3_2018_con_quarter03_bs.pdf",
+      "soi": "2018Q3_2018_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2018,
+    "quarter": 4,
+    "published": "2019-01-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2018_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2018Q4_2018_con_quarter04_bs.pdf",
+      "soi": "2018Q4_2018_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2019,
+    "quarter": 1,
+    "published": "2019-04-30T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2019_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2019Q1_2019_con_quarter01_bs.pdf",
+      "soi": "2019Q1_2019_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2019,
+    "quarter": 2,
+    "published": "2019-07-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2019_con_quarter02_soi_new.pdf",
+    "files": {
+      "bs": "2019Q2_2019_con_quarter02_bs_new.pdf",
+      "soi": "2019Q2_2019_con_quarter02_soi_new.pdf"
+    }
+  },
+  {
+    "year": 2019,
+    "quarter": 3,
+    "published": "2019-10-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2019_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2019Q3_2019_con_quarter03_bs.pdf",
+      "soi": "2019Q3_2019_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2019,
+    "quarter": 4,
+    "published": "2020-01-30T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2019_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2019Q4_2019_con_quarter04_bs.pdf",
+      "soi": "2019Q4_2019_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2020,
+    "quarter": 1,
+    "published": "2020-04-29T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2020_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2020Q1_2020_con_quarter01_bs.pdf",
+      "soi": "2020Q1_2020_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2020,
+    "quarter": 2,
+    "published": "2020-07-30T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2020_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2020Q2_2020_con_quarter02_bs.pdf",
+      "soi": "2020Q2_2020_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2020,
+    "quarter": 3,
+    "published": "2020-10-29T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2020_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2020Q3_2020_con_quarter03_bs.pdf",
+      "soi": "2020Q3_2020_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2020,
+    "quarter": 4,
+    "published": "2021-01-28T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2020_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2020Q4_2020_con_quarter04_bs.pdf",
+      "soi": "2020Q4_2020_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2021,
+    "quarter": 1,
+    "published": "2021-04-29T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2021_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2021Q1_2021_con_quarter01_bs.pdf",
+      "soi": "2021Q1_2021_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2021,
+    "quarter": 2,
+    "published": "2021-07-29T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2021_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2021Q2_2021_con_quarter02_bs.pdf",
+      "soi": "2021Q2_2021_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2021,
+    "quarter": 3,
+    "published": "2021-10-28T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2021_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2021Q3_2021_con_quarter03_bs.pdf",
+      "soi": "2021Q3_2021_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2021,
+    "quarter": 4,
+    "published": "2022-01-27T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2021_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2021Q4_2021_con_quarter04_bs.pdf",
+      "soi": "2021Q4_2021_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2022,
+    "quarter": 1,
+    "published": "2022-04-28T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2022_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2022Q1_2022_con_quarter01_bs.pdf",
+      "soi": "2022Q1_2022_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2022,
+    "quarter": 2,
+    "published": "2022-07-28T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2022_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2022Q2_2022_con_quarter02_bs.pdf",
+      "soi": "2022Q2_2022_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2022,
+    "quarter": 3,
+    "published": "2022-10-27T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2022_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2022Q3_2022_con_quarter03_bs.pdf",
+      "soi": "2022Q3_2022_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2022,
+    "quarter": 4,
+    "published": "2023-01-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2022_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2022Q4_2022_con_quarter04_bs.pdf",
+      "soi": "2022Q4_2022_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2023,
+    "quarter": 1,
+    "published": "2023-04-27T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2023_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2023Q1_2023_con_quarter01_bs.pdf",
+      "soi": "2023Q1_2023_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2023,
+    "quarter": 2,
+    "published": "2023-07-27T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2023_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2023Q2_2023_con_quarter02_bs.pdf",
+      "soi": "2023Q2_2023_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2023,
+    "quarter": 3,
+    "published": "2023-10-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2023_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2023Q3_2023_con_quarter03_bs.pdf",
+      "soi": "2023Q3_2023_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2023,
+    "quarter": 4,
+    "published": "2024-01-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2023_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2023Q4_2023_con_quarter04_bs.pdf",
+      "soi": "2023Q4_2023_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2024,
+    "quarter": 1,
+    "published": "2024-04-30T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2024_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2024Q1_2024_con_quarter01_bs.pdf",
+      "soi": "2024Q1_2024_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2024,
+    "quarter": 2,
+    "published": "2024-07-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2024_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2024Q2_2024_con_quarter02_bs.pdf",
+      "soi": "2024Q2_2024_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2024,
+    "quarter": 3,
+    "published": "2024-10-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2024_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2024Q3_2024_con_quarter03_bs.pdf",
+      "soi": "2024Q3_2024_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2024,
+    "quarter": 4,
+    "published": "2025-01-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2024_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2024Q4_2024_con_quarter04_bs.pdf",
+      "soi": "2024Q4_2024_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2025,
+    "quarter": 1,
+    "published": "2025-04-30T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2025_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2025Q1_2025_con_quarter01_bs.pdf",
+      "soi": "2025Q1_2025_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2025,
+    "quarter": 2,
+    "published": "2025-07-31T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2025_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2025Q2_2025_con_quarter02_bs.pdf",
+      "soi": "2025Q2_2025_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2025,
+    "quarter": 3,
+    "published": "2025-10-30T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2025_con_quarter03_soi.pdf",
+    "files": {
+      "bs": "2025Q3_2025_con_quarter03_bs.pdf",
+      "soi": "2025Q3_2025_con_quarter03_soi.pdf"
+    }
+  },
+  {
+    "year": 2025,
+    "quarter": 4,
+    "published": "2026-01-29T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2025_con_quarter04_soi.pdf",
+    "files": {
+      "bs": "2025Q4_2025_con_quarter04_bs.pdf",
+      "soi": "2025Q4_2025_con_quarter04_soi.pdf"
+    }
+  },
+  {
+    "year": 2026,
+    "quarter": 1,
+    "published": "2026-04-30T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2026_con_quarter01_soi.pdf",
+    "files": {
+      "bs": "2026Q1_2026_con_quarter01_bs.pdf",
+      "soi": "2026Q1_2026_con_quarter01_soi.pdf"
+    }
+  },
+  {
+    "year": 2026,
+    "quarter": 2,
+    "published": "2026-07-30T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2026_con_quarter02_soi.pdf",
+    "files": {
+      "bs": "2026Q2_2026_con_quarter02_bs.pdf",
+      "soi": "2026Q2_2026_con_quarter02_soi.pdf"
+    }
+  },
+  {
+    "year": 2026,
+    "quarter": 3,
+    "published": "2026-10-29T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2026_3Q_conference_eng.pdf",
+    "files": {
+      "deck": "2026Q3_2026_3Q_conference_eng.pdf"
+    },
+    "provisional": true
+  }
+]
