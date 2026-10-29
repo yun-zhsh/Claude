@@ -46,5 +46,5 @@ def test_archive_saves_once_and_works_offline(tmp_path):
 
     provider.online = False
     offline = provider.results_announcements("0700.HK", datetime(2026, 1, 1))
-    assert [(f.title, f.published, f.pdf) for f in offline] == [(f.title, f.published, f.pdf) for f in first]
+    assert [(f.title, f.published, f.content) for f in offline] == [(f.title, f.published, f.content) for f in first]
     assert provider.results_announcements("0700.HK", datetime(2026, 9, 1)) == []

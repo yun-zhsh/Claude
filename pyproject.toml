@@ -11,6 +11,8 @@ dependencies = [
     "matplotlib>=3.7",
     "pypdf>=4.0",
     "flask>=3.0",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
 ]
 
 [project.optional-dependencies]

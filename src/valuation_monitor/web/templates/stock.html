@@ -51,7 +51,7 @@
 {% endfor %}
 
 <section class="card chart-card">
-  <h2>股价走势（{{ report.data.price_currency }}，实际成交价，过去 <span data-years-label>{{ default_years }}</span> 年）</h2>
+  <h2>股价走势（{{ report.data.price_currency }}，{{ '实际成交价' if report.stock.cross_checks_prices else '收盘价' }}，过去 <span data-years-label>{{ default_years }}</span> 年）</h2>
   <div class="chart-box"><canvas id="chart-price"></canvas></div>
 </section>
 
@@ -64,8 +64,12 @@
     <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='raw.zip') }}" download="{{ download_name(report.stock.symbol, 'raw.zip') }}">全部原始数据（zip）</a>
   </div>
   <ul class="muted small">
+    {% if report.stock.cross_checks_prices %}
     <li>历史股价：每个交易日最终采用的收盘价，以及腾讯证券、Yahoo 两个来源的价格和核对状态。</li>
-    <li>历史业绩：从港交所业绩公告原文提取的每期（季度或半年）营收、归母净利润、基本 EPS、期末归母净资产，含首次公布时间、生效交易日、被几份公告证实、原文链接。</li>
+    {% else %}
+    <li>历史股价：每个交易日的收盘价（来自 Yahoo Finance，已按拆股调整）。</li>
+    {% endif %}
+    <li>历史业绩：从{{ report.stock.filing_source }}业绩公告原文提取的每期（季度或半年）营收、归母净利润、基本 EPS、期末归母净资产，含首次公布时间、生效交易日、被几份公告证实、原文链接。</li>
     <li>每股指标：每份公告发布后计算估值所用的 TTM EPS、每股营收、每股净资产及股数。</li>
     <li>全部原始数据：各来源的原始行情、汇率、公告解析结果和公告索引。</li>
   </ul>
@@ -75,10 +79,14 @@
   <h2>数据来源与核对</h2>
   <dl class="stats">
     <dt>业绩数据</dt>
-    <dd>港交所披露易 {{ report.data.earnings.announcements|length }} 份业绩公告原文，币种 {{ report.data.earnings.currency }}</dd>
+    <dd>{{ report.stock.filing_source }} {{ report.data.earnings.announcements|length }} 份业绩公告原文，币种 {{ report.data.earnings.currency }}</dd>
     <dt>股价核对</dt>
+    {% if report.stock.cross_checks_prices %}
     <dd>腾讯证券 vs Yahoo（还原除权调整后），近 {{ max_lookback_years }} 年：
       {% for k, n in report.price_check.items() %}{{ status_labels[k] }} {{ n }} 天{% if not loop.last %}，{% endif %}{% endfor %}</dd>
+    {% else %}
+    <dd>仅 Yahoo Finance 一个来源，没有第二个来源可以核对（腾讯证券的美股行情接口有访问限制）</dd>
+    {% endif %}
   </dl>
   {% if report.discrepancies %}
   <div class="warnings">

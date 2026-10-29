@@ -17,6 +17,14 @@ class NonIfrsPE(PriceMultiple):
     column = "non_ifrs_eps_ttm"
 
 
+class NonGaapPE(PriceMultiple):
+    """用公司披露的 Non-GAAP 利润计算（美股公司的口径），剔除股权激励、投资损益等项目。"""
+
+    key = "pe_non_gaap"
+    label = "PE Non-GAAP (TTM)"
+    column = "non_ifrs_eps_ttm"
+
+
 class PS(PriceMultiple):
     """市销率：股价 ÷ 每股营收（最近 4 个季度营收之和 ÷ 最新一季的加权平均股数）。"""
 

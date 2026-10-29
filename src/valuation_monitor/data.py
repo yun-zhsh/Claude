@@ -9,7 +9,9 @@ import pandas as pd
 
 from valuation_monitor.config import Config, StockConfig
 from valuation_monitor.filings import EarningsHistory
+from valuation_monitor.market_calendar import get_market
 from valuation_monitor.providers.hkex import HkexProvider
+from valuation_monitor.providers.sec import SecProvider
 from valuation_monitor.store import EarningsStore, PriceStore
 
 
@@ -24,18 +26,24 @@ class StockData:
 
 
 class DataLoader:
-    def __init__(self, config: Config, prices: PriceStore, hkex: HkexProvider, earnings: EarningsStore):
+    def __init__(self, config: Config, prices: PriceStore, hkex: HkexProvider, sec: SecProvider, earnings: EarningsStore):
         self.config = config
         self.prices = prices
         self.hkex = hkex
+        self.sec = sec
         self.earnings = earnings
 
     def load(self, stock: StockConfig) -> StockData:
         # 行情多取一年；公告多取两年，保证回看窗口起点就能凑齐 4 个季度算 TTM
         now = datetime.now()
-        prices = self.prices.prices(stock.symbol, now - pd.DateOffset(years=self.config.max_lookback + 1))
-        filings = self.hkex.results_announcements(stock.symbol, now - pd.DateOffset(years=self.config.max_lookback + 2))
-        earnings = self.earnings.load(stock.symbol, filings, prices.splits, prices.close.index, stock.filing_format)
+        market = get_market(stock.market)
+        prices = self.prices.prices(stock.symbol, now - pd.DateOffset(years=self.config.max_lookback + 1), market)
+        since = now - pd.DateOffset(years=self.config.max_lookback + 2)
+        if stock.market == "US":
+            filings = self.sec.results_announcements(stock.symbol, stock.cik, since)
+        else:
+            filings = self.hkex.results_announcements(stock.symbol, since)
+        earnings = self.earnings.load(stock.symbol, filings, prices.splits, prices.close.index, stock.filing_format, market)
 
         if earnings.currency == prices.currency:
             fx = pd.Series(1.0, index=prices.close.index)

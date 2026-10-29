@@ -29,14 +29,14 @@ from valuation_monitor.filings import (
     build_history,
     parse_announcement,
 )
+from valuation_monitor.market_calendar import HK, Market
 from valuation_monitor.prices import consolidate
-from valuation_monitor.providers.hkex import Filing
+from valuation_monitor.providers.base import Filing
 from valuation_monitor.providers.tencent import TencentQuoteProvider
 from valuation_monitor.providers.yahoo import PriceHistory, YahooProvider
 
 OVERLAP_DAYS = 7  # 增量下载时与已保存数据重叠的天数，用于核对数据源是否改动了历史数据
 MISMATCH_TOLERANCE = 1e-4  # 相对差异
-MARKET_TIMEZONE = "Asia/Hong_Kong"
 
 
 def write_if_changed(path: Path, text: str) -> None:
@@ -84,24 +84,34 @@ class PriceStore:
     def final_path(self, symbol: str) -> Path:
         return self.root / "prices" / symbol / "final.csv"
 
-    def prices(self, symbol: str, start: datetime) -> PriceHistory:
-        """最终采用的收盘价（已按拆股换算到当前股本口径）和拆股记录。"""
+    def prices(self, symbol: str, start: datetime, market: Market = HK) -> PriceHistory:
+        """最终采用的收盘价（已按拆股换算到当前股本口径）和拆股记录。
+
+        港股有腾讯证券（实际成交价）和 Yahoo 两个来源，互相核对；美股只用 Yahoo 一个来源
+        （腾讯证券的美股接口有访问限制），Yahoo 对美股的收盘价已经按拆股调整，不再重复调整。
+        """
         folder = self.root / "prices" / symbol
-        tencent = self._frame(
-            folder / "tencent.csv",
-            folder / "tencent.json",
-            source=f"腾讯证券行情接口 {symbol}（未复权）",
-            fetch=lambda since: self.quotes.daily_bars(symbol, since),
-            start=start,
-            decimals=BAR_DECIMALS,
-            frozen=True,
-        )
+        if market.key == "HK":
+            tencent = self._frame(
+                folder / "tencent.csv",
+                folder / "tencent.json",
+                source=f"腾讯证券行情接口 {symbol}（未复权）",
+                fetch=lambda since: self.quotes.daily_bars(symbol, since),
+                start=start,
+                decimals=BAR_DECIMALS,
+                frozen=True,
+                timezone=market.timezone,
+            )
+        else:
+            tencent = pd.DataFrame(columns=list(BAR_DECIMALS), dtype=float)
 
         found_splits = []
+        found_currency = []
 
         def fetch_yahoo(since: datetime) -> pd.DataFrame:
             h = self.yahoo.price_history(symbol, since)
             found_splits.append(h.splits)
+            found_currency.append(h.currency)
             return h.bars
 
         try:
@@ -113,12 +123,18 @@ class PriceStore:
                 start=start,
                 decimals=YAHOO_DECIMALS,
                 frozen=False,  # Yahoo 的调整价会因新的除权回溯变化，发现变化时整段重新下载
+                timezone=market.timezone,
             )
         except Exception as e:
+            if market.key != "HK":
+                raise
             print(f"Yahoo Finance {symbol}: 无法获取（{e}），只用腾讯证券的数据", file=sys.stderr)
             yahoo = pd.DataFrame(columns=list(YAHOO_DECIMALS))
 
         yahoo_meta = read_meta(folder / "yahoo.json")
+        if found_currency and market.key != "HK":
+            yahoo_meta["currency"] = found_currency[-1]
+            write_meta(folder / "yahoo.json", yahoo_meta)
         splits = {pd.Timestamp(d): r for d, r in yahoo_meta.get("splits", {}).items()}
         for found in found_splits:
             splits.update(found.to_dict())
@@ -128,11 +144,12 @@ class PriceStore:
         splits = pd.Series(splits, dtype=float).sort_index()
 
         final = consolidate(tencent, yahoo)
-        today = pd.Timestamp.now(tz=MARKET_TIMEZONE).tz_localize(None).normalize()
+        today = pd.Timestamp.now(tz=market.timezone).tz_localize(None).normalize()
         saved = final[final.index < today]
         write_if_changed(self.final_path(symbol), saved.to_csv(index_label="date", date_format="%Y-%m-%d"))
-        close = split_adjust(final["close"], splits)
-        return PriceHistory(close[close.index >= pd.Timestamp(start).normalize()], splits, self.quotes.currency, self.quotes.timezone)
+        close = split_adjust(final["close"], splits) if market.key == "HK" else final["close"]
+        currency = self.quotes.currency if market.key == "HK" else yahoo_meta.get("currency", "USD")
+        return PriceHistory(close[close.index >= pd.Timestamp(start).normalize()], splits, currency, market.timezone)
 
     def fx(self, from_ccy: str, to_ccy: str, start: datetime) -> pd.Series:
         """1 单位 from_ccy 兑换多少 to_ccy 的日线序列。"""
@@ -159,7 +176,7 @@ class PriceStore:
         start: datetime,
         decimals: dict[str, int],
         frozen: bool,
-        timezone: str = MARKET_TIMEZONE,
+        timezone: str,
     ) -> pd.DataFrame:
         """读取已保存的数据，只下载新增的交易日并保存。返回已保存的全部数据加当天行情。
 
@@ -225,6 +242,7 @@ class EarningsStore:
         splits: pd.Series,
         trading_days: pd.DatetimeIndex | None = None,
         fmt: str = "highlights",
+        market: Market = HK,
     ) -> EarningsHistory:
         """解析公告并计算 EPS。已解析过的公告直接读取保存的结果，只解析新公告。
 
@@ -236,9 +254,9 @@ class EarningsStore:
         if paths["announcements"].exists():
             df = pd.read_csv(paths["announcements"], dtype=str)
             df = df[df["parser_version"].astype(int) == version]
-            saved = {a.url: a for a in announcements_from_frame(df)}
+            saved = {a.url: a for a in announcements_from_frame(df, market)}
 
-        parsed = [saved.get(f.url) or parse_announcement(f, fmt) for f in filings]
+        parsed = [saved.get(f.url) or parse_announcement(f, fmt, market) for f in filings]
         history = build_history(adjust_for_splits(parsed, splits))
 
         everything = {**saved, **{a.url: a for a in parsed}}

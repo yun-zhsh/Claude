@@ -10,12 +10,12 @@ from __future__ import annotations
 import json
 import re
 import sys
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
+from valuation_monitor.providers.base import Filing
 from valuation_monitor.providers.http import HttpClient
 
 BASE_URL = "https://www1.hkexnews.hk"
@@ -23,14 +23,6 @@ BASE_URL = "https://www1.hkexnews.hk"
 # “INTERIM RESULTS ANNOUNCEMENT FOR THE SIX MONTHS ENDED 30 JUNE 2026”，共同点是先有 RESULTS、后有“ENDED 日期”。
 # 股东大会的表决结果（POLL RESULTS OF ...）没有“ENDED 日期”，也一并排除。
 RESULTS_TITLE_RE = re.compile(r"\bRESULTS\b.*\bENDED \d{1,2} [A-Z]+ \d{4}", re.I)
-
-
-@dataclass
-class Filing:
-    title: str
-    published: pd.Timestamp  # 香港时间
-    url: str
-    pdf: bytes
 
 
 def stock_code(symbol: str) -> str:
@@ -90,7 +82,7 @@ class HkexProvider:
                     title=saved["title"],
                     published=pd.Timestamp(saved["published"]),
                     url=saved["url"],
-                    pdf=(folder / saved["file"]).read_bytes(),
+                    content=(folder / saved["file"]).read_bytes(),
                 )
             )
 

@@ -14,12 +14,26 @@ class Level:
     label: str
 
 
+FILING_SOURCES = {"HK": "港交所披露易", "US": "美国证监会 EDGAR"}
+
+
 @dataclass(frozen=True)
 class StockConfig:
-    symbol: str  # Yahoo Finance 代码，如 0700.HK
+    symbol: str  # Yahoo Finance 代码，如 0700.HK、JD
     name: str
     metrics: list[str] = field(default_factory=lambda: ["pe"])
-    filing_format: str = "highlights"  # 业绩公告的版式，见 filings.FORMATS
+    filing_format: str = "highlights"  # 业绩公告的版式，见 filings.FILING_FORMATS
+    market: str = "HK"  # 上市地：HK（港交所披露易）或 US（美国证监会 EDGAR）
+    cik: int | None = None  # 美股公司在美国证监会的编号（Central Index Key）
+
+    @property
+    def filing_source(self) -> str:
+        return FILING_SOURCES[self.market]
+
+    @property
+    def cross_checks_prices(self) -> bool:
+        """是否有两个以上来源的股价可以互相核对（港股有腾讯证券和 Yahoo，美股只有 Yahoo）。"""
+        return self.market == "HK"
 
 
 DEFAULT_LOOKBACK_OPTIONS = [10, 5, 3, 2, 1]
@@ -53,7 +67,8 @@ def load_config(path: str | Path) -> Config:
 
 
 def parse_config(raw: dict) -> Config:
-    from valuation_monitor.filings import FORMATS
+    from valuation_monitor.filings import FILING_FORMATS
+    from valuation_monitor.market_calendar import MARKETS
     from valuation_monitor.metrics import METRICS
 
     stocks = []
@@ -62,12 +77,28 @@ def parse_config(raw: dict) -> Config:
         unknown = [m for m in metrics if m not in METRICS]
         if unknown:
             raise ValueError(f"{s['symbol']}: 未知指标 {unknown}，可用指标: {sorted(METRICS)}")
-        filing_format = str(s.get("filing_format", "highlights"))
-        if filing_format not in FORMATS:
-            raise ValueError(f"{s['symbol']}: 未知的公告版式 {filing_format}，可用版式: {sorted(FORMATS)}")
+        symbol = str(s["symbol"])
+        market = str(s.get("market", "HK" if symbol.upper().endswith(".HK") else "US")).upper()
+        if market not in MARKETS:
+            raise ValueError(f"{symbol}: 未知的市场 {market}，可用市场: {sorted(MARKETS)}")
+        # 港股的业绩来自港交所公告（PDF），美股的来自美国证监会 EDGAR 的新闻稿（HTML）
+        default_format = "press_release" if market == "US" else "highlights"
+        filing_format = str(s.get("filing_format", default_format))
+        if filing_format not in FILING_FORMATS:
+            raise ValueError(f"{symbol}: 未知的公告版式 {filing_format}，可用版式: {sorted(FILING_FORMATS)}")
+        if (filing_format == "press_release") != (market == "US"):
+            raise ValueError(f"{symbol}: 公告版式 {filing_format} 与市场 {market} 不匹配（美股用 press_release，港股用其他版式）")
+        cik = int(s["cik"]) if s.get("cik") is not None else None
+        if market == "US" and cik is None:
+            raise ValueError(f"{symbol}: 美股需要配置 cik（公司在美国证监会的编号）")
         stocks.append(
             StockConfig(
-                symbol=str(s["symbol"]), name=str(s.get("name", s["symbol"])), metrics=metrics, filing_format=filing_format
+                symbol=symbol,
+                name=str(s.get("name", symbol)),
+                metrics=metrics,
+                filing_format=filing_format,
+                market=market,
+                cik=cik,
             )
         )
     if not stocks:

@@ -14,6 +14,7 @@ from valuation_monitor.data import DataLoader, StockData
 from valuation_monitor.metrics import METRICS, Metric
 from valuation_monitor.providers.hkex import HkexProvider
 from valuation_monitor.providers.http import HttpClient
+from valuation_monitor.providers.sec import SecProvider, SecUserAgentMissing, make_http_client
 from valuation_monitor.providers.tencent import TencentQuoteProvider
 from valuation_monitor.providers.yahoo import YahooProvider
 from valuation_monitor.store import EarningsStore, PriceStore
@@ -73,7 +74,17 @@ class Monitor:
         http = HttpClient(cache_dir=cache_dir, refresh=refresh)
         self.prices = PriceStore(TencentQuoteProvider(http), YahooProvider(http), self.data_dir)
         self.earnings = EarningsStore(self.data_dir)
-        self.loader = DataLoader(config, self.prices, HkexProvider(http, self.data_dir / "filings"), self.earnings)
+        try:
+            sec_http = make_http_client(cache_dir, refresh=refresh)
+        except SecUserAgentMissing:
+            sec_http = None  # 没有声明使用者时不访问美国证监会，直接使用本地已保存的公告
+        self.loader = DataLoader(
+            config,
+            self.prices,
+            HkexProvider(http, self.data_dir / "filings"),
+            SecProvider(sec_http, self.data_dir / "filings"),
+            self.earnings,
+        )
 
     def analyze(self, stock: StockConfig) -> StockReport:
         report = StockReport(stock=stock, updated_at=datetime.now())
