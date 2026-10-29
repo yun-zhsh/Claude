@@ -28,7 +28,7 @@ SERIES_NAMES = {  # 系列 -> (带单位的完整名称, 其他列名里用的�
     "revenue": ("营收（百万元）", "营收"),
     "profit": ("归母净利润（百万元）", "归母净利润"),
     "equity": ("期末归母净资产（百万元）", "期末归母净资产"),
-    "wa_shares": ("公告披露的加权平均股数（百万股；ADR 为百万份 ADS）", "加权平均股数"),
+    "wa_shares": ("公告披露的股数（百万股；加权平均股数，A 股为期末总股本；ADR 为百万份 ADS）", "公告披露股数"),
 }
 PERIOD_COLUMNS = {"period": "报告期（季度或半年）", "currency": "币种"}
 for _key, (_name, _short) in SERIES_NAMES.items():
@@ -65,6 +65,7 @@ TTM_COLUMNS = {
     "book_value_per_share": "每股净资产 = 期末归母净资产 ÷ 股数（财报币种）",
     "book_value_per_share_formula": "每股净资产算式",
     "split_note": "拆股调整说明（公告原文数值 → 调整后）",
+    "published_note": "发布时间说明",
 }
 for _k in range(1, 5):  # TTM 覆盖的各期（从早到晚）及各期数值，加总即得 TTM
     TTM_COLUMNS |= {

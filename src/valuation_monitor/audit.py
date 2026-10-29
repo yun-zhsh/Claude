@@ -57,7 +57,7 @@ def shares_formula(rec: dict) -> str:
     if rec.get("shares_source") == "reported":
         basis = "，公告披露的是全年数" if rec.get("shares_basis") else ""
         check = f"；对照：归母净利润 {num(rec['profit'])} ÷ 基本 EPS {num(rec['eps_latest'])} 反推 {num(implied)}" if implied else ""
-        return f"公告披露的{rec['period_label']}基本 EPS 加权平均股数 {num(rec['shares'])}（{unit}{basis}）{check}"
+        return f"公告披露的{rec['period_label']}{rec.get('shares_label', '基本 EPS 加权平均股数')} {num(rec['shares'])}（{unit}{basis}）{check}"
     if implied is None:
         return ""
     return f"公告没有披露股数，用归母净利润 {num(rec['profit'])} ÷ 基本 EPS {num(rec['eps_latest'])} 反推 = {num(rec['shares'])}（{rec['period_label']}，{unit}）"
@@ -108,6 +108,8 @@ def explain(column: str, rec: dict) -> list[str]:
     lines = [line for line in EXPLAINERS[column](rec) if line]
     if any(c.derived for key in ("eps", "non_ifrs_eps", "revenue") for c in rec.get(key) or []):
         lines.append("* 由累计数相减得到（如第四季度 = 全年 − 前三季度）")
+    if rec.get("note"):
+        lines.append(rec["note"])
     if rec.get("provisional"):
-        lines.append("本期数据暂用业绩发布会材料（审阅前），正式财报发布后自动替换")
+        lines.append("本期数据暂用初步数据（业绩发布会材料或业绩快报，审阅/审计前），正式报告发布后自动替换")
     return lines

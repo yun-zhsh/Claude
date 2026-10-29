@@ -25,7 +25,8 @@ levels:
 #   statements  只有合并损益表和资产负债表，通常每半年发布业绩（舜宇光学）
 #   press_release  美股公司在美国证监会 EDGAR 提交的业绩新闻稿（6-K），每季度发布；需要配置 cik
 #   kifrs_statements  三星电子 IR 网站的英文合并财务报表（K-IFRS），每季度发布，market 为 KR
-# market：HK（港交所披露易，symbol 以 .HK 结尾时默认）、US（美国证监会 EDGAR）或 KR（韩国公司的 IR 网站，symbol 以 .KS 结尾时默认）。
+#   cn_report  A 股公司在巨潮资讯网披露的定期报告（一季报、半年报、三季报、年报）和年度业绩快报（中文原文），market 为 CN
+# market：HK（港交所披露易，symbol 以 .HK 结尾时默认）、US（美国证监会 EDGAR）、KR（韩国公司的 IR 网站，symbol 以 .KS 结尾时默认）或 CN（A 股，巨潮资讯网，symbol 以 .SZ、.SS 结尾时默认）。
 # 访问 EDGAR 要求声明使用者：运行前设置环境变量 SEC_USER_AGENT="valuation-monitor 你的邮箱"（见 README）。
 stocks:
   - symbol: 0700.HK   # Yahoo Finance 代码
@@ -46,4 +47,9 @@ stocks:
     name: 三星电子
     market: KR   # 业绩取自三星 IR 网站的英文合并财务报表（K-IFRS），每季度发布
     filing_format: kifrs_statements   # EPS 为普通股基本 EPS（韩元），股价 Yahoo 是韩元，不需要汇率
+    metrics: [pe, ps, pb]
+  - symbol: 002415.SZ
+    name: 海康威视
+    market: CN   # 业绩取自巨潮资讯网（证监会指定披露平台）的中文定期报告和年度业绩快报
+    filing_format: cn_report   # 股价和财报都是人民币；公司不披露 Non-GAAP 数据
     metrics: [pe, ps, pb]

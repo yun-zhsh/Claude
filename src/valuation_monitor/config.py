@@ -16,7 +16,7 @@ class Level:
     label: str
 
 
-FILING_SOURCES = {"HK": "港交所披露易", "US": "美国证监会 EDGAR", "KR": "三星电子 IR 网站（英文财务报表）"}
+FILING_SOURCES = {"HK": "港交所披露易", "US": "美国证监会 EDGAR", "KR": "三星电子 IR 网站（英文财务报表）", "CN": "巨潮资讯网（证监会指定的信息披露平台）"}
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ class StockConfig:
     name: str
     metrics: list[str] = field(default_factory=lambda: ["pe"])
     filing_format: str = "highlights"  # 业绩公告的版式，见 filings.FILING_FORMATS
-    market: str = "HK"  # 上市地：HK（港交所披露易）、US（美国证监会 EDGAR）或 KR（韩国公司的 IR 网站）
+    market: str = "HK"  # 上市地：HK（港交所披露易）、US（美国证监会 EDGAR）、KR（韩国公司的 IR 网站）或 CN（A 股，巨潮资讯网）
     cik: int | None = None  # 美股公司在美国证监会的编号（Central Index Key）
 
     @property
@@ -79,17 +79,17 @@ def parse_config(raw: dict) -> Config:
         if unknown:
             raise ValueError(f"{s['symbol']}: 未知指标 {unknown}，可用指标: {sorted(METRICS)}")
         symbol = str(s["symbol"])
-        suffix_markets = {".HK": "HK", ".KS": "KR", ".KQ": "KR"}
+        suffix_markets = {".HK": "HK", ".KS": "KR", ".KQ": "KR", ".SZ": "CN", ".SS": "CN"}
         default_market = next((m for suffix, m in suffix_markets.items() if symbol.upper().endswith(suffix)), "US")
         market = str(s.get("market", default_market)).upper()
         if market not in MARKETS:
             raise ValueError(f"{symbol}: 未知的市场 {market}，可用市场: {sorted(MARKETS)}")
         # 港股的业绩来自港交所公告（PDF），美股的来自美国证监会 EDGAR 的新闻稿（HTML），韩股的来自公司 IR 网站的财务报表
-        default_format = {"HK": "highlights", "US": "press_release", "KR": "kifrs_statements"}[market]
+        default_format = {"HK": "highlights", "US": "press_release", "KR": "kifrs_statements", "CN": "cn_report"}[market]
         filing_format = str(s.get("filing_format", default_format))
         if filing_format not in FILING_FORMATS:
             raise ValueError(f"{symbol}: 未知的公告版式 {filing_format}，可用版式: {sorted(FILING_FORMATS)}")
-        foreign_formats = {"press_release": "US", "kifrs_statements": "KR"}  # 非港股版式只适用于对应市场
+        foreign_formats = {"press_release": "US", "kifrs_statements": "KR", "cn_report": "CN"}  # 非港股版式只适用于对应市场
         if foreign_formats.get(filing_format, "HK" if market == "HK" else None) != market:
             raise ValueError(f"{symbol}: 公告版式 {filing_format} 与市场 {market} 不匹配")
         cik = int(s["cik"]) if s.get("cik") is not None else None
