@@ -25,11 +25,13 @@ class Valuation:
     bands: dict[int, float]  # 分位数 -> 对应指标值
 
 
+def level_index(percentile: float, levels: list[Level]) -> int:
+    """估值档位的序号（0 为最低估）。"""
+    return next((i for i, lv in enumerate(levels) if percentile <= lv.upper), len(levels) - 1)
+
+
 def classify(percentile: float, levels: list[Level]) -> str:
-    for lv in levels:
-        if percentile <= lv.upper:
-            return lv.label
-    return levels[-1].label
+    return levels[level_index(percentile, levels)].label
 
 
 def evaluate(series: pd.Series, lookback_years: int, levels: list[Level]) -> Valuation:

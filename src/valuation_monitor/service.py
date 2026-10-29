@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from valuation_monitor.analysis import Valuation, evaluate
+from valuation_monitor.analysis import Valuation, evaluate, level_index
 from valuation_monitor.config import Config, StockConfig
 from valuation_monitor.data import DataLoader, StockData
 from valuation_monitor.metrics import METRICS, Metric
@@ -22,12 +22,31 @@ PRICE_STATUS_LABELS = {"agree": "一致", "mismatch": "不一致", "tencent_only
 
 
 @dataclass
+class WindowResult:
+    """某个回看年数下的估值。"""
+
+    valuation: Valuation
+    level_index: int  # 第几档（0 为最低估），用于配色
+
+
+@dataclass
 class MetricResult:
     metric: Metric
     series: pd.Series | None = None
-    valuation: Valuation | None = None
-    level_index: int | None = None  # 第几档（0 为最低估），用于配色
+    windows: dict[int, WindowResult] = field(default_factory=dict)  # 回看年数 -> 结果
+    default_years: int = 10
     error: str | None = None
+
+    @property
+    def valuation(self) -> Valuation | None:
+        """默认回看年数下的估值。"""
+        w = self.windows.get(self.default_years)
+        return w.valuation if w else None
+
+    @property
+    def level_index(self) -> int | None:
+        w = self.windows.get(self.default_years)
+        return w.level_index if w else None
 
 
 @dataclass
@@ -67,13 +86,12 @@ class Monitor:
         report.discrepancies = report.data.earnings.discrepancies()
         report.price_check = self.price_check(stock.symbol)
         for key in stock.metrics:
-            result = MetricResult(METRICS[key])
+            result = MetricResult(METRICS[key], default_years=self.config.lookback_years)
             try:
                 result.series = result.metric.compute(report.data)
-                result.valuation = evaluate(result.series, self.config.lookback_years, self.config.levels)
-                result.level_index = next(
-                    i for i, lv in enumerate(self.config.levels) if result.valuation.percentile <= lv.upper
-                )
+                for years in self.config.lookback_options:
+                    v = evaluate(result.series, years, self.config.levels)
+                    result.windows[years] = WindowResult(v, level_index(v.percentile, self.config.levels))
             except Exception as e:
                 result.error = f"计算失败: {e}"
             report.metrics.append(result)
@@ -87,6 +105,6 @@ class Monitor:
         if not path.exists():
             return {}
         final = pd.read_csv(path, index_col="date", parse_dates=True)
-        final = final[final.index >= final.index[-1] - pd.DateOffset(years=self.config.lookback_years)]
+        final = final[final.index >= final.index[-1] - pd.DateOffset(years=self.config.max_lookback)]
         counts = final["status"].value_counts()
         return {k: int(counts[k]) for k in PRICE_STATUS_LABELS if k in counts}

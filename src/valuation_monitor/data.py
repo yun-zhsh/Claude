@@ -33,8 +33,8 @@ class DataLoader:
     def load(self, stock: StockConfig) -> StockData:
         # 行情多取一年；公告多取两年，保证回看窗口起点就能凑齐 4 个季度算 TTM
         now = datetime.now()
-        prices = self.prices.prices(stock.symbol, now - pd.DateOffset(years=self.config.lookback_years + 1))
-        filings = self.hkex.results_announcements(stock.symbol, now - pd.DateOffset(years=self.config.lookback_years + 2))
+        prices = self.prices.prices(stock.symbol, now - pd.DateOffset(years=self.config.max_lookback + 1))
+        filings = self.hkex.results_announcements(stock.symbol, now - pd.DateOffset(years=self.config.max_lookback + 2))
         earnings = self.earnings.load(stock.symbol, filings, prices.splits, prices.close.index, stock.filing_format)
 
         if earnings.currency == prices.currency:

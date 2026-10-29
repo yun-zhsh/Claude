@@ -8,19 +8,26 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('index') }}">股票估值监控</a>
-    {% if not static_site %}
-    <form method="post" action="{{ url_for('refresh_view') }}" class="refresh-form">
-      <input type="hidden" name="next" value="{{ request.path }}">
-      <button type="submit" class="btn btn-secondary">更新数据</button>
-    </form>
-    {% endif %}
+    <a class="brand" href="{{ url_for('index') }}" data-keep-years>股票估值监控</a>
+    <div class="topbar-right">
+      <label class="years-select">历史比较
+        <select id="years-select" aria-label="历史分位按过去多少年的历史计算">
+          {% for y in year_options %}<option value="{{ y }}"{% if y == default_years %} selected{% endif %}>过去 {{ y }} 年</option>{% endfor %}
+        </select>
+      </label>
+      {% if not static_site %}
+      <form method="post" action="{{ url_for('refresh_view') }}" class="refresh-form">
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <button type="submit" class="btn btn-secondary">更新数据</button>
+      </form>
+      {% endif %}
+    </div>
   </header>
   <main class="container">
     {% block content %}{% endblock %}
   </main>
   <footer class="container footer">
-    估值高低按当前值在过去 {{ lookback_years }} 年中的历史分位判断：
+    估值高低按当前值在过去 <span data-years-label>{{ default_years }}</span> 年中的历史分位判断（右上角可以切换）：
     {% for lv in levels %}<span class="chip" style="--c: {{ level_colors[loop.index0] }}">{{ lv.label }} ≤{{ lv.upper|int }}%</span>{% endfor %}
   </footer>
   {% if not static_site %}
@@ -35,6 +42,8 @@
     });
   </script>
   {% endif %}
+  {% if data %}<script type="application/json" id="view-data">{{ data|tojson }}</script>{% endif %}
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

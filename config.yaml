@@ -1,9 +1,10 @@
 # 估值监控配置
 #
-# 判断方法：把当前指标值放到过去 lookback_years 年的历史分布里，算出历史分位数，
+# 判断方法：把当前指标值放到过去若干年（lookback_years，网页上可以切换）的历史分布里，算出历史分位数，
 # 再按 levels 划分成估值档位。
 
-lookback_years: 10
+lookback_years: 10   # 默认选中的回看年数
+lookback_options: [10, 5, 3, 2, 1]   # 网页首页下拉框里可以选的回看年数
 
 # 估值档位：分位数 <= upper 时归入该档（按 upper 从小到大排列，最后一档 upper 应为 100）
 levels:
