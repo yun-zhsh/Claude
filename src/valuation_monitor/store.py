@@ -218,8 +218,13 @@ class EarningsStore:
     def paths(self, symbol: str) -> dict[str, Path]:
         return {kind: self.folder / f"{symbol}_{kind}.csv" for kind in ("announcements", "quarterly", "ttm")}
 
-    def load(self, symbol: str, filings: list[Filing], splits: pd.Series) -> EarningsHistory:
-        """解析公告并计算 EPS。已解析过的公告直接读取保存的结果，只解析新公告。"""
+    def load(
+        self, symbol: str, filings: list[Filing], splits: pd.Series, trading_days: pd.DatetimeIndex | None = None
+    ) -> EarningsHistory:
+        """解析公告并计算 EPS。已解析过的公告直接读取保存的结果，只解析新公告。
+
+        trading_days 用于在保存的明细中列出每个数值实际开始使用的交易日。
+        """
         paths = self.paths(symbol)
         saved = {}
         if paths["announcements"].exists():
@@ -232,6 +237,6 @@ class EarningsStore:
 
         everything = {**saved, **{a.url: a for a in parsed}}
         write_if_changed(paths["announcements"], announcements_to_frame(list(everything.values())).to_csv(index=False))
-        write_if_changed(paths["quarterly"], history.quarters_frame().to_csv(index=False))
-        write_if_changed(paths["ttm"], history.ttm.to_csv(index=False, date_format="%Y-%m-%d"))
+        write_if_changed(paths["quarterly"], history.quarters_frame(trading_days).to_csv(index=False))
+        write_if_changed(paths["ttm"], history.ttm_frame(trading_days).to_csv(index=False, date_format="%Y-%m-%d"))
         return history

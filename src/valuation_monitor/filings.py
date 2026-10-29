@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, replace
 import pandas as pd
 from pypdf import PdfReader
 
+from valuation_monitor.market_calendar import available_date, effective_trading_day
 from valuation_monitor.providers.hkex import Filing
 
 MONTH_TO_QUARTER = {"MARCH": 1, "JUNE": 2, "SEPTEMBER": 3, "DECEMBER": 4}
@@ -58,6 +59,7 @@ class Observation:
 class QuarterValue:
     value: float
     available: pd.Timestamp
+    published: pd.Timestamp  # 最早公布这个数值的公告的发布时间
     observations: list[Observation] = field(default_factory=list)
 
     @property
@@ -70,12 +72,6 @@ def parse_period(title: str) -> pd.Period:
     if not m:
         raise ValueError(f"无法从标题识别报告期: {title}")
     return pd.Period(year=int(m.group(3)), quarter=MONTH_TO_QUARTER[m.group(2).upper()], freq="Q")
-
-
-def available_date(published: pd.Timestamp) -> pd.Timestamp:
-    """港股 16:00 收盘；收盘后发布的公告从下一个交易日起才反映在收盘价里。"""
-    day = published.normalize()
-    return day + pd.Timedelta(days=1) if published.hour >= 16 else day
 
 
 def parse_eps_table(text: str) -> tuple[str, dict[str, list[float]]]:
@@ -167,7 +163,7 @@ def announcements_from_frame(df: pd.DataFrame) -> list[Announcement]:
 class EarningsHistory:
     currency: str
     quarters: dict[str, dict[pd.Period, QuarterValue]]  # series -> 季度 -> 单季值
-    ttm: pd.DataFrame  # report_date, available_date, eps_ttm, non_ifrs_eps_ttm
+    ttm: pd.DataFrame  # report_date, published, available_date, eps_ttm, non_ifrs_eps_ttm
     announcements: list[Announcement]
 
     def discrepancies(self) -> list[str]:
@@ -179,14 +175,16 @@ class EarningsHistory:
                     out.append(f"{SERIES_LABELS[series]} {p} 在不同公告中数值不一致（可能是公司重述）[{vals}]，采用最早公布的 {q.value:.3f}")
         return out
 
-    def quarters_frame(self) -> pd.DataFrame:
+    def quarters_frame(self, trading_days: pd.DatetimeIndex | None = None) -> pd.DataFrame:
+        """逐季明细。给出交易日时，同时列出每个数值实际开始使用的交易日。"""
         rows = []
         for p in sorted(set().union(*self.quarters.values())):
             row = {"quarter": str(p), "currency": self.currency}
             for series in SERIES:
                 q = self.quarters[series].get(p)
                 row[series] = round(q.value, 4) if q else None
-                row[f"{series}_available"] = q.available.date() if q else None
+                row[f"{series}_published"] = f"{q.published:%Y-%m-%d %H:%M}" if q else None
+                row[f"{series}_effective"] = effective_day(q.available, trading_days) if q else None
                 row[f"{series}_sources"] = len(q.observations) if q else 0
                 row[f"{series}_max_deviation"] = round(q.max_deviation, 4) if q else None
             row["first_source"] = next(
@@ -194,6 +192,19 @@ class EarningsHistory:
             )
             rows.append(row)
         return pd.DataFrame(rows)
+
+    def ttm_frame(self, trading_days: pd.DatetimeIndex | None = None) -> pd.DataFrame:
+        df = self.ttm.copy()
+        df.insert(3, "effective_date", [effective_day(d, trading_days) for d in df["available_date"]])
+        return df
+
+
+def effective_day(available: pd.Timestamp, trading_days: pd.DatetimeIndex | None):
+    """实际开始使用的交易日（日期）；行情里还没有这一天（尚未开市）或没给交易日时为空。"""
+    if trading_days is None:
+        return None
+    day = effective_trading_day(available, trading_days)
+    return day.date() if day is not None else None
 
 
 def build_history(parsed: list[Announcement]) -> EarningsHistory:
@@ -210,7 +221,7 @@ def build_history(parsed: list[Announcement]) -> EarningsHistory:
     ttm_rows = []
 
     def record(series: str, period: pd.Period, value: float, a: Announcement, derived: bool) -> None:
-        q = quarters[series].setdefault(period, QuarterValue(value, a.available))
+        q = quarters[series].setdefault(period, QuarterValue(value, a.available, a.published))
         q.observations.append(Observation(value, a.url, derived))
 
     for a in sorted(announcements.values(), key=lambda x: x.available):
@@ -224,13 +235,17 @@ def build_history(parsed: list[Announcement]) -> EarningsHistory:
             _derive_from_ytd(series, quarters[series], ytd[series], a, record)
 
         last4 = [a.period - k for k in range(4)]
-        row = {"report_date": a.period.end_time.normalize(), "available_date": a.available}
+        row = {
+            "report_date": a.period.end_time.normalize(),
+            "published": f"{a.published:%Y-%m-%d %H:%M}",
+            "available_date": a.available,
+        }
         for series in SERIES:
             qs = quarters[series]
             row[f"{series}_ttm"] = round(sum(qs[p].value for p in last4), 4) if all(p in qs for p in last4) else None
         ttm_rows.append(row)
 
-    ttm = pd.DataFrame(ttm_rows, columns=["report_date", "available_date", "eps_ttm", "non_ifrs_eps_ttm"])
+    ttm = pd.DataFrame(ttm_rows, columns=["report_date", "published", "available_date", "eps_ttm", "non_ifrs_eps_ttm"])
     return EarningsHistory(currencies.pop(), quarters, ttm, list(announcements.values()))
 
 

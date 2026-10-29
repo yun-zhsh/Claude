@@ -35,7 +35,7 @@ class DataLoader:
         now = datetime.now()
         prices = self.prices.prices(stock.symbol, now - pd.DateOffset(years=self.config.lookback_years + 1))
         filings = self.hkex.results_announcements(stock.symbol, now - pd.DateOffset(years=self.config.lookback_years + 2))
-        earnings = self.earnings.load(stock.symbol, filings, prices.splits)
+        earnings = self.earnings.load(stock.symbol, filings, prices.splits, prices.close.index)
 
         if earnings.currency == prices.currency:
             fx = pd.Series(1.0, index=prices.close.index)
