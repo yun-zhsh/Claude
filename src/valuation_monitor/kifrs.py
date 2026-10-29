@@ -74,6 +74,13 @@ DECK_SALES_RE = re.compile(rf"\bSales {DECK_PCT_COLUMNS}")
 DECK_PROFIT_RE = re.compile(rf"Profit ?attributable to owners of the parent {DECK_PCT_COLUMNS}")
 DECK_EPS_RE = re.compile(r"EPS ?\(KRW\) ?※ ?Common stock (?P<a>[\d,]+) (?P<b>[\d,]+) (?P<c>[\d,]+)")
 DECK_EQUITY_RE = re.compile(r"Shareholder equity (?P<a>[\d,]+\.\d) (?P<b>[\d,]+\.\d) (?P<c>[\d,]+\.\d)")
+# 第四季度的材料多了全年两列：去年同季度、上一季度、本季度、上年全年、本年全年（只有营收、净利润带“占比%”）
+FY_PCT = r"(?P<q4y>[\d.]+) (?P<q3>[\d.]+) [\d.]+% (?P<q4>[\d.]+) [\d.]+% (?P<fy0>[\d.]+) [\d.]+% (?P<fy1>[\d.]+) [\d.]+%"
+DECK_FY_SALES_RE = re.compile(rf"\bSales {FY_PCT}")
+DECK_FY_PROFIT_RE = re.compile(rf"Profit ?attributable to owners of the parent {FY_PCT}")
+DECK_FY_EPS_RE = re.compile(
+    r"(?:EPS ?\(KRW\) ?※ ?Common stock|Earnings per share ?\(KRW\)) (?P<q4y>[\d,]+) (?P<q3>[\d,]+) (?P<q4>[\d,]+) (?P<fy0>[\d,]+) (?P<fy1>[\d,]+)"
+)
 TRILLION = 1_000_000  # 百万韩元
 BILLION = 1_000
 
@@ -87,11 +94,21 @@ def deck_columns(regex: re.Pattern, text: str, name: str) -> list[float]:
     return [cur, yoy, qoq]
 
 
+def fiscal_year_columns(regex: re.Pattern, text: str, name: str) -> list[float]:
+    """第四季度材料里的一行，返回 [本年全年, 上年全年]。"""
+    m = regex.search(text)
+    if not m:
+        raise ValueError(f"第四季度发布会材料里没有找到 {name}（版式可能变了）")
+    return [float(m.group("fy1").replace(",", "")), float(m.group("fy0").replace(",", ""))]
+
+
 def parse_kifrs_deck(title: str, deck: bytes, previous_bs: bytes) -> Parsed:
     """业绩发布会材料里的当季业绩（审阅前，先用着，英文财报发布后换成财报数字）。
 
     营收和净利润只精确到 0.1 万亿韩元；EPS 是精确的韩元数。材料里的净资产含非控股权益，
     归属母公司的净资产按上一季度财报里“归母 ÷ 合计”的比例估算（非控股权益只占 2%～3%，变化很小）。
+    第四季度和年度财报一样当作全年累计数（本年、上年）处理，由程序用全年减前三季度得到单季数，
+    这样第四季度的 TTM EPS 与年报的全年 EPS 一致，财报发布后数字也不会跳变。
     """
     m = TITLE_RE.search(title)
     if not m:
@@ -99,15 +116,25 @@ def parse_kifrs_deck(title: str, deck: bytes, previous_bs: bytes) -> Parsed:
     quarter, year = int(m.group("q")), int(m.group("year"))
     text = read_text(deck)
     if f"{quarter}Q {year} Results" not in text:
-        raise ValueError(f"发布会材料不是 {quarter}Q {year} 的")
+        raise ValueError(f"发布会材料不是 {quarter}Q {year} 的，或版式已变")
 
     previous = read_text(previous_bs)
     total_prev, nci_prev = pair(TOTAL_EQUITY_RE, previous, "Total equity")[0], pair(NCI_RE, previous, "Non-controlling interests")[0]
     equity_total = deck_columns(DECK_EQUITY_RE, text, "Shareholder equity")[0] * BILLION
+    equity = [equity_total * (total_prev - nci_prev) / total_prev]
+    period = pd.Period(year=year, quarter=quarter, freq="Q")
+    if quarter == 4:
+        values = {
+            "revenue": [v * TRILLION for v in fiscal_year_columns(DECK_FY_SALES_RE, text, "Sales")],
+            "profit": [v * TRILLION for v in fiscal_year_columns(DECK_FY_PROFIT_RE, text, "Profit attributable to owners of the parent")],
+            "eps": fiscal_year_columns(DECK_FY_EPS_RE, text, "EPS"),
+            "equity": equity,
+        }
+        return Parsed("KRW", values, period, quarterly=False)
     values = {
         "revenue": [v * TRILLION for v in deck_columns(DECK_SALES_RE, text, "Sales")],
         "profit": [v * TRILLION for v in deck_columns(DECK_PROFIT_RE, text, "Profit attributable to owners of the parent")],
         "eps": deck_columns(DECK_EPS_RE, text, "EPS"),
-        "equity": [equity_total * (total_prev - nci_prev) / total_prev],
+        "equity": equity,
     }
-    return Parsed("KRW", values, pd.Period(year=year, quarter=quarter, freq="Q"), quarterly=True)
+    return Parsed("KRW", values, period, quarterly=True)
