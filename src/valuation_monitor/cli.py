@@ -32,12 +32,12 @@ def main(argv: list[str] | None = None) -> int:
 
         earnings = report.data.earnings
         print(
-            f"{stock.name} ({stock.symbol})  EPS 来源：港交所披露易 {len(earnings.announcements)} 份业绩公告原文，"
+            f"{stock.name} ({stock.symbol})  业绩数据来源：港交所披露易 {len(earnings.announcements)} 份业绩公告原文，"
             f"币种 {earnings.currency}"
         )
         for issue in report.discrepancies:
             print(f"  ⚠ {issue}")
-        print(f"  EPS 明细  {monitor.earnings.paths(stock.symbol)['quarterly']}")
+        print(f"  业绩明细  {monitor.earnings.paths(stock.symbol)['quarterly']}")
         checks = "，".join(f"{PRICE_STATUS_LABELS[k]} {n} 天" for k, n in report.price_check.items())
         print(f"  股价核对  腾讯证券 vs Yahoo（还原除权调整后）：{checks}（明细见 {monitor.prices.final_path(stock.symbol)}）")
         print()

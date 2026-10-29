@@ -8,7 +8,8 @@ from valuation_monitor.filings import (
     announcements_to_frame,
     available_date,
     build_history,
-    parse_eps_table,
+    parse_equity,
+    parse_summary_table,
     parse_period,
     split_factor,
 )
@@ -45,15 +46,15 @@ FOOTNOTED_2014Q3 = """y holders of the Company (1) 17,501 12,535 40% EPS (2) (RM
         (FOOTNOTED_2014Q3, [1.948, 1.264], [1.899, 1.367]),
     ],
 )
-def test_parse_eps_table(text, eps, non_ifrs):
-    currency, values = parse_eps_table(text)
+def test_parse_summary_table(text, eps, non_ifrs):
+    currency, values = parse_summary_table(text)
     assert currency == "CNY"
-    assert values == {"eps": eps, "non_ifrs_eps": non_ifrs}
+    assert values["eps"] == eps and values["non_ifrs_eps"] == non_ifrs
 
 
-def test_parse_eps_table_requires_eps_row():
+def test_parse_summary_table_requires_eps_row():
     with pytest.raises(ValueError):
-        parse_eps_table("Revenues 100 90 11%")
+        parse_summary_table("Revenues 100 90 11%")
 
 
 @pytest.mark.parametrize(
@@ -165,3 +166,63 @@ def test_adjust_for_splits_uses_publish_time():
     assert adjusted[0].values["eps"] == pytest.approx([0.7, 0.4408, 0.425])
     assert adjusted[1].values == b.values
     assert a.values["eps"] == [3.5, 2.204, 2.125]  # 原对象不变
+
+
+SUMMARY_2026Q2 = """(RMB in millions, unless specified) Revenues 204,785 184,504 11% 196,458 4% Gross profit 118,433
+105,013 13% 111,265 6% Operating profit 67,276 60,104 12% 67,375 -0.1% Profit for the period 57,977 56,044 3% 59,392 -2%
+Profit attributable to equity holders of the Company 56,022 55,628 0.7% 58,093 -4% EPS (RMB per share) – basic 6.207
+6.115 2% 6.431 -3% – diluted 6.104 5.996 2% 6.302 -3% Non-IFRS profit attributable to equity holders of the Company
+68,415 63,052 9% 67,905 0.8% Non-IFRS EPS (RMB per share) – basic 7.581 6.931 9% 7.517 0.9% – diluted 7.433"""
+
+SUMMARY_2015H1 = """Revenues 45,828 38,146 20% Gross profit 27,433 Profit attributable to equity holders of the Company *
+14,197 12,293 15% EPS (RMB per share) - basic 1.528 1.332 15% - diluted 1.512 1.313 15%"""
+
+BALANCE_SHEET = """EQUITY Equity attributable to equity holders of the Company Share capital – – Share premium 73,692 63,796
+Treasury shares (2,180) (3,450) Shares held for share award scheme (8,315) (7,124) Other reserves 5,893 90,494
+Retained earnings 1,066,763 1,010,436 1,135,853 1,154,152 Non-controlling interests 87,000 86,913"""
+
+
+def test_parse_summary_table_amounts():
+    _, values = parse_summary_table(SUMMARY_2026Q2)
+    assert values["revenue"] == [204785, 184504, 196458]
+    assert values["profit"] == [56022, 55628, 58093]  # 不会取到 Non-IFRS 那一行
+    _, values = parse_summary_table(SUMMARY_2015H1)
+    assert values["revenue"] == [45828, 38146]
+    assert values["profit"] == [14197, 12293]  # 跳过脚注标记
+
+
+def test_parse_equity():
+    assert parse_equity(BALANCE_SHEET) == [1135853, 1154152]
+    assert parse_equity("no balance sheet here") is None
+
+
+def test_build_history_revenue_shares_and_book_value():
+    def full(period, available, eps, revenue, profit, equity):
+        a = ann(period, available, True, eps)
+        a.values |= {"revenue": revenue, "profit": profit, "equity": equity}
+        return a
+
+    history = build_history(
+        [
+            full("2025Q2", "2025-08-14", [6.115, 5.112, 5.252], [184504, 161117, 180022], [55628, 47630, 47821], [1114639, 973548]),
+            full("2025Q3", "2025-11-14", [6.952, 5.762, 6.115], [192869, 167193, 184504], [63133, 53230, 55628], [1172080, 973548]),
+            full("2025Q4", "2026-03-19", [6.433, 5.597, 6.952], [194371, 172446, 192869], [58260, 51324, 63133], [1154152, 973548]),
+        ]
+    )
+    row = history.ttm.iloc[-1]
+    assert row["revenue_ttm"] == 180022 + 184504 + 192869 + 194371  # 2025Q1～Q4
+    assert row["revenue_per_share_ttm"] == pytest.approx(row["revenue_ttm"] / row["shares"], rel=1e-4)
+    assert row["shares"] == pytest.approx(58260 / 6.433, abs=0.1)
+    assert row["equity"] == 1154152
+    assert row["book_value_per_share"] == pytest.approx(1154152 / (58260 / 6.433), rel=1e-4)
+    # 2024 年末净资产在三份公告中都以“上年末”出现，数值一致，不报差异
+    assert len(history.quarters["equity"][pd.Period("2024Q4")].observations) == 3
+    assert history.discrepancies() == []
+
+
+def test_adjust_for_splits_leaves_amounts():
+    a = ann("2014Q1", "2014-05-15", True, [3.5, 2.204, 2.125])
+    a.values["revenue"] = [18400.0, 13550.0, 16970.0]
+    adjusted = adjust_for_splits([a], pd.Series([5.0], index=pd.to_datetime(["2014-05-15"])))[0]
+    assert adjusted.values["eps"] == pytest.approx([0.7, 0.4408, 0.425])
+    assert adjusted.values["revenue"] == [18400.0, 13550.0, 16970.0]

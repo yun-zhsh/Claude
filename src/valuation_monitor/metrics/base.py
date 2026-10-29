@@ -22,3 +22,13 @@ def point_in_time(data: StockData, column: str) -> pd.Series:
     days = pd.DataFrame({"date": data.close.index})
     merged = pd.merge_asof(days, f[["available_date", column]], left_on="date", right_on="available_date")
     return pd.Series(merged[column].to_numpy(), index=data.close.index)
+
+
+class PriceMultiple(Metric):
+    """股价 ÷ 每股财务数据（PE、PS、PB 等）。每股数据按财报币种保存，先换算成股价币种。"""
+
+    column: str  # data.fundamentals 中的每股数据列
+
+    def compute(self, data: StockData) -> pd.Series:
+        per_share = point_in_time(data, self.column) * data.fx
+        return (data.close / per_share).where(per_share > 0).rename(self.key)  # 亏损或净资产为负时无意义

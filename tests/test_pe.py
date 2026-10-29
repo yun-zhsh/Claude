@@ -59,3 +59,20 @@ def test_classify(pct, label):
 def test_parse_config_rejects_unknown_metric():
     with pytest.raises(ValueError, match="未知指标"):
         parse_config({"stocks": [{"symbol": "0700.HK", "metrics": ["xyz"]}]})
+
+
+def test_ps_and_pb_use_per_share_values_in_price_currency():
+    idx = pd.to_datetime(["2024-06-03", "2024-06-04"])
+    f = pd.DataFrame(
+        {
+            "available_date": pd.to_datetime(["2024-06-01", "2024-06-04"]),
+            "revenue_per_share_ttm": [50.0, 60.0],
+            "book_value_per_share": [100.0, -5.0],
+        }
+    )
+    data = StockData(STOCK, pd.Series([110.0, 110.0], index=idx), "HKD", pd.Series(1.1, index=idx), f)
+    ps = METRICS["ps"].compute(data)
+    assert ps.tolist() == pytest.approx([110 / (50 * 1.1), 110 / (60 * 1.1)])
+    pb = METRICS["pb"].compute(data)
+    assert pb.iloc[0] == pytest.approx(110 / (100 * 1.1))
+    assert pd.isna(pb.iloc[1])  # 净资产为负时 PB 无意义

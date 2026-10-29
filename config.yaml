@@ -16,7 +16,9 @@ levels:
 # 可用指标：
 #   pe           PE (TTM)，按 IFRS 口径的归母净利润
 #   pe_non_ifrs  PE Non-IFRS (TTM)，按公司披露的 Non-IFRS 利润，剔除投资收益等一次性项目
+#   ps           PS (TTM)，市销率，按最近 4 个季度营收
+#   pb           PB，市净率，按最新一期末归属股东净资产
 stocks:
   - symbol: 0700.HK   # Yahoo Finance 代码
     name: 腾讯控股
-    metrics: [pe, pe_non_ifrs]
+    metrics: [pe, pe_non_ifrs, ps, pb]

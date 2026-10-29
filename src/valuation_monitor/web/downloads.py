@@ -21,35 +21,45 @@ PRICE_COLUMNS = {
 }
 SOURCE_LABELS = {"tencent": "腾讯证券", "yahoo": "Yahoo"}
 
-QUARTERLY_COLUMNS = {
-    "quarter": "季度",
-    "currency": "币种",
-    "eps": "基本 EPS（IFRS）",
-    "eps_published": "IFRS EPS 首次公布时间",
-    "eps_effective": "IFRS EPS 生效交易日",
-    "eps_sources": "IFRS EPS 证实公告数",
-    "eps_max_deviation": "IFRS EPS 各公告最大偏差",
-    "non_ifrs_eps": "基本 EPS（Non-IFRS）",
-    "non_ifrs_eps_published": "Non-IFRS EPS 首次公布时间",
-    "non_ifrs_eps_effective": "Non-IFRS EPS 生效交易日",
-    "non_ifrs_eps_sources": "Non-IFRS EPS 证实公告数",
-    "non_ifrs_eps_max_deviation": "Non-IFRS EPS 各公告最大偏差",
-    "first_source": "最早公布该数据的公告",
+# 逐季明细：每项数据都有数值、首次公布时间、生效交易日、证实公告数、各公告最大偏差
+SERIES_NAMES = {
+    "eps": "基本 EPS（IFRS，元/股）",
+    "non_ifrs_eps": "基本 EPS（Non-IFRS，元/股）",
+    "revenue": "营收（百万元）",
+    "profit": "归母净利润（百万元）",
+    "equity": "期末归母净资产（百万元）",
 }
+QUARTERLY_COLUMNS = {"quarter": "季度", "currency": "币种"}
+for _key, _name in SERIES_NAMES.items():
+    _short = _name.split("（")[0]
+    QUARTERLY_COLUMNS |= {
+        _key: _name,
+        f"{_key}_published": f"{_short} 首次公布时间",
+        f"{_key}_effective": f"{_short} 生效交易日",
+        f"{_key}_sources": f"{_short} 证实公告数",
+        f"{_key}_max_deviation": f"{_short} 各公告最大偏差",
+    }
+QUARTERLY_COLUMNS |= {"shares": "反推股数（百万股，归母净利润 ÷ 基本 EPS）", "first_source": "最早公布该季数据的公告"}
+
 TTM_COLUMNS = {
     "report_date": "报告期末",
     "published": "公告发布时间（香港时间）",
     "available_date": "可用日期（自然日）",
     "effective_date": "生效交易日",
-    "eps_ttm": "TTM EPS（IFRS）",
-    "non_ifrs_eps_ttm": "TTM EPS（Non-IFRS）",
+    "eps_ttm": "TTM EPS（IFRS，元/股）",
+    "non_ifrs_eps_ttm": "TTM EPS（Non-IFRS，元/股）",
+    "revenue_ttm": "TTM 营收（百万元）",
+    "shares": "股数（百万股，最新一季加权平均）",
+    "revenue_per_share_ttm": "每股营收 TTM（元/股）",
+    "equity": "期末归母净资产（百万元）",
+    "book_value_per_share": "每股净资产（元/股）",
 }
 
 # 网址中的文件名 -> 下载时保存的文件名（不含股票代码）
 FILES = {
     "prices.csv": "历史股价.csv",
-    "eps.csv": "历史业绩_逐季EPS.csv",
-    "ttm.csv": "历史业绩_TTM_EPS.csv",
+    "eps.csv": "历史业绩_逐季.csv",
+    "ttm.csv": "历史业绩_每股指标.csv",
     "raw.zip": "全部原始数据.zip",
 }
 
