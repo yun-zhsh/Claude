@@ -12,8 +12,7 @@ from __future__ import annotations
 
 import io
 import re
-from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 import pandas as pd
 from pypdf import PdfReader
@@ -28,6 +27,7 @@ EPS_RE = re.compile(
 NUMBER_RE = re.compile(r"\(?\d+\.\d+\)?")
 CURRENCY_CODES = {"RMB": "CNY"}  # 公告里的写法 -> ISO 货币代码
 SERIES = ("eps", "non_ifrs_eps")
+PARSER_VERSION = 1  # 解析规则变化时加 1，已保存的解析结果会自动重新解析
 SERIES_LABELS = {"eps": "EPS", "non_ifrs_eps": "Non-IFRS EPS"}
 TOLERANCE = 0.005  # 不同公告对同一季度的数值允许的差异（四舍五入、累计数相减）
 
@@ -35,11 +35,16 @@ TOLERANCE = 0.005  # 不同公告对同一季度的数值允许的差异（四�
 @dataclass
 class Announcement:
     period: pd.Period  # 本公告的报告季度，如 2026Q2
-    available: pd.Timestamp  # 第一个可以用到这份公告的收盘价所在日期
+    published: pd.Timestamp  # 发布时间（香港时间）
     url: str
     currency: str
     is_quarterly_table: bool  # True：摘要表是单季数据；False：年初至今累计数据
     values: dict[str, list[float]]  # series -> 摘要表里该行的数值
+
+    @property
+    def available(self) -> pd.Timestamp:
+        """第一个可以用到这份公告的收盘价所在日期。"""
+        return available_date(self.published)
 
 
 @dataclass
@@ -90,13 +95,11 @@ def parse_eps_table(text: str) -> tuple[str, dict[str, list[float]]]:
     return currency, values
 
 
-def parse_announcement(filing: Filing, splits: pd.Series) -> Announcement:
-    """解析一份业绩公告。每股数据会按公告发布之后发生的拆股调整到当前股本口径。"""
+def parse_announcement(filing: Filing) -> Announcement:
+    """解析一份业绩公告，数值保持公告原样（未做拆股调整）。"""
     period = parse_period(filing.title)
     text = PdfReader(io.BytesIO(filing.pdf)).pages[0].extract_text() or ""
     currency, values = parse_eps_table(text)
-    factor = split_factor(filing.published, splits)
-    values = {k: [v / factor for v in vs] for k, vs in values.items()}
     counts = {len(v) for v in values.values()}
     if counts == {3}:
         quarterly = True
@@ -104,13 +107,60 @@ def parse_announcement(filing: Filing, splits: pd.Series) -> Announcement:
         quarterly = period.quarter == 1  # 一季度公告的“累计”就是单季
     else:
         raise ValueError(f"{filing.url}: EPS 行的数值个数不符合预期: {values}")
-    return Announcement(period, available_date(filing.published), filing.url, currency, quarterly, values)
+    return Announcement(period, filing.published, filing.url, currency, quarterly, values)
 
 
 def split_factor(published: pd.Timestamp, splits: pd.Series) -> float:
     """公告发布之后发生的拆股，需要把公告里的每股数据除以的倍数。"""
+    if splits.empty:
+        return 1.0
     after = splits[splits.index > published.normalize()]
     return float(after.prod()) if len(after) else 1.0
+
+
+def adjust_for_splits(announcements: list[Announcement], splits: pd.Series) -> list[Announcement]:
+    """把每股数据换算到当前股本口径（与复权股价一致）。"""
+    out = []
+    for a in announcements:
+        factor = split_factor(a.published, splits)
+        out.append(replace(a, values={k: [v / factor for v in vs] for k, vs in a.values.items()}))
+    return out
+
+
+ANNOUNCEMENT_COLUMNS = ["published", "period", "table", "currency", "eps", "non_ifrs_eps", "url", "parser_version"]
+
+
+def announcements_to_frame(announcements: list[Announcement]) -> pd.DataFrame:
+    """解析结果的存储格式：每份公告一行，摘要表里的数值用分号连接（公告原样数值）。"""
+    rows = [
+        {
+            "published": f"{a.published:%Y-%m-%d %H:%M}",
+            "period": str(a.period),
+            "table": "quarterly" if a.is_quarterly_table else "cumulative",
+            "currency": a.currency,
+            **{s: ";".join(f"{v:g}" for v in a.values[s]) if s in a.values else "" for s in SERIES},
+            "url": a.url,
+            "parser_version": PARSER_VERSION,
+        }
+        for a in sorted(announcements, key=lambda a: a.published)
+    ]
+    return pd.DataFrame(rows, columns=ANNOUNCEMENT_COLUMNS)
+
+
+def announcements_from_frame(df: pd.DataFrame) -> list[Announcement]:
+    out = []
+    for r in df.fillna("").to_dict("records"):
+        out.append(
+            Announcement(
+                period=pd.Period(r["period"], freq="Q"),
+                published=pd.Timestamp(r["published"]),
+                url=r["url"],
+                currency=r["currency"],
+                is_quarterly_table=r["table"] == "quarterly",
+                values={s: [float(v) for v in str(r[s]).split(";")] for s in SERIES if str(r[s])},
+            )
+        )
+    return out
 
 
 @dataclass
@@ -135,7 +185,7 @@ class EarningsHistory:
             row = {"quarter": str(p), "currency": self.currency}
             for series in SERIES:
                 q = self.quarters[series].get(p)
-                row[series] = q.value if q else None
+                row[series] = round(q.value, 4) if q else None
                 row[f"{series}_available"] = q.available.date() if q else None
                 row[f"{series}_sources"] = len(q.observations) if q else 0
                 row[f"{series}_max_deviation"] = round(q.max_deviation, 4) if q else None
@@ -177,7 +227,7 @@ def build_history(parsed: list[Announcement]) -> EarningsHistory:
         row = {"report_date": a.period.end_time.normalize(), "available_date": a.available}
         for series in SERIES:
             qs = quarters[series]
-            row[f"{series}_ttm"] = sum(qs[p].value for p in last4) if all(p in qs for p in last4) else None
+            row[f"{series}_ttm"] = round(sum(qs[p].value for p in last4), 4) if all(p in qs for p in last4) else None
         ttm_rows.append(row)
 
     ttm = pd.DataFrame(ttm_rows, columns=["report_date", "available_date", "eps_ttm", "non_ifrs_eps_ttm"])

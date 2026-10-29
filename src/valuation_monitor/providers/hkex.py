@@ -1,6 +1,6 @@
 """港交所披露易（HKEXnews）：检索并下载上市公司的业绩公告原文 PDF。
 
-下载过的公告保存在 filings/<股票代码>/ 目录（随代码一起提交到仓库），
+下载过的公告保存在 data/filings/<股票代码>/ 目录（随代码一起提交到仓库），
 目录中的 index.json 记录每份公告的标题、发布时间和原文链接。
 已经存在的 PDF 不会重复下载；无法访问披露易时，直接使用本地已保存的公告。
 """
@@ -39,7 +39,7 @@ def stock_code(symbol: str) -> str:
 
 
 class HkexProvider:
-    def __init__(self, http: HttpClient, archive_dir: str | Path = "filings"):
+    def __init__(self, http: HttpClient, archive_dir: str | Path = "data/filings"):
         self.http = http
         self.archive_dir = Path(archive_dir)
 

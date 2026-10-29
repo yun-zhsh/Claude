@@ -3,6 +3,9 @@ import pytest
 
 from valuation_monitor.filings import (
     Announcement,
+    adjust_for_splits,
+    announcements_from_frame,
+    announcements_to_frame,
     available_date,
     build_history,
     parse_eps_table,
@@ -83,7 +86,7 @@ def ann(period, available, quarterly, eps, non_ifrs=None):
         values["non_ifrs_eps"] = non_ifrs
     return Announcement(
         period=pd.Period(period, freq="Q"),
-        available=pd.Timestamp(available),
+        published=pd.Timestamp(available) - pd.Timedelta(hours=7),  # 前一天 17:00 发布
         url=f"https://example.com/{period}.pdf",
         currency="CNY",
         is_quarterly_table=quarterly,
@@ -143,3 +146,22 @@ def test_stock_code():
     assert stock_code("0700.HK") == "00700"
     with pytest.raises(ValueError):
         stock_code("AAPL")
+
+
+def test_announcements_round_trip_through_frame():
+    original = [
+        ann("2015Q2", "2015-08-13", False, [1.528, 1.332], [1.634, 1.22]),
+        ann("2016Q1", "2016-05-19", True, [0.981, 0.741, 0.769]),
+    ]
+    restored = announcements_from_frame(announcements_to_frame(original).astype(str))
+    assert restored == original
+
+
+def test_adjust_for_splits_uses_publish_time():
+    a = ann("2014Q1", "2014-05-15", True, [3.5, 2.204, 2.125])  # 2014-05-14 17:00 发布，拆股前
+    b = ann("2014Q2", "2014-08-14", False, [1.332, 0.843])
+    splits = pd.Series([5.0], index=pd.to_datetime(["2014-05-15"]))
+    adjusted = adjust_for_splits([a, b], splits)
+    assert adjusted[0].values["eps"] == pytest.approx([0.7, 0.4408, 0.425])
+    assert adjusted[1].values == b.values
+    assert a.values["eps"] == [3.5, 2.204, 2.125]  # 原对象不变
