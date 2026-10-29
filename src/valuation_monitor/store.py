@@ -3,7 +3,7 @@
   data/prices/<代码>/                   各来源的日线原始数据，以及综合判定后的收盘价（见 PriceStore）
   data/fx/<货币对>.csv、<货币对>.json   汇率
   data/eps/<代码>_announcements.csv     每份业绩公告的解析结果（公告原样数值）
-  data/eps/<代码>_quarterly.csv         逐季 EPS（已按拆股调整），含交叉核对信息
+  data/eps/<代码>_periods.csv           逐期（季度或半年）业绩（EPS 已按拆股调整），含交叉核对信息
   data/eps/<代码>_ttm.csv               每份公告发布后的 TTM EPS
 
 行情只下载上次保存之后的新交易日。原始成交价和汇率保存后不再改动；Yahoo 的
@@ -21,7 +21,7 @@ from pathlib import Path
 import pandas as pd
 
 from valuation_monitor.filings import (
-    PARSER_VERSION,
+    PARSER_VERSIONS,
     EarningsHistory,
     adjust_for_splits,
     announcements_from_frame,
@@ -216,27 +216,33 @@ class EarningsStore:
         self.folder = Path(root) / "eps"
 
     def paths(self, symbol: str) -> dict[str, Path]:
-        return {kind: self.folder / f"{symbol}_{kind}.csv" for kind in ("announcements", "quarterly", "ttm")}
+        return {kind: self.folder / f"{symbol}_{kind}.csv" for kind in ("announcements", "periods", "ttm")}
 
     def load(
-        self, symbol: str, filings: list[Filing], splits: pd.Series, trading_days: pd.DatetimeIndex | None = None
+        self,
+        symbol: str,
+        filings: list[Filing],
+        splits: pd.Series,
+        trading_days: pd.DatetimeIndex | None = None,
+        fmt: str = "highlights",
     ) -> EarningsHistory:
         """解析公告并计算 EPS。已解析过的公告直接读取保存的结果，只解析新公告。
 
-        trading_days 用于在保存的明细中列出每个数值实际开始使用的交易日。
+        trading_days 用于在保存的明细中列出每个数值实际开始使用的交易日；fmt 是公告的版式。
         """
+        version = PARSER_VERSIONS[fmt]
         paths = self.paths(symbol)
         saved = {}
         if paths["announcements"].exists():
             df = pd.read_csv(paths["announcements"], dtype=str)
-            df = df[df["parser_version"].astype(int) == PARSER_VERSION]
+            df = df[df["parser_version"].astype(int) == version]
             saved = {a.url: a for a in announcements_from_frame(df)}
 
-        parsed = [saved.get(f.url) or parse_announcement(f) for f in filings]
+        parsed = [saved.get(f.url) or parse_announcement(f, fmt) for f in filings]
         history = build_history(adjust_for_splits(parsed, splits))
 
         everything = {**saved, **{a.url: a for a in parsed}}
-        write_if_changed(paths["announcements"], announcements_to_frame(list(everything.values())).to_csv(index=False))
-        write_if_changed(paths["quarterly"], history.quarters_frame(trading_days).to_csv(index=False))
+        write_if_changed(paths["announcements"], announcements_to_frame(list(everything.values()), version).to_csv(index=False))
+        write_if_changed(paths["periods"], history.periods_frame(trading_days).to_csv(index=False))
         write_if_changed(paths["ttm"], history.ttm_frame(trading_days).to_csv(index=False, date_format="%Y-%m-%d"))
         return history

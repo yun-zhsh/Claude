@@ -76,3 +76,11 @@ def test_ps_and_pb_use_per_share_values_in_price_currency():
     pb = METRICS["pb"].compute(data)
     assert pb.iloc[0] == pytest.approx(110 / (100 * 1.1))
     assert pd.isna(pb.iloc[1])  # 净资产为负时 PB 无意义
+
+
+def test_parse_config_filing_format():
+    raw = {"stocks": [{"symbol": "2382.HK", "name": "舜宇光学科技", "filing_format": "statements", "metrics": ["pe"]}]}
+    assert parse_config(raw).stocks[0].filing_format == "statements"
+    assert parse_config({"stocks": [{"symbol": "0700.HK"}]}).stocks[0].filing_format == "highlights"
+    with pytest.raises(ValueError, match="公告版式"):
+        parse_config({"stocks": [{"symbol": "0700.HK", "filing_format": "xyz"}]})

@@ -19,6 +19,7 @@ class StockConfig:
     symbol: str  # Yahoo Finance 代码，如 0700.HK
     name: str
     metrics: list[str] = field(default_factory=lambda: ["pe"])
+    filing_format: str = "highlights"  # 业绩公告的版式，见 filings.FORMATS
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,7 @@ def load_config(path: str | Path) -> Config:
 
 
 def parse_config(raw: dict) -> Config:
+    from valuation_monitor.filings import FORMATS
     from valuation_monitor.metrics import METRICS
 
     stocks = []
@@ -51,7 +53,14 @@ def parse_config(raw: dict) -> Config:
         unknown = [m for m in metrics if m not in METRICS]
         if unknown:
             raise ValueError(f"{s['symbol']}: 未知指标 {unknown}，可用指标: {sorted(METRICS)}")
-        stocks.append(StockConfig(symbol=str(s["symbol"]), name=str(s.get("name", s["symbol"])), metrics=metrics))
+        filing_format = str(s.get("filing_format", "highlights"))
+        if filing_format not in FORMATS:
+            raise ValueError(f"{s['symbol']}: 未知的公告版式 {filing_format}，可用版式: {sorted(FORMATS)}")
+        stocks.append(
+            StockConfig(
+                symbol=str(s["symbol"]), name=str(s.get("name", s["symbol"])), metrics=metrics, filing_format=filing_format
+            )
+        )
     if not stocks:
         raise ValueError("配置中没有任何股票（stocks 为空）")
 

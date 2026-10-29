@@ -18,7 +18,15 @@ levels:
 #   pe_non_ifrs  PE Non-IFRS (TTM)，按公司披露的 Non-IFRS 利润，剔除投资收益等一次性项目
 #   ps           PS (TTM)，市销率，按最近 4 个季度营收
 #   pb           PB，市净率，按最新一期末归属股东净资产
+# filing_format：业绩公告的版式，决定怎样从公告里提取数据
+#   highlights  第一页有财务摘要表，每季度发布业绩（腾讯）
+#   statements  只有合并损益表和资产负债表，通常每半年发布业绩（舜宇光学）
 stocks:
   - symbol: 0700.HK   # Yahoo Finance 代码
     name: 腾讯控股
+    filing_format: highlights
     metrics: [pe, pe_non_ifrs, ps, pb]
+  - symbol: 2382.HK
+    name: 舜宇光学科技
+    filing_format: statements   # 舜宇只披露 HKFRS 数据，没有 Non-IFRS，所以不配 pe_non_ifrs
+    metrics: [pe, ps, pb]

@@ -38,8 +38,8 @@ def monitor(tmp_path):
     prices.write_text("date,close,source,status,tencent_close,yahoo_close_unadjusted,yahoo_factor\n"
                       "2024-01-01,300.0,tencent,agree,300.0,300.0,1.0\n")
     paths = monitor.earnings.paths("0700.HK")
-    paths["quarterly"].parent.mkdir(parents=True)
-    paths["quarterly"].write_text(earnings.quarters_frame().to_csv(index=False))
+    paths["periods"].parent.mkdir(parents=True)
+    paths["periods"].write_text(earnings.periods_frame().to_csv(index=False))
     paths["ttm"].write_text(earnings.ttm.to_csv(index=False))
 
     return monitor
@@ -78,9 +78,9 @@ def test_downloads(client):
     assert "腾讯证券,一致" in text
     assert "历史股价" in r.headers["Content-Disposition"] or "%E5%8E%86%E5%8F%B2" in r.headers["Content-Disposition"]
 
-    assert client.get("/stock/0700.HK/download/eps.csv").data.decode("utf-8-sig").startswith("季度,币种")
+    assert client.get("/stock/0700.HK/download/eps.csv").data.decode("utf-8-sig").startswith("报告期（季度或半年）,币种")
     names = zipfile.ZipFile(io.BytesIO(client.get("/stock/0700.HK/download/raw.zip").data)).namelist()
-    assert "prices/0700.HK/final.csv" in names and "eps/0700.HK_quarterly.csv" in names
+    assert "prices/0700.HK/final.csv" in names and "eps/0700.HK_periods.csv" in names
     assert client.get("/stock/0700.HK/download/other").status_code == 404
 
 
@@ -104,3 +104,28 @@ def test_export_site(monitor, tmp_path):
     assert (out / "stock" / "0700.HK" / "download" / "prices.csv").read_bytes().decode("utf-8-sig").startswith("日期")
     assert (out / "static" / "chart.umd.min.js").exists()
     assert (out / ".nojekyll").exists()
+
+
+def test_drop_empty_series():
+    from valuation_monitor.web.downloads import drop_empty_series
+
+    df = pd.DataFrame(
+        {
+            "period": ["2025H1"],
+            "eps": [1.5], "eps_published": ["2025-08-19 18:28"], "eps_effective": ["2025-08-20"], "eps_sources": [2], "eps_max_deviation": [0.0],
+            "non_ifrs_eps": [None], "non_ifrs_eps_published": [None], "non_ifrs_eps_effective": [None],
+            "non_ifrs_eps_sources": [0], "non_ifrs_eps_max_deviation": [None],
+        }
+    )
+    out = drop_empty_series(df)
+    assert list(out.columns) == ["period", "eps", "eps_published", "eps_effective", "eps_sources", "eps_max_deviation"]
+
+
+def test_download_headers_are_unique():
+    import collections
+
+    from valuation_monitor.web import downloads
+
+    for columns in (downloads.PERIOD_COLUMNS, downloads.TTM_COLUMNS, downloads.PRICE_COLUMNS):
+        names = list(columns.values())
+        assert [n for n, c in collections.Counter(names).items() if c > 1] == []
