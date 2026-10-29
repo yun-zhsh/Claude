@@ -33,7 +33,7 @@ import pandas as pd
 from pypdf import PdfReader
 
 from valuation_monitor.market_calendar import HK, Market, effective_trading_day, get_market
-from valuation_monitor.kifrs import parse_kifrs
+from valuation_monitor.kifrs import parse_kifrs, parse_kifrs_deck
 from valuation_monitor.press_release import parse_press_release
 from valuation_monitor.providers.base import Filing
 
@@ -108,6 +108,7 @@ class Announcement:
     is_quarterly_table: bool  # True：摘要表是单季数据；False：年初至今累计数据
     values: dict[str, list[float]]  # series -> 该行的数值（equity 为本期末、上年末）
     market: str = "HK"  # 上市地，决定收盘时间
+    provisional: bool = False  # 暂用的初步数据，正式财报发布后会被取代
 
     @property
     def available(self) -> pd.Timestamp:
@@ -285,12 +286,15 @@ FILING_FORMATS = {*FORMATS, "press_release", "kifrs_statements"}  # 加上美股
 def parse_announcement(filing: Filing, fmt: str = "highlights", market: Market = HK) -> Announcement:
     """解析一份业绩公告，数值保持公告原样（金额已换算成百万元，EPS 已换算成元；未做拆股调整）。"""
     if fmt in ("press_release", "kifrs_statements"):  # 解析结果自带报告期和是否单季数据
-        parsed = (
-            parse_press_release(filing.content)
-            if fmt == "press_release"
-            else parse_kifrs(filing.title, filing.content, filing.attachments["bs"])
+        if fmt == "press_release":
+            parsed = parse_press_release(filing.content)
+        elif filing.provisional:
+            parsed = parse_kifrs_deck(filing.title, filing.content, filing.attachments["previous_bs"])
+        else:
+            parsed = parse_kifrs(filing.title, filing.content, filing.attachments["bs"])
+        return Announcement(
+            parsed.period, filing.published, filing.url, parsed.currency, parsed.quarterly, parsed.values, market.key, filing.provisional
         )
-        return Announcement(parsed.period, filing.published, filing.url, parsed.currency, parsed.quarterly, parsed.values, market.key)
     period = parse_period(filing.title)
     currency, values = FORMATS[fmt](Pages(filing.content))
     counts = {len(values[k]) for k in FLOWS if k in values}
@@ -321,7 +325,7 @@ def adjust_for_splits(announcements: list[Announcement], splits: pd.Series) -> l
     return out
 
 
-ANNOUNCEMENT_COLUMNS = ["published", "period", "table", "currency", *SERIES, "url", "parser_version"]
+ANNOUNCEMENT_COLUMNS = ["published", "period", "table", "currency", *SERIES, "url", "provisional", "parser_version"]
 
 
 def announcements_to_frame(announcements: list[Announcement], parser_version: int) -> pd.DataFrame:
@@ -334,6 +338,7 @@ def announcements_to_frame(announcements: list[Announcement], parser_version: in
             "currency": a.currency,
             **{s: ";".join(f"{v:.10g}" for v in a.values[s]) if s in a.values else "" for s in SERIES},
             "url": a.url,
+            "provisional": int(a.provisional),
             "parser_version": parser_version,
         }
         for a in sorted(announcements, key=lambda a: a.published)
@@ -353,6 +358,7 @@ def announcements_from_frame(df: pd.DataFrame, market: Market = HK) -> list[Anno
                 is_quarterly_table=r["table"] == "quarterly",
                 values={s: [float(v) for v in str(r[s]).split(";")] for s in SERIES if str(r.get(s, ""))},
                 market=market.key,
+                provisional=str(r.get("provisional", "")) == "1",
             )
         )
     return out
@@ -390,6 +396,12 @@ class EarningsHistory:
                         f"{SERIES_LABELS[series]} {period_label(p, self.periods_per_year)} 在不同公告中数值不一致（可能是公司重述）[{vals}]，"
                         f"采用最早公布的 {fmt.format(q.value)}"
                     )
+        for a in self.announcements:
+            if a.provisional:
+                out.append(
+                    f"{period_label(a.period, self.periods_per_year)} 的数据来自业绩发布会材料（审阅前；营收、净利润只精确到 0.1 万亿韩元，"
+                    f"净资产是估算值），英文财报发布后会自动换成财报数字"
+                )
         shares = {p: s for p in sorted(self.quarters["eps"]) if (s := implied_shares(self.quarters, p))}
         periods = list(shares)
         label = lambda p: period_label(p, self.periods_per_year)  # noqa: E731

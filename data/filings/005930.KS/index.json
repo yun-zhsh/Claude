@@ -478,5 +478,15 @@
       "bs": "2026Q2_2026_con_quarter02_bs.pdf",
       "soi": "2026Q2_2026_con_quarter02_soi.pdf"
     }
+  },
+  {
+    "year": 2026,
+    "quarter": 3,
+    "published": "2026-10-29T10:00:00",
+    "url": "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2026_3Q_conference_eng.pdf",
+    "files": {
+      "deck": "2026Q3_2026_3Q_conference_eng.pdf"
+    },
+    "provisional": true
   }
 ]

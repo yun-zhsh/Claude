@@ -14,3 +14,4 @@ class Filing:
     url: str
     content: bytes  # 公告原文：港交所是 PDF，美国证监会是 HTML
     attachments: dict[str, bytes] = field(default_factory=dict)  # 同一份公告的其他文件（如三星的资产负债表）
+    provisional: bool = False  # 暂用的初步数据（如三星业绩发布会材料），正式财报发布后会被取代

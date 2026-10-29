@@ -32,6 +32,7 @@ EVENTS_PAGE = "https://www.samsung.com/global/ir/ir-events-presentations/events/
 STATEMENT_RE = re.compile(r"(?P<year>20\d\d)_con_quarter0(?P<q>[1-4])_(?P<kind>soi|bs)(?P<variant>_[a-z0-9]+)?\.pdf")
 CALL_RE = re.compile(r"^(?P<q>[1-4])Q ?(?:FY)?(?P<year>\d{2}|\d{4}) Earnings Conference Call")
 CALL_TIME_RE = re.compile(r"^(?P<date>[A-Z][a-z]+ \d{1,2}, \d{4})(?:, (?P<hour>\d{1,2}):(?P<minute>\d\d) a\.m\. KST)?")
+DECK_RE = re.compile(r"(?P<year>20\d\d)_(?P<q>[1-4])Q_conference_eng\w*\.pdf")
 DEFAULT_CALL_TIME = "10:00"
 
 
@@ -66,6 +67,20 @@ def discover(html_pages: list[str]) -> dict[tuple[int, int], dict[str, str]]:
     return statements
 
 
+def discover_decks(html_pages: list[str]) -> dict[tuple[int, int], str]:
+    """业绩发布会材料（presentation）的链接：{(年, 季度): 链接}。"""
+    decks = {}
+    for html in html_pages:
+        for name in sorted(set(re.findall(r"[\w.-]+\.pdf", html))):
+            if m := DECK_RE.fullmatch(name):
+                decks[(int(m.group("year")), int(m.group("q")))] = BASE + name
+    return decks
+
+
+def previous_quarter(year: int, quarter: int) -> tuple[int, int]:
+    return (year - 1, 4) if quarter == 1 else (year, quarter - 1)
+
+
 class SamsungIrProvider:
     def __init__(self, http: HttpClient | None, archive_dir: str | Path = "data/filings"):
         self.http = http
@@ -76,7 +91,7 @@ class SamsungIrProvider:
         folder = self.archive_dir / symbol.upper()
         index_path = folder / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
-        known = {(e["year"], e["quarter"]) for e in index}
+        known = {(e["year"], e["quarter"]) for e in index if not e.get("provisional")}
 
         try:
             added = self._fetch_new(symbol, since, folder, index, known)
@@ -90,49 +105,86 @@ class SamsungIrProvider:
             index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
         since_ts = pd.Timestamp(since)
-        return [
-            Filing(
-                title=f"Samsung Electronics {e['quarter']}Q {e['year']} consolidated financial statements",
-                published=pd.Timestamp(e["published"]),
-                url=e["url"],
-                content=(folder / e["files"]["soi"]).read_bytes(),
-                attachments={"bs": (folder / e["files"]["bs"]).read_bytes()},
-            )
-            for e in index
-            if pd.Timestamp(e["published"]) >= since_ts
-        ]
+        by_quarter = {(e["year"], e["quarter"]): e for e in index}
+        filings = []
+        for e in index:
+            if pd.Timestamp(e["published"]) < since_ts:
+                continue
+            title = f"Samsung Electronics {e['quarter']}Q {e['year']} consolidated financial statements"
+            if e.get("provisional"):
+                prev = by_quarter.get(previous_quarter(e["year"], e["quarter"]))
+                if prev is None or prev.get("provisional"):
+                    continue
+                filings.append(
+                    Filing(
+                        title=title.replace("consolidated financial statements", "earnings call presentation (provisional)"),
+                        published=pd.Timestamp(e["published"]),
+                        url=e["url"],
+                        content=(folder / e["files"]["deck"]).read_bytes(),
+                        attachments={"previous_bs": (folder / prev["files"]["bs"]).read_bytes()},
+                        provisional=True,
+                    )
+                )
+            else:
+                filings.append(
+                    Filing(
+                        title=title,
+                        published=pd.Timestamp(e["published"]),
+                        url=e["url"],
+                        content=(folder / e["files"]["soi"]).read_bytes(),
+                        attachments={"bs": (folder / e["files"]["bs"]).read_bytes()},
+                    )
+                )
+        return filings
 
     def _fetch_new(self, symbol, since, folder, index, known) -> bool:
-        statements = discover([self.http.get_bytes(url).decode("utf-8", "replace") for url in STATEMENT_PAGES])
+        pages = [self.http.get_bytes(url).decode("utf-8", "replace") for url in STATEMENT_PAGES]
+        statements = discover(pages)
+        decks = discover_decks(pages)
         calls = parse_calls(self.http.get_bytes(EVENTS_PAGE).decode("utf-8", "replace"))
         added = False
-        for (year, quarter), kinds in sorted(statements.items()):
-            if (year, quarter) in known or {"soi", "bs"} - kinds.keys():
-                continue
+
+        def too_old(year, quarter):
             quarter_end = pd.Timestamp(year=year, month=quarter * 3, day=1) + pd.offsets.MonthEnd(0)
-            if quarter_end + pd.Timedelta(days=60) < pd.Timestamp(since):
-                continue  # 发布会不可能在回看范围内
+            return quarter_end + pd.Timedelta(days=60) < pd.Timestamp(since)  # 发布会不可能在回看范围内
+
+        for (year, quarter), kinds in sorted(statements.items()):
+            if (year, quarter) in known or {"soi", "bs"} - kinds.keys() or too_old(year, quarter):
+                continue
             published = calls.get((year, quarter))
             if published is None:
                 print(f"{symbol}: {year}Q{quarter} 在 IR 网站的 Events 页面找不到业绩发布会日期，无法确定发布时间，跳过", file=sys.stderr)
                 continue
             if published < pd.Timestamp(since):
                 continue
+            # 正式财报出来了：取代之前暂用的发布会材料数据
+            for old in [e for e in index if (e["year"], e["quarter"]) == (year, quarter) and e.get("provisional")]:
+                (folder / old["files"]["deck"]).unlink(missing_ok=True)
+                index.remove(old)
             folder.mkdir(parents=True, exist_ok=True)
             files = {}
             for kind, url in kinds.items():
                 files[kind] = f"{year}Q{quarter}_{url.rsplit('/', 1)[-1]}"
                 (folder / files[kind]).write_bytes(self.http.get_bytes(url, cache=False))
-            index.append(
-                {
-                    "year": year,
-                    "quarter": quarter,
-                    "published": f"{published:%Y-%m-%dT%H:%M:%S}",
-                    "url": kinds["soi"],
-                    "files": files,
-                }
-            )
+            index.append({"year": year, "quarter": quarter, "published": f"{published:%Y-%m-%dT%H:%M:%S}", "url": kinds["soi"], "files": files})
             known.add((year, quarter))
             added = True
             print(f"{symbol}: 新财报 {year}Q{quarter}，业绩发布会 {published}", file=sys.stderr)
+
+        # 还没有英文财报的最新季度：先用业绩发布会材料里的数据（发布会当天就有）
+        have_provisional = {(e["year"], e["quarter"]) for e in index if e.get("provisional")}
+        for (year, quarter), deck in sorted(decks.items()):
+            published = calls.get((year, quarter))
+            if (year, quarter) in known | have_provisional or published is None or published < pd.Timestamp(since) or too_old(year, quarter):
+                continue
+            if previous_quarter(year, quarter) not in known:
+                continue  # 净资产估算要用上一季度的财报
+            name = f"{year}Q{quarter}_{deck.rsplit('/', 1)[-1]}"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / name).write_bytes(self.http.get_bytes(deck, cache=False))
+            index.append(
+                {"year": year, "quarter": quarter, "published": f"{published:%Y-%m-%dT%H:%M:%S}", "url": deck, "files": {"deck": name}, "provisional": True}
+            )
+            added = True
+            print(f"{symbol}: {year}Q{quarter} 英文财报还没发布，先用业绩发布会材料（{published}）", file=sys.stderr)
         return added

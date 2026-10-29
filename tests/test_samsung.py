@@ -98,7 +98,64 @@ def test_label_variants_and_control_characters():
 def test_every_saved_statement_parses():
     index = json.loads((FOLDER / "index.json").read_text(encoding="utf-8"))
     assert len(index) >= 40
-    for e in index:
+    for e in (e for e in index if not e.get("provisional")):
         p = parsed(e["year"], e["quarter"])
         assert p.period == pd.Period(year=e["year"], quarter=e["quarter"], freq="Q")
         assert {"revenue", "profit", "eps", "equity"} <= p.values.keys()
+
+
+@pytestmark_saved
+def test_earnings_call_deck_is_used_until_the_statements_are_out():
+    from valuation_monitor.kifrs import parse_kifrs_deck
+
+    index = json.loads((FOLDER / "index.json").read_text(encoding="utf-8"))
+    deck = next((e for e in index if e.get("provisional")), None)
+    if deck is None:
+        pytest.skip("3Q26 的英文财报已发布，发布会材料已被取代")
+    prev = next(e for e in index if (e["year"], e["quarter"]) == (2026, 2))
+    p = parse_kifrs_deck(
+        "Samsung Electronics 3Q 2026 x", (FOLDER / deck["files"]["deck"]).read_bytes(), (FOLDER / prev["files"]["bs"]).read_bytes()
+    )
+    assert p.period == pd.Period("2026Q3") and p.quarterly
+    assert p.values["eps"] == [11462, 1802, 10849]  # 本季度、去年同季度、上一季度
+    assert p.values["revenue"] == [195_300_000, 86_100_000, 171_500_000]  # 万亿韩元精确到 0.1
+    assert p.values["equity"][0] == pytest.approx(614_111_600 * 565_064_740 / 579_309_676)  # 合计权益按上季归母比例折算
+
+
+def test_deck_for_another_quarter_is_rejected():
+    from valuation_monitor.kifrs import parse_kifrs_deck
+
+    with pytest.raises(Exception):
+        parse_kifrs_deck("Samsung Electronics 3Q 2026 x", b"not a pdf", b"")
+
+
+class FakeHttpWithDeck(FakeHttp):
+    statements = True
+
+    def get_bytes(self, url, **kwargs):
+        if "audited" in url:
+            if not self.statements:
+                return b"2026_con_quarter02_soi.pdf 2026_con_quarter02_bs.pdf"
+            return b"2026_con_quarter02_soi.pdf 2026_con_quarter02_bs.pdf 2026_con_quarter03_soi.pdf 2026_con_quarter03_bs.pdf"
+        if "earnings-release" in url:
+            return b"2026_3Q_conference_eng.pdf"
+        return super().get_bytes(url, **kwargs)
+
+
+def test_provider_falls_back_to_deck_then_replaces_it(tmp_path):
+    http = FakeHttpWithDeck()
+    http.statements = False
+    provider = SamsungIrProvider(http, tmp_path)
+    # 上一季度财报也没有的话，不做暂用（净资产估算需要上一季度财报）
+    events = EVENTS_HTML + "<li>2Q26 Earnings Conference Call</li><li>July 30, 2026, 10:00 a.m. KST</li>"
+    http_events = events.encode()
+    original = http.get_bytes
+    http.get_bytes = lambda url, **kw: http_events if "events" in url else original(url, **kw)
+    found = provider.results_announcements("005930.KS", datetime(2026, 1, 1))
+    assert [(f.title.split()[2], f.provisional) for f in found] == [("2Q", False), ("3Q", True)]
+    assert found[1].attachments["previous_bs"] == b"%PDF 2026_con_quarter02_bs.pdf"
+
+    http.statements = True  # 英文财报发布：暂用的发布会材料被取代，发布时间不变
+    found = provider.results_announcements("005930.KS", datetime(2026, 1, 1))
+    assert [(f.title.split()[2], f.provisional, f.published) for f in found][-1] == ("3Q", False, pd.Timestamp("2026-10-29 10:00"))
+    assert not list(tmp_path.glob("005930.KS/*conference_eng*"))

@@ -256,11 +256,17 @@ class EarningsStore:
             df = df[df["parser_version"].astype(int) == version]
             saved = {a.url: a for a in announcements_from_frame(df, market)}
 
-        parsed = [saved.get(f.url) or parse_announcement(f, fmt, market) for f in filings]
+        parsed = []
+        for f in filings:
+            try:
+                parsed.append(saved.get(f.url) or parse_announcement(f, fmt, market))
+            except Exception as e:
+                if not f.provisional:
+                    raise
+                print(f"{symbol}: 无法解析暂用的初步数据 {f.url}（{e}），等正式财报", file=sys.stderr)
         history = build_history(adjust_for_splits(parsed, splits))
 
-        everything = {**saved, **{a.url: a for a in parsed}}
-        write_if_changed(paths["announcements"], announcements_to_frame(list(everything.values()), version).to_csv(index=False))
+        write_if_changed(paths["announcements"], announcements_to_frame(parsed, version).to_csv(index=False))
         write_if_changed(paths["periods"], history.periods_frame(trading_days).to_csv(index=False))
         write_if_changed(paths["ttm"], history.ttm_frame(trading_days).to_csv(index=False, date_format="%Y-%m-%d"))
         return history
