@@ -59,13 +59,13 @@
   <h2>下载数据</h2>
   <div class="downloads">
     <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='prices.csv') }}" download="{{ download_name(report.stock.symbol, 'prices.csv') }}">下载历史股价</a>
-    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='eps.csv') }}" download="{{ download_name(report.stock.symbol, 'eps.csv') }}">下载历史业绩（逐季）</a>
+    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='eps.csv') }}" download="{{ download_name(report.stock.symbol, 'eps.csv') }}">下载历史业绩</a>
     <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='ttm.csv') }}" download="{{ download_name(report.stock.symbol, 'ttm.csv') }}">每股指标</a>
     <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='raw.zip') }}" download="{{ download_name(report.stock.symbol, 'raw.zip') }}">全部原始数据（zip）</a>
   </div>
   <ul class="muted small">
     <li>历史股价：每个交易日最终采用的收盘价，以及腾讯证券、Yahoo 两个来源的价格和核对状态。</li>
-    <li>历史业绩（逐季）：从港交所业绩公告原文提取的每季营收、归母净利润、基本 EPS（IFRS 和 Non-IFRS）、期末归母净资产，含首次公布时间、生效交易日、被几份公告证实、原文链接。</li>
+    <li>历史业绩：从港交所业绩公告原文提取的每期（季度或半年）营收、归母净利润、基本 EPS、期末归母净资产，含首次公布时间、生效交易日、被几份公告证实、原文链接。</li>
     <li>每股指标：每份公告发布后计算估值所用的 TTM EPS、每股营收、每股净资产及股数。</li>
     <li>全部原始数据：各来源的原始行情、汇率、公告解析结果和公告索引。</li>
   </ul>

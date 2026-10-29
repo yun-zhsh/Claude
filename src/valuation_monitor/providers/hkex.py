@@ -19,7 +19,10 @@ import pandas as pd
 from valuation_monitor.providers.http import HttpClient
 
 BASE_URL = "https://www1.hkexnews.hk"
-RESULTS_TITLE_RE = re.compile(r"^ANNOUNCEMENT OF THE (?:ANNUAL )?RESULTS FOR THE ", re.I)
+# 业绩公告的标题各公司写法不同，如“ANNOUNCEMENT OF THE RESULTS FOR THE THREE MONTHS ENDED 31 MARCH 2026”、
+# “INTERIM RESULTS ANNOUNCEMENT FOR THE SIX MONTHS ENDED 30 JUNE 2026”，共同点是先有 RESULTS、后有“ENDED 日期”。
+# 股东大会的表决结果（POLL RESULTS OF ...）没有“ENDED 日期”，也一并排除。
+RESULTS_TITLE_RE = re.compile(r"\bRESULTS\b.*\bENDED \d{1,2} [A-Z]+ \d{4}", re.I)
 
 
 @dataclass
@@ -123,7 +126,7 @@ class HkexProvider:
         found = []
         for row in json.loads(data["result"]):
             title = " ".join(row["TITLE"].split())
-            if RESULTS_TITLE_RE.match(title):
+            if "POLL RESULTS" not in title.upper() and RESULTS_TITLE_RE.search(title):
                 published = datetime.strptime(row["DATE_TIME"], "%d/%m/%Y %H:%M")
                 found.append({"title": title, "published": published.isoformat(), "url": BASE_URL + row["FILE_LINK"]})
         return found

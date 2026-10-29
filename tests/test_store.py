@@ -121,7 +121,7 @@ def test_price_store_adjusts_raw_prices_for_splits_in_memory(tmp_path):
 def test_earnings_store_parses_each_filing_once(tmp_path, monkeypatch):
     calls = []
 
-    def fake_parse(filing):
+    def fake_parse(filing, fmt):
         calls.append(filing.url)
         return Announcement(
             period=pd.Period("2026Q2", freq="Q"),
@@ -140,5 +140,5 @@ def test_earnings_store_parses_each_filing_once(tmp_path, monkeypatch):
     second = store.load("0700.HK", [filing], pd.Series(dtype=float))
     assert calls == ["https://example.com/a.pdf"]
     assert second.quarters["eps"][pd.Period("2026Q2")].value == first.quarters["eps"][pd.Period("2026Q2")].value
-    assert (tmp_path / "eps" / "0700.HK_quarterly.csv").exists()
+    assert (tmp_path / "eps" / "0700.HK_periods.csv").exists()
     assert (tmp_path / "eps" / "0700.HK_ttm.csv").exists()

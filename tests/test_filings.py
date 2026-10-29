@@ -8,8 +8,12 @@ from valuation_monitor.filings import (
     announcements_to_frame,
     available_date,
     build_history,
+    first_profit_match,
+    infer_periods_per_year,
     parse_equity,
+    parse_statements,
     parse_summary_table,
+    period_label,
     parse_period,
     split_factor,
 )
@@ -154,7 +158,7 @@ def test_announcements_round_trip_through_frame():
         ann("2015Q2", "2015-08-13", False, [1.528, 1.332], [1.634, 1.22]),
         ann("2016Q1", "2016-05-19", True, [0.981, 0.741, 0.769]),
     ]
-    restored = announcements_from_frame(announcements_to_frame(original).astype(str))
+    restored = announcements_from_frame(announcements_to_frame(original, 1).astype(str))
     assert restored == original
 
 
@@ -226,3 +230,115 @@ def test_adjust_for_splits_leaves_amounts():
     adjusted = adjust_for_splits([a], pd.Series([5.0], index=pd.to_datetime(["2014-05-15"])))[0]
     assert adjusted.values["eps"] == pytest.approx([0.7, 0.4408, 0.425])
     assert adjusted.values["revenue"] == [18400.0, 13550.0, 16970.0]
+
+
+# ---- statements 版式（舜宇光学）和每半年发布的公司 ----
+
+INCOME_STATEMENT = """Consolidated Statement of Profit or Loss and Other Comprehensive Income FOR THE SIX MONTHS ENDED 30 JUNE 2026
+For the six months ended 30 June NOTES 2026 2025 RMB’000 RMB’000 (Unaudited) (Unaudited) Revenue 3 21,905,704 19,651,919
+Cost of sales (17,637,038) (15,757,471) Gross profit 4,268,666 3,894,448 Profit for the period attributable to:
+Owners of the Company 1,808,364 1,646,133 Non-controlling interests ( “NCI”) 141,626 78,051 1,949,990 1,724,184
+Total comprehensive income for the period attributable to: Owners of the Company 1,735,863 1,648,740
+Earnings per share – Basic (RMB cents) 8 168.03 151.56 – Diluted (RMB cents) 8 167.66 150.96"""
+
+BALANCE_SHEET_STMT = """CAPITAL AND RESERVES Share capital 21 104,967 104,967 Reserves 28,795,593 29,043,621
+Equity attributable to owners of the Company 28,900,560 29,148,588 Non-controlling interests 697,015 615,738"""
+
+
+def test_parse_statements_converts_units_and_picks_the_right_rows():
+    # 资产负债表所在页没有单位表头，沿用前面损益表的单位
+    currency, v = parse_statements(["cover page", INCOME_STATEMENT, BALANCE_SHEET_STMT])
+    assert currency == "CNY"
+    assert v["revenue"] == pytest.approx([21905.704, 19651.919])  # 千元 -> 百万元
+    assert v["profit"] == pytest.approx([1808.364, 1646.133])  # 不是紧随其后的 comprehensive income
+    assert v["eps"] == pytest.approx([1.6803, 1.5156])  # 分 -> 元
+    assert v["equity"] == pytest.approx([28900.56, 29148.588])
+
+
+@pytest.mark.parametrize("revenue_row", ["Revenue 3 21,905,704 19,651,919", "Revenue 3A 21,905,704 19,651,919",
+                                          "Revenue 3, 4 21,905,704 19,651,919", "Revenue 3,4 21,905,704 19,651,919",
+                                          "Revenue 21,905,704 19,651,919"])
+def test_parse_statements_note_column_variants(revenue_row):
+    page = INCOME_STATEMENT.replace("Revenue 3 21,905,704 19,651,919", revenue_row)
+    _, v = parse_statements([page, BALANCE_SHEET_STMT])
+    assert v["revenue"] == pytest.approx([21905.704, 19651.919])
+
+
+def test_parse_statements_requires_all_rows():
+    with pytest.raises(ValueError, match="合并损益表"):
+        parse_statements(["no statements here"])
+    with pytest.raises(ValueError, match="equity"):
+        parse_statements([INCOME_STATEMENT])
+
+
+def half(period, available, eps, revenue, profit, equity):
+    a = ann(period, available, False, eps)
+    a.values |= {"revenue": revenue, "profit": profit, "equity": equity}
+    return a
+
+
+def semiannual_history(fy2024_prior=2.50):
+    return build_history(
+        [
+            half("2024Q2", "2024-08-21", [1.00, 0.40], [100, 80], [10, 4], [500, 450]),  # 上半年累计、去年同期
+            half("2024Q4", "2025-03-25", [2.50, 1.00], [230, 180], [25, 10], [550, 450]),  # 全年累计、去年全年
+            half("2025Q2", "2025-08-20", [1.60, 1.00], [120, 100], [16, 10], [560, 550]),
+            half("2025Q4", "2026-03-31", [4.30, fy2024_prior], [270, 230], [43, 25], [620, 550]),
+        ]
+    )
+
+
+def test_semiannual_history_derives_second_half_and_ttm():
+    h = semiannual_history()
+    assert h.periods_per_year == 2 and h.step == 2
+    eps = {period_label(p, 2): q.value for p, q in h.quarters["eps"].items()}
+    assert eps["2024H1"] == pytest.approx(1.00)
+    assert eps["2024H2"] == pytest.approx(1.50)  # 全年 2.50 - 上半年 1.00
+    assert eps["2023H2"] == pytest.approx(0.60)  # 去年全年 1.00 - 去年上半年 0.40
+    assert eps["2025H2"] == pytest.approx(2.70)
+
+    ttm = h.ttm.set_index("published")
+    assert ttm["eps_ttm"].tolist()[1:] == pytest.approx([2.50, 3.10, 4.30])  # 首份公告发布时下半年数据还不知道
+    assert pd.isna(ttm["eps_ttm"].iloc[0])
+    assert ttm["revenue_ttm"].iloc[-1] == pytest.approx(270)  # 2025 全年
+    last = h.ttm.iloc[-1]
+    assert last["shares"] == pytest.approx(43 / 4.30 * 1.0 if False else (43 - 16) / (4.30 - 1.60), rel=1e-6)
+    assert last["equity"] == 620 and last["book_value_per_share"] == pytest.approx(620 / last["shares"], rel=1e-4)
+
+
+def test_semiannual_history_cross_checks_cumulative_totals():
+    assert semiannual_history().discrepancies() == []
+    # 次年年报把上年全年数重述为 2.60：2024 下半年出现第二个来源，数值不一致
+    issues = semiannual_history(fy2024_prior=2.60).discrepancies()
+    assert len(issues) == 1 and "2024H2" in issues[0] and "累计数推算" in issues[0]
+
+
+def test_period_label_and_frequency_inference():
+    assert period_label(pd.Period("2025Q4", freq="Q"), 4) == "2025Q4"
+    assert period_label(pd.Period("2025Q4", freq="Q"), 2) == "2025H2"
+    assert period_label(pd.Period("2025Q2", freq="Q"), 2) == "2025H1"
+    assert period_label(pd.Period("2025Q4", freq="Q"), 1) == "2025FY"
+    quarters = lambda *qs: [pd.Period(f"2025Q{q}", freq="Q") for q in qs]  # noqa: E731
+    assert infer_periods_per_year(quarters(1, 2, 3, 4)) == 4
+    assert infer_periods_per_year(quarters(2, 4)) == 2
+    assert infer_periods_per_year(quarters(4)) == 1
+
+
+def test_parse_statements_does_not_take_equity_or_comprehensive_income_as_profit():
+    unit = "NOTES 2026 2025 RMB’000 RMB’000 Revenue 3 21,905,704 19,651,919 "
+    eps = "Earnings per share – Basic (RMB cents) 8 168.03 151.56 "
+    tci = "Total comprehensive income for the period attributable to: Owners of the Company 1,735,863 1,648,740 "
+    profit = "Profit for the period attributable to: Owners of the Company 1,808,364 1,646,133 "
+
+    # 损益表里没有净利润行：不能退而求其次，取到后面的综合收益总额或资产负债表的“归属股东净资产”
+    with pytest.raises(ValueError, match="profit"):
+        parse_statements([unit + tci + eps, BALANCE_SHEET_STMT])
+    # 净利润在综合收益总额前面（常见排版）：取净利润；资产负债表在 EPS 之后，不会被当成净利润
+    _, v = parse_statements([unit + profit + tci + eps, BALANCE_SHEET_STMT])
+    assert v["profit"] == pytest.approx([1808.364, 1646.133])
+    assert v["equity"] == pytest.approx([28900.56, 29148.588])
+    # 综合收益总额排在前面也一样：靠标签区分，取的仍是净利润
+    _, v = parse_statements([unit + tci + profit + eps, BALANCE_SHEET_STMT])
+    assert v["profit"] == pytest.approx([1808.364, 1646.133])
+    # “Profit (loss) for the year”的写法
+    assert first_profit_match("Profit (loss) for the year attributable to: Owners of the Company 10 20").group("a") == "10"

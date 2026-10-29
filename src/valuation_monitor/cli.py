@@ -37,7 +37,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         for issue in report.discrepancies:
             print(f"  ⚠ {issue}")
-        print(f"  业绩明细  {monitor.earnings.paths(stock.symbol)['quarterly']}")
+        print(f"  业绩明细  {monitor.earnings.paths(stock.symbol)['periods']}")
         checks = "，".join(f"{PRICE_STATUS_LABELS[k]} {n} 天" for k, n in report.price_check.items())
         print(f"  股价核对  腾讯证券 vs Yahoo（还原除权调整后）：{checks}（明细见 {monitor.prices.final_path(stock.symbol)}）")
         print()
