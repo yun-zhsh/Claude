@@ -1,0 +1,1 @@
+chart.umd.min.js: Chart.js v4.4.1 (https://www.chartjs.org), MIT License, Copyright (c) 2014-2024 Chart.js Contributors

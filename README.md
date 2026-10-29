@@ -6,8 +6,51 @@
 
 ## 快速开始
 
+安装：
+
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
+```
+
+### 网页界面
+
+```bash
+.venv/bin/valuation-monitor-web
+```
+
+启动时会先更新数据（约几秒到十几秒），然后自动在浏览器中打开 http://127.0.0.1:8050/ 。按 Ctrl+C 退出。
+
+- **首页**：列出所有跟踪的股票，显示最新股价、各项估值的当前值、历史分位和估值档位。
+- **股票页面**：点击股票进入。页面内容包括：
+  - 各指标的当前值、历史分位，以及标出当前位置的分位条；
+  - 各指标的走势图（带 P10～P90 分位线，鼠标悬停可查看每天的数值）和股价走势图；
+  - 数据来源与核对情况；
+  - 下载按钮：历史股价、历史业绩（逐季 EPS）、TTM EPS、全部原始数据（zip）。下载的 CSV 使用中文列名，可以直接用 Excel 打开。
+- **更新数据**：页面右上角的按钮会联网补充最新的行情和公告。
+
+参数：`--port` 指定端口（默认 8050），`--no-browser` 启动后不自动打开浏览器；`-c`、`--data-dir`、`--refresh` 与命令行版相同。程序默认只允许本机访问。
+
+### 在线网页（GitHub Pages）
+
+网址：https://yun-zhsh.github.io/Claude/ （手机、电脑都可以直接打开）
+
+GitHub Actions（`.github/workflows/pages.yml`）每 4 小时运行一次，即香港时间 9:47、13:47、17:47、21:47、1:47、5:47（GitHub 不保证准点，可能晚几分钟到半小时以上）。每次运行会：
+
+1. 更新行情和公告数据，有变化就提交回仓库的 `data/` 目录；
+2. 用和本地网页相同的页面导出静态网站（没有“更新数据”按钮），发布到 GitHub Pages。
+
+另外，代码推送到 `main` 时也会触发一次。需要立即更新时，可以在仓库的 Actions 页面选择“更新数据并发布网页”，点 “Run workflow” 手动运行。
+
+几点说明：
+
+- 首次使用前，需要在仓库 Settings → Pages 中把 Source 设为 “GitHub Actions”。
+- 仓库是公开的，所以网页任何人都能访问。
+- 公开仓库如果连续 60 天没有任何活动，GitHub 会自动停用定时任务，到 Actions 页面重新启用即可。
+- 本地也可以导出静态网站：`.venv/bin/valuation-monitor-export --out site`。
+
+### 命令行
+
+```bash
 .venv/bin/valuation-monitor --plot charts
 ```
 
@@ -138,8 +181,11 @@ src/valuation_monitor/
   providers/                       数据源（hkex.py 披露易、tencent.py 股价、yahoo.py 拆股和汇率、http.py 缓存/重试）
   metrics/                         指标（base.py 定义接口，pe.py 实现 PE）
   analysis.py                      历史分位和档位判断
-  report.py                        文字报告与走势图
+  report.py                        文字报告与走势图（命令行版）
+  service.py                       取数并计算各项指标（命令行和网页共用）
+  web/                             网页界面（Flask）：页面模板、样式、Chart.js、下载文件生成、静态网站导出
 data/                              保存的公告原文、行情、汇率、EPS（见“保存的数据”）
+.github/workflows/pages.yml        定时更新数据并发布 GitHub Pages
 tests/                             单元测试（离线，不访问网络）
 ```
 

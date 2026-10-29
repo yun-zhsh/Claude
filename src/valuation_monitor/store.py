@@ -131,13 +131,14 @@ class PriceStore:
         today = pd.Timestamp.now(tz=MARKET_TIMEZONE).tz_localize(None).normalize()
         saved = final[final.index < today]
         write_if_changed(self.final_path(symbol), saved.to_csv(index_label="date", date_format="%Y-%m-%d"))
-        return PriceHistory(split_adjust(final["close"], splits), splits, self.quotes.currency, self.quotes.timezone)
+        close = split_adjust(final["close"], splits)
+        return PriceHistory(close[close.index >= pd.Timestamp(start).normalize()], splits, self.quotes.currency, self.quotes.timezone)
 
     def fx(self, from_ccy: str, to_ccy: str, start: datetime) -> pd.Series:
         """1 单位 from_ccy 兑换多少 to_ccy 的日线序列。"""
         pair = f"{from_ccy}{to_ccy}"
         folder = self.root / "fx"
-        return self._frame(
+        rate = self._frame(
             folder / f"{pair}.csv",
             folder / f"{pair}.json",
             source=f"Yahoo Finance {pair}=X",
@@ -147,6 +148,7 @@ class PriceStore:
             frozen=True,
             timezone="Europe/London",  # Yahoo 的外汇日线按伦敦时间划分
         )["rate"]
+        return rate[rate.index >= pd.Timestamp(start).normalize()]
 
     def _frame(
         self,
@@ -159,7 +161,7 @@ class PriceStore:
         frozen: bool,
         timezone: str = MARKET_TIMEZONE,
     ) -> pd.DataFrame:
-        """读取已保存的数据，只下载新增的交易日并保存。
+        """读取已保存的数据，只下载新增的交易日并保存。返回已保存的全部数据加当天行情。
 
         frozen=True：已保存的数据不再改动（原始成交价、汇率），数据源改动历史时只提示；
         frozen=False：数据源回溯调整了历史（如 Yahoo 的除权调整价）时，整段重新下载。
@@ -194,7 +196,7 @@ class PriceStore:
             if stored.empty:
                 raise
             print(f"{source}: 无法更新（{e}），使用已保存的数据（截至 {stored.index[-1]:%Y-%m-%d}）", file=sys.stderr)
-            return stored[stored.index >= start]
+            return stored
 
         merged = pd.concat([stored, completed[~completed.index.isin(stored.index)]]).sort_index()
         for col, places in decimals.items():
@@ -206,7 +208,7 @@ class PriceStore:
         write_meta(meta_path, meta)
 
         result = pd.concat([merged.astype(float), live[live.index >= today][columns]])  # 加上当天的实时行情（不保存）
-        return result[result.index >= start]
+        return result
 
 
 class EarningsStore:
