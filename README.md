@@ -30,6 +30,24 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 
 参数：`--port` 指定端口（默认 8050），`--no-browser` 启动后不自动打开浏览器；`-c`、`--data-dir`、`--refresh` 与命令行版相同。程序默认只允许本机访问。
 
+### 在线网页（GitHub Pages）
+
+网址：https://yun-zhsh.github.io/Claude/ （手机、电脑都可以直接打开）
+
+GitHub Actions（`.github/workflows/pages.yml`）每 4 小时运行一次，即香港时间 9:47、13:47、17:47、21:47、1:47、5:47（GitHub 不保证准点，可能晚几分钟到半小时以上）。每次运行会：
+
+1. 更新行情和公告数据，有变化就提交回仓库的 `data/` 目录；
+2. 用和本地网页相同的页面导出静态网站（没有“更新数据”按钮），发布到 GitHub Pages。
+
+另外，代码推送到 `main` 时也会触发一次。需要立即更新时，可以在仓库的 Actions 页面选择“更新数据并发布网页”，点 “Run workflow” 手动运行。
+
+几点说明：
+
+- 首次使用前，需要在仓库 Settings → Pages 中把 Source 设为 “GitHub Actions”。
+- 仓库是公开的，所以网页任何人都能访问。
+- 公开仓库如果连续 60 天没有任何活动，GitHub 会自动停用定时任务，到 Actions 页面重新启用即可。
+- 本地也可以导出静态网站：`.venv/bin/valuation-monitor-export --out site`。
+
 ### 命令行
 
 ```bash
@@ -165,8 +183,9 @@ src/valuation_monitor/
   analysis.py                      历史分位和档位判断
   report.py                        文字报告与走势图（命令行版）
   service.py                       取数并计算各项指标（命令行和网页共用）
-  web/                             网页界面（Flask）：页面模板、样式、Chart.js、下载文件生成
+  web/                             网页界面（Flask）：页面模板、样式、Chart.js、下载文件生成、静态网站导出
 data/                              保存的公告原文、行情、汇率、EPS（见“保存的数据”）
+.github/workflows/pages.yml        定时更新数据并发布 GitHub Pages
 tests/                             单元测试（离线，不访问网络）
 ```
 

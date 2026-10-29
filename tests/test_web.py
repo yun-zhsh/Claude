@@ -9,11 +9,11 @@ from valuation_monitor.config import parse_config
 from valuation_monitor.data import StockData
 from valuation_monitor.filings import Announcement, build_history
 from valuation_monitor.service import Monitor
-from valuation_monitor.web import create_app
+from valuation_monitor.web import create_app, export_site
 
 
 @pytest.fixture
-def client(tmp_path):
+def monitor(tmp_path):
     config = parse_config({"stocks": [{"symbol": "0700.HK", "name": "腾讯控股", "metrics": ["pe", "pe_non_ifrs"]}]})
     monitor = Monitor(config, data_dir=tmp_path, cache_dir=tmp_path / "cache")
 
@@ -42,6 +42,11 @@ def client(tmp_path):
     paths["quarterly"].write_text(earnings.quarters_frame().to_csv(index=False))
     paths["ttm"].write_text(earnings.ttm.to_csv(index=False))
 
+    return monitor
+
+
+@pytest.fixture
+def client(monitor):
     app = create_app(monitor)
     app.testing = True
     return app.test_client()
@@ -50,35 +55,52 @@ def client(tmp_path):
 def test_index_lists_stocks(client):
     html = client.get("/").get_data(as_text=True)
     assert "腾讯控股" in html and "0700.HK" in html
-    assert "/stock/0700.HK" in html
+    assert "/stock/0700.HK/" in html
+    assert "更新数据" in html
     assert "PE (TTM)" in html and "分位" in html
 
 
 def test_stock_page_has_charts_and_downloads(client):
-    html = client.get("/stock/0700.HK").get_data(as_text=True)
+    html = client.get("/stock/0700.HK/").get_data(as_text=True)
     assert 'id="chart-pe"' in html and 'id="chart-pe_non_ifrs"' in html and 'id="chart-price"' in html
-    for kind in ("prices", "eps", "ttm", "raw"):
-        assert f"/stock/0700.HK/download/{kind}" in html
-    assert client.get("/stock/9999.HK").status_code == 404
+    for name in ("prices.csv", "eps.csv", "ttm.csv", "raw.zip"):
+        assert f"/stock/0700.HK/download/{name}" in html
+    assert 'download="0700.HK_历史股价.csv"' in html
+    assert client.get("/stock/0700.HK").status_code == 308  # 不带 / 的网址会跳转
+    assert client.get("/stock/9999.HK/").status_code == 404
 
 
 def test_downloads(client):
-    r = client.get("/stock/0700.HK/download/prices")
+    r = client.get("/stock/0700.HK/download/prices.csv")
     assert r.status_code == 200
     text = r.data.decode("utf-8-sig")
     assert text.splitlines()[0].startswith("日期,收盘价（实际成交价）")
     assert "腾讯证券,一致" in text
     assert "历史股价" in r.headers["Content-Disposition"] or "%E5%8E%86%E5%8F%B2" in r.headers["Content-Disposition"]
 
-    assert client.get("/stock/0700.HK/download/eps").data.decode("utf-8-sig").startswith("季度,币种")
-    names = zipfile.ZipFile(io.BytesIO(client.get("/stock/0700.HK/download/raw").data)).namelist()
+    assert client.get("/stock/0700.HK/download/eps.csv").data.decode("utf-8-sig").startswith("季度,币种")
+    names = zipfile.ZipFile(io.BytesIO(client.get("/stock/0700.HK/download/raw.zip").data)).namelist()
     assert "prices/0700.HK/final.csv" in names and "eps/0700.HK_quarterly.csv" in names
     assert client.get("/stock/0700.HK/download/other").status_code == 404
 
 
 def test_refresh_redirects_back(client):
-    r = client.post("/refresh", data={"next": "/stock/0700.HK"})
-    assert r.status_code == 302 and r.headers["Location"].endswith("/stock/0700.HK")
+    r = client.post("/refresh", data={"next": "/stock/0700.HK/"})
+    assert r.status_code == 302 and r.headers["Location"].endswith("/stock/0700.HK/")
     for target in ("https://example.com", "//example.com"):
         r = client.post("/refresh", data={"next": target})
         assert "example.com" not in r.headers["Location"]
+
+
+def test_export_site(monitor, tmp_path):
+    out = tmp_path / "site"
+    export_site(monitor, out, base_path="/Claude")
+    index = (out / "index.html").read_text(encoding="utf-8")
+    assert 'href="/Claude/stock/0700.HK/"' in index
+    assert "/Claude/static/style.css" in index
+    assert "/refresh" not in index and "更新数据" not in index  # 静态网站没有更新按钮
+    page = (out / "stock" / "0700.HK" / "index.html").read_text(encoding="utf-8")
+    assert "/Claude/stock/0700.HK/download/prices.csv" in page and "定时自动更新" in page
+    assert (out / "stock" / "0700.HK" / "download" / "prices.csv").read_bytes().decode("utf-8-sig").startswith("日期")
+    assert (out / "static" / "chart.umd.min.js").exists()
+    assert (out / ".nojekyll").exists()

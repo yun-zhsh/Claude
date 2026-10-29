@@ -5,7 +5,7 @@
 <div class="stock-head page-head">
   <div>
     <h1>{{ report.stock.name }} <span class="muted">{{ report.stock.symbol }}</span></h1>
-    <div class="muted">数据更新于 {{ report.updated_at.strftime("%Y-%m-%d %H:%M") }}</div>
+    <div class="muted">数据更新于 {{ report.updated_at.strftime("%Y-%m-%d %H:%M") }}{% if static_site %}（定时自动更新）{% endif %}</div>
   </div>
   {% if report.latest_close %}
   <div class="price">
@@ -58,10 +58,10 @@
 <section class="card">
   <h2>下载数据</h2>
   <div class="downloads">
-    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, kind='prices') }}">下载历史股价</a>
-    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, kind='eps') }}">下载历史业绩（逐季 EPS）</a>
-    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, kind='ttm') }}">TTM EPS</a>
-    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, kind='raw') }}">全部原始数据（zip）</a>
+    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='prices.csv') }}" download="{{ download_name(report.stock.symbol, 'prices.csv') }}">下载历史股价</a>
+    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='eps.csv') }}" download="{{ download_name(report.stock.symbol, 'eps.csv') }}">下载历史业绩（逐季 EPS）</a>
+    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='ttm.csv') }}" download="{{ download_name(report.stock.symbol, 'ttm.csv') }}">TTM EPS</a>
+    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='raw.zip') }}" download="{{ download_name(report.stock.symbol, 'raw.zip') }}">全部原始数据（zip）</a>
   </div>
   <ul class="muted small">
     <li>历史股价：每个交易日最终采用的收盘价，以及腾讯证券、Yahoo 两个来源的价格和核对状态。</li>

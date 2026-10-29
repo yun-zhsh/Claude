@@ -19,6 +19,7 @@ dev = ["pytest>=7"]
 [project.scripts]
 valuation-monitor = "valuation_monitor.cli:main"
 valuation-monitor-web = "valuation_monitor.web:main"
+valuation-monitor-export = "valuation_monitor.web:export_main"
 
 [build-system]
 requires = ["setuptools>=61"]

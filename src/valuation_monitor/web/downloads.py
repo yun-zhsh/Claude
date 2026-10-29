@@ -41,35 +41,38 @@ TTM_COLUMNS = {
     "non_ifrs_eps_ttm": "TTM EPS（Non-IFRS）",
 }
 
-KINDS = {
-    "prices": "历史股价",
-    "eps": "历史业绩_逐季EPS",
-    "ttm": "历史业绩_TTM_EPS",
-    "raw": "全部原始数据",
+# 网址中的文件名 -> 下载时保存的文件名（不含股票代码）
+FILES = {
+    "prices.csv": "历史股价.csv",
+    "eps.csv": "历史业绩_逐季EPS.csv",
+    "ttm.csv": "历史业绩_TTM_EPS.csv",
+    "raw.zip": "全部原始数据.zip",
 }
+
+
+def download_name(symbol: str, name: str) -> str:
+    return f"{symbol}_{FILES[name]}"
 
 
 def to_csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8-sig")
 
 
-def build(monitor: Monitor, symbol: str, kind: str) -> tuple[bytes, str]:
-    """返回（文件内容，文件名）。"""
-    name = f"{symbol}_{KINDS[kind]}"
-    if kind == "prices":
+def build(monitor: Monitor, symbol: str, name: str) -> bytes:
+    if name == "prices.csv":
         df = pd.read_csv(monitor.prices.final_path(symbol))
         df["status"] = df["status"].map(PRICE_STATUS_LABELS)
         df["source"] = df["source"].map(SOURCE_LABELS)
-        return to_csv_bytes(df.rename(columns=PRICE_COLUMNS)), f"{name}.csv"
-    if kind == "eps":
+        return to_csv_bytes(df.rename(columns=PRICE_COLUMNS))
+    if name == "eps.csv":
         df = pd.read_csv(monitor.earnings.paths(symbol)["quarterly"])
-        return to_csv_bytes(df.rename(columns=QUARTERLY_COLUMNS)), f"{name}.csv"
-    if kind == "ttm":
+        return to_csv_bytes(df.rename(columns=QUARTERLY_COLUMNS))
+    if name == "ttm.csv":
         df = pd.read_csv(monitor.earnings.paths(symbol)["ttm"])
-        return to_csv_bytes(df.rename(columns=TTM_COLUMNS)), f"{name}.csv"
-    if kind == "raw":
-        return raw_zip(monitor.data_dir, symbol), f"{name}.zip"
-    raise KeyError(kind)
+        return to_csv_bytes(df.rename(columns=TTM_COLUMNS))
+    if name == "raw.zip":
+        return raw_zip(monitor.data_dir, symbol)
+    raise KeyError(name)
 
 
 def raw_zip(data_dir: Path, symbol: str) -> bytes:

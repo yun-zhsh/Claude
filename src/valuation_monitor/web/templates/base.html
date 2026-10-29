@@ -9,10 +9,12 @@
 <body>
   <header class="topbar">
     <a class="brand" href="{{ url_for('index') }}">股票估值监控</a>
+    {% if not static_site %}
     <form method="post" action="{{ url_for('refresh_view') }}" class="refresh-form">
       <input type="hidden" name="next" value="{{ request.path }}">
       <button type="submit" class="btn btn-secondary">更新数据</button>
     </form>
+    {% endif %}
   </header>
   <main class="container">
     {% block content %}{% endblock %}
@@ -21,6 +23,7 @@
     估值高低按当前值在过去 {{ lookback_years }} 年中的历史分位判断：
     {% for lv in levels %}<span class="chip" style="--c: {{ level_colors[loop.index0] }}">{{ lv.label }} ≤{{ lv.upper|int }}%</span>{% endfor %}
   </footer>
+  {% if not static_site %}
   <script>
     // 更新数据要联网，可能需要十几秒
     document.querySelectorAll(".refresh-form").forEach((form) => {
@@ -31,6 +34,7 @@
       });
     });
   </script>
+  {% endif %}
   {% block scripts %}{% endblock %}
 </body>
 </html>
