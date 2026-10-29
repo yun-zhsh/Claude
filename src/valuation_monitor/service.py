@@ -14,6 +14,7 @@ from valuation_monitor.data import DataLoader, StockData
 from valuation_monitor.metrics import METRICS, Metric
 from valuation_monitor.providers.hkex import HkexProvider
 from valuation_monitor.providers.http import HttpClient
+from valuation_monitor.providers.samsung import SamsungIrProvider
 from valuation_monitor.providers.sec import SecProvider, SecUserAgentMissing, make_http_client
 from valuation_monitor.providers.tencent import TencentQuoteProvider
 from valuation_monitor.providers.yahoo import YahooProvider
@@ -83,6 +84,7 @@ class Monitor:
             self.prices,
             HkexProvider(http, self.data_dir / "filings"),
             SecProvider(sec_http, self.data_dir / "filings"),
+            SamsungIrProvider(http, self.data_dir / "filings"),
             self.earnings,
         )
 

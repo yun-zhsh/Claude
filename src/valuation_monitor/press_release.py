@@ -18,6 +18,8 @@ from typing import NamedTuple
 
 import pandas as pd
 
+from valuation_monitor.parsed import Parsed
+
 DATE_RE = re.compile(r"^([A-Z][a-z]+) ?(\d{1,2}), (\d{4})$")  # 个别新闻稿里有“September30”这样漏掉空格的写法
 CURRENCY_CELL_RE = re.compile(r"^(RMB|US\$|USD|HK\$)$")
 NUMBER_CELL_RE = re.compile(r"^\(?-?\d[\d,]*(?:\.\d+)?\)?$")
@@ -31,13 +33,6 @@ MONTHS = {m: i for i, m in enumerate(
     ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], 1)}
 AMOUNT_KEYS = ("revenue", "profit")
 TOLERANCE = 0.001  # 同一数值在不同表格里的允许差异（相对）
-
-
-class Parsed(NamedTuple):
-    currency: str
-    values: dict[str, list[float]]  # series -> 本期、去年同期、（上一期）；equity 为本期末、上年末
-    period: pd.Period  # 报告季度
-    quarterly: bool = True
 
 
 def clean(text: str) -> str:

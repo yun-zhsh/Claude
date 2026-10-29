@@ -33,6 +33,7 @@ import pandas as pd
 from pypdf import PdfReader
 
 from valuation_monitor.market_calendar import HK, Market, effective_trading_day, get_market
+from valuation_monitor.kifrs import parse_kifrs
 from valuation_monitor.press_release import parse_press_release
 from valuation_monitor.providers.base import Filing
 
@@ -79,8 +80,9 @@ SERIES_LABELS = {
     "profit": "归母净利润",
     "equity": "归母净资产",
 }
-PARSER_VERSIONS = {"highlights": 2, "statements": 1, "press_release": 1}  # 解析规则变化时加 1，已保存的解析结果会自动重新解析
+PARSER_VERSIONS = {"highlights": 2, "statements": 1, "press_release": 1, "kifrs_statements": 1}  # 解析规则变化时加 1，已保存的解析结果会自动重新解析
 PER_SHARE_TOLERANCE = 0.005  # 不同公告对同一数值允许的差异：每股数据（四舍五入、累计数相减）
+PER_SHARE_RELATIVE_TOLERANCE = 5e-4
 AMOUNT_TOLERANCE = 0.001  # 金额按相对差异
 SHARES_CHANGE_LIMIT = 0.05  # 相邻季度反推股数变化超过 5% 时提示（可能提取错误）
 
@@ -92,7 +94,9 @@ TTM_COLUMNS = [
 
 
 def tolerance(series: str, value: float) -> float:
-    return PER_SHARE_TOLERANCE if series in PER_SHARE else max(1.0, abs(value) * AMOUNT_TOLERANCE)
+    if series in PER_SHARE:  # 每股数据四舍五入到分或到元，如三星的 EPS 是整数韩元，拆股调整后会有零点几元的差
+        return max(PER_SHARE_TOLERANCE, abs(value) * PER_SHARE_RELATIVE_TOLERANCE)
+    return max(1.0, abs(value) * AMOUNT_TOLERANCE)
 
 
 @dataclass
@@ -275,14 +279,18 @@ def parse_statements(pages: Pages) -> tuple[str, dict[str, list[float]]]:
 
 
 FORMATS = {"highlights": parse_highlights, "statements": parse_statements}  # 港交所 PDF 公告
-FILING_FORMATS = {*FORMATS, "press_release"}  # 加上美国证监会的 HTML 新闻稿
+FILING_FORMATS = {*FORMATS, "press_release", "kifrs_statements"}  # 加上美股的 HTML 新闻稿和三星的英文财务报表
 
 
 def parse_announcement(filing: Filing, fmt: str = "highlights", market: Market = HK) -> Announcement:
     """解析一份业绩公告，数值保持公告原样（金额已换算成百万元，EPS 已换算成元；未做拆股调整）。"""
-    if fmt == "press_release":  # 美股新闻稿的表格每个季度都是单季数据，报告期取自表头的日期
-        parsed = parse_press_release(filing.content)
-        return Announcement(parsed.period, filing.published, filing.url, parsed.currency, True, parsed.values, market.key)
+    if fmt in ("press_release", "kifrs_statements"):  # 解析结果自带报告期和是否单季数据
+        parsed = (
+            parse_press_release(filing.content)
+            if fmt == "press_release"
+            else parse_kifrs(filing.title, filing.content, filing.attachments["bs"])
+        )
+        return Announcement(parsed.period, filing.published, filing.url, parsed.currency, parsed.quarterly, parsed.values, market.key)
     period = parse_period(filing.title)
     currency, values = FORMATS[fmt](Pages(filing.content))
     counts = {len(values[k]) for k in FLOWS if k in values}

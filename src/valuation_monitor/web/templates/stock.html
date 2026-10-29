@@ -85,7 +85,7 @@
     <dd>腾讯证券 vs Yahoo（还原除权调整后），近 {{ max_lookback_years }} 年：
       {% for k, n in report.price_check.items() %}{{ status_labels[k] }} {{ n }} 天{% if not loop.last %}，{% endif %}{% endfor %}</dd>
     {% else %}
-    <dd>仅 Yahoo Finance 一个来源，没有第二个来源可以核对（腾讯证券的美股行情接口有访问限制）</dd>
+    <dd>仅 Yahoo Finance 一个来源，没有第二个来源可以核对</dd>
     {% endif %}
   </dl>
   {% if report.discrepancies %}

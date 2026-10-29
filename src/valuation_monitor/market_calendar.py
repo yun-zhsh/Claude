@@ -2,6 +2,7 @@
 
 港股：全日市 16:00 收盘；平安夜（12 月 24 日）、除夕（12 月 31 日）、农历除夕如果是交易日，
 只开上午市，12:00 收盘。
+韩股：15:30（首尔时间）收盘，没有半日市。
 美股（纽交所/纳斯达克）：常规 16:00（纽约时间）收盘；感恩节次日、7 月 3 日（周一至周四）、
 平安夜（周一至周四）提前到 13:00 收盘。
 
@@ -59,6 +60,7 @@ class Market:
     full_close: time
     half_close: time
     half_day: Callable[[pd.Timestamp], bool]
+    cross_checks_prices: bool = False  # 是否有第二个来源的股价可以核对（只有港股有腾讯证券）
 
     def is_half_day(self, day: pd.Timestamp) -> bool:
         """如果这天开市，是否提前收盘（不判断这天是否开市）。"""
@@ -76,9 +78,11 @@ class Market:
         return day + pd.Timedelta(days=1) if pd.Timestamp(published).time() >= self.close_time(day) else day
 
 
-HK = Market("HK", "Asia/Hong_Kong", FULL_DAY_CLOSE, HALF_DAY_CLOSE, _hk_half_day)
+HK = Market("HK", "Asia/Hong_Kong", FULL_DAY_CLOSE, HALF_DAY_CLOSE, _hk_half_day, cross_checks_prices=True)
 US = Market("US", "America/New_York", FULL_DAY_CLOSE, time(13, 0), _us_half_day)
-MARKETS = {m.key: m for m in (HK, US)}
+# 韩国交易所：15:30 收盘，没有提前收盘的半日市（休市日由行情数据判断）
+KR = Market("KR", "Asia/Seoul", time(15, 30), time(15, 30), lambda day: False)
+MARKETS = {m.key: m for m in (HK, US, KR)}
 
 
 def get_market(key: str) -> Market:

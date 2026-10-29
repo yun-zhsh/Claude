@@ -50,3 +50,12 @@ def test_us_calendar_early_closes_and_after_close():
     assert US.available_date(pd.Timestamp("2026-08-13 15:59")) == pd.Timestamp("2026-08-13")
     assert US.available_date(pd.Timestamp("2026-08-13 16:00")) == pd.Timestamp("2026-08-14")
     assert US.available_date(pd.Timestamp("2025-11-28 13:30")) == pd.Timestamp("2025-11-29")
+
+
+def test_korean_market_closes_at_1530_without_half_days():
+    from valuation_monitor.market_calendar import KR
+
+    assert KR.available_date(pd.Timestamp("2026-10-29 10:00")) == pd.Timestamp("2026-10-29")
+    assert KR.available_date(pd.Timestamp("2026-10-29 15:29")) == pd.Timestamp("2026-10-29")
+    assert KR.available_date(pd.Timestamp("2026-10-29 15:30")) == pd.Timestamp("2026-10-30")
+    assert not KR.is_half_day(pd.Timestamp("2025-12-24"))

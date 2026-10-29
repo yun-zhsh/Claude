@@ -87,11 +87,11 @@ class PriceStore:
     def prices(self, symbol: str, start: datetime, market: Market = HK) -> PriceHistory:
         """最终采用的收盘价（已按拆股换算到当前股本口径）和拆股记录。
 
-        港股有腾讯证券（实际成交价）和 Yahoo 两个来源，互相核对；美股只用 Yahoo 一个来源
-        （腾讯证券的美股接口有访问限制），Yahoo 对美股的收盘价已经按拆股调整，不再重复调整。
+        港股有腾讯证券（实际成交价）和 Yahoo 两个来源，互相核对；美股、韩股只用 Yahoo 一个来源，
+        Yahoo 的收盘价已经按拆股调整，不再重复调整。
         """
         folder = self.root / "prices" / symbol
-        if market.key == "HK":
+        if market.cross_checks_prices:
             tencent = self._frame(
                 folder / "tencent.csv",
                 folder / "tencent.json",
@@ -126,13 +126,13 @@ class PriceStore:
                 timezone=market.timezone,
             )
         except Exception as e:
-            if market.key != "HK":
+            if not market.cross_checks_prices:
                 raise
             print(f"Yahoo Finance {symbol}: 无法获取（{e}），只用腾讯证券的数据", file=sys.stderr)
             yahoo = pd.DataFrame(columns=list(YAHOO_DECIMALS))
 
         yahoo_meta = read_meta(folder / "yahoo.json")
-        if found_currency and market.key != "HK":
+        if found_currency and not market.cross_checks_prices:
             yahoo_meta["currency"] = found_currency[-1]
             write_meta(folder / "yahoo.json", yahoo_meta)
         splits = {pd.Timestamp(d): r for d, r in yahoo_meta.get("splits", {}).items()}
@@ -147,8 +147,8 @@ class PriceStore:
         today = pd.Timestamp.now(tz=market.timezone).tz_localize(None).normalize()
         saved = final[final.index < today]
         write_if_changed(self.final_path(symbol), saved.to_csv(index_label="date", date_format="%Y-%m-%d"))
-        close = split_adjust(final["close"], splits) if market.key == "HK" else final["close"]
-        currency = self.quotes.currency if market.key == "HK" else yahoo_meta.get("currency", "USD")
+        close = split_adjust(final["close"], splits) if market.cross_checks_prices else final["close"]
+        currency = self.quotes.currency if market.cross_checks_prices else yahoo_meta["currency"]
         return PriceHistory(close[close.index >= pd.Timestamp(start).normalize()], splits, currency, market.timezone)
 
     def fx(self, from_ccy: str, to_ccy: str, start: datetime) -> pd.Series:
