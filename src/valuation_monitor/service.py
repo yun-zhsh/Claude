@@ -12,6 +12,7 @@ from valuation_monitor.analysis import Valuation, evaluate, level_index
 from valuation_monitor.config import Config, StockConfig
 from valuation_monitor.data import DataLoader, StockData
 from valuation_monitor.metrics import METRICS, Metric
+from valuation_monitor.providers.cninfo import REQUEST_INTERVAL as CNINFO_INTERVAL, CninfoProvider
 from valuation_monitor.providers.hkex import HkexProvider
 from valuation_monitor.providers.http import HttpClient
 from valuation_monitor.providers.samsung import SamsungIrProvider
@@ -85,6 +86,7 @@ class Monitor:
             HkexProvider(http, self.data_dir / "filings"),
             SecProvider(sec_http, self.data_dir / "filings"),
             SamsungIrProvider(http, self.data_dir / "filings"),
+            CninfoProvider(HttpClient(cache_dir=cache_dir, refresh=refresh, min_interval=CNINFO_INTERVAL), self.data_dir / "filings"),
             self.earnings,
         )
 

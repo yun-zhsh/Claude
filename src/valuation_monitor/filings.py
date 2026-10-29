@@ -33,6 +33,7 @@ import pandas as pd
 from pypdf import PdfReader
 
 from valuation_monitor.market_calendar import HK, Market, effective_trading_day, get_market
+from valuation_monitor.cn_report import parse_cn_express, parse_cn_report
 from valuation_monitor.audit import Component, num, shares_formula, split_notes, sum_formula
 from valuation_monitor.kifrs import parse_kifrs, parse_kifrs_deck
 from valuation_monitor.press_release import parse_press_release
@@ -92,7 +93,7 @@ SERIES_LABELS = {
     "equity": "归母净资产",
     "wa_shares": "加权平均股数",
 }
-PARSER_VERSIONS = {"highlights": 4, "statements": 2, "press_release": 2, "kifrs_statements": 3}  # 解析规则变化时加 1，已保存的解析结果会自动重新解析
+PARSER_VERSIONS = {"highlights": 4, "statements": 2, "press_release": 2, "kifrs_statements": 3, "cn_report": 2}  # 解析规则变化时加 1，已保存的解析结果会自动重新解析
 PER_SHARE_TOLERANCE = 0.005  # 不同公告对同一数值允许的差异：每股数据（四舍五入、累计数相减）
 PER_SHARE_RELATIVE_TOLERANCE = 5e-4
 AMOUNT_TOLERANCE = 0.001  # 金额按相对差异
@@ -107,13 +108,20 @@ TTM_FRAME_ORDER = [
     *[f"revenue_{k}" for k in range(1, 5)], "revenue_ttm", "revenue_ttm_formula",
     "profit_latest", "eps_latest", "shares", "shares_source", "shares_implied", "shares_formula",
     "revenue_per_share_ttm", "revenue_per_share_formula",
-    "equity", "book_value_per_share", "book_value_per_share_formula", "split_note",
+    "equity", "book_value_per_share", "book_value_per_share_formula", "split_note", "published_note",
 ]
 TTM_COLUMNS = [
     "report_date", "published", "available_date",
     "eps_ttm", "non_ifrs_eps_ttm", "revenue_ttm", "shares",
     "revenue_per_share_ttm", "equity", "book_value_per_share",
 ]
+
+
+PROVISIONAL_NOTES = {
+    "KR": "来自业绩发布会材料（审阅前；营收、净利润只精确到 0.1 万亿韩元，净资产是估算值），英文财报发布后会自动换成财报数字",
+    "CN": "来自业绩快报（未经会计师审计，与年报的最终数字可能略有差异），年报发布后会自动换成年报数字",
+    "*": "是初步数据，正式报告发布后会自动替换",
+}
 
 
 def tolerance(series: str, value: float) -> float:
@@ -133,6 +141,8 @@ class Announcement:
     market: str = "HK"  # 上市地，决定收盘时间
     provisional: bool = False  # 暂用的初步数据，正式财报发布后会被取代
     shares_basis: str = ""  # 公告披露的加权平均股数对应的期间：空表示就是本期，“全年”表示披露的是全年数（第四季度）
+    shares_label: str = "基本 EPS 加权平均股数"  # 公告里披露的是什么股数（A 股公司披露的是期末总股本）
+    note: str = ""  # 发布时间等需要说明的情况
 
     @property
     def available(self) -> pd.Timestamp:
@@ -312,11 +322,17 @@ def parse_statements(pages: Pages) -> tuple[str, dict[str, list[float]]]:
 
 
 FORMATS = {"highlights": parse_highlights, "statements": parse_statements}  # 港交所 PDF 公告
-FILING_FORMATS = {*FORMATS, "press_release", "kifrs_statements"}  # 加上美股的 HTML 新闻稿和三星的英文财务报表
+FILING_FORMATS = {*FORMATS, "press_release", "kifrs_statements", "cn_report"}  # 加上美股的 HTML 新闻稿和三星的英文财务报表
 
 
 def parse_announcement(filing: Filing, fmt: str = "highlights", market: Market = HK) -> Announcement:
     """解析一份业绩公告，数值保持公告原样（金额已换算成百万元，EPS 已换算成元；未做拆股调整）。"""
+    if fmt == "cn_report":  # A 股：定期报告或业绩快报（暂用）
+        parsed = parse_cn_express(filing.title, filing.content) if "业绩快报" in filing.title else parse_cn_report(filing.title, filing.content)
+        return Announcement(
+            parsed.period, filing.published, filing.url, parsed.currency, parsed.quarterly, parsed.values, market.key,
+            filing.provisional, "", "期末总股本", filing.note,
+        )
     if fmt in ("press_release", "kifrs_statements"):  # 解析结果自带报告期和是否单季数据
         if fmt == "press_release":
             parsed = parse_press_release(filing.content)
@@ -369,7 +385,7 @@ def adjust_for_splits(announcements: list[Announcement], splits: pd.Series) -> l
     return out
 
 
-ANNOUNCEMENT_COLUMNS = ["published", "period", "table", "currency", *SERIES, "url", "provisional", "shares_basis", "parser_version"]
+ANNOUNCEMENT_COLUMNS = ["published", "period", "table", "currency", *SERIES, "url", "provisional", "shares_basis", "shares_label", "note", "parser_version"]
 
 
 def announcements_to_frame(announcements: list[Announcement], parser_version: int) -> pd.DataFrame:
@@ -384,6 +400,8 @@ def announcements_to_frame(announcements: list[Announcement], parser_version: in
             "url": a.url,
             "provisional": int(a.provisional),
             "shares_basis": a.shares_basis,
+            "shares_label": a.shares_label,
+            "note": a.note,
             "parser_version": parser_version,
         }
         for a in sorted(announcements, key=lambda a: a.published)
@@ -405,6 +423,8 @@ def announcements_from_frame(df: pd.DataFrame, market: Market = HK) -> list[Anno
                 market=market.key,
                 provisional=str(r.get("provisional", "")) == "1",
                 shares_basis=str(r.get("shares_basis", "")),
+                shares_label=str(r.get("shares_label", "")) or "基本 EPS 加权平均股数",
+                note=str(r.get("note", "")),
             )
         )
     return out
@@ -446,10 +466,7 @@ class EarningsHistory:
                     )
         for a in self.announcements:
             if a.provisional:
-                out.append(
-                    f"{period_label(a.period, self.periods_per_year)} 的数据来自业绩发布会材料（审阅前；营收、净利润只精确到 0.1 万亿韩元，"
-                    f"净资产是估算值），英文财报发布后会自动换成财报数字"
-                )
+                out.append(f"{period_label(a.period, self.periods_per_year)} 的数据{PROVISIONAL_NOTES.get(a.market, PROVISIONAL_NOTES['*'])}")
         shares = {p: s for p in sorted(self.quarters["eps"]) if (s := implied_shares(self.quarters, p))}
         periods = list(shares)
         label = lambda p: period_label(p, self.periods_per_year)  # noqa: E731
@@ -505,6 +522,7 @@ class EarningsHistory:
             _division(r["revenue_ttm"], r["shares"], r["revenue_per_share_ttm"]) for r in self.ttm_detail
         ]
         extra["book_value_per_share_formula"] = [_division(r["equity"], r["shares"], r["book_value_per_share"]) for r in self.ttm_detail]
+        extra["published_note"] = [r["note"] for r in self.ttm_detail]
         extra["split_note"] = [
             "；".join(split_notes(r["eps"]) + split_notes(r["non_ifrs_eps"])) for r in self.ttm_detail
         ]
@@ -655,6 +673,8 @@ def _ttm_row(
         "profit": profit.value if profit else None,
         "eps_latest": eps_now.value if eps_now else None,
         "shares": row["shares"],
+        "shares_label": a.shares_label,
+        "note": a.note,
         "shares_source": source,
         "shares_basis": basis,
         "shares_parts": parts,

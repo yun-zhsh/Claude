@@ -1,0 +1,9 @@
+{
+  "source": "Yahoo Finance 002415.SZ",
+  "fetched_from": "2015-10-29",
+  "currency": "CNY",
+  "splits": {
+    "2016-05-18": 1.5,
+    "2017-05-16": 1.5
+  }
+}

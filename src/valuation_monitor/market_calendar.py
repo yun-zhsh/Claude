@@ -3,6 +3,7 @@
 港股：全日市 16:00 收盘；平安夜（12 月 24 日）、除夕（12 月 31 日）、农历除夕如果是交易日，
 只开上午市，12:00 收盘。
 韩股：15:30（首尔时间）收盘，没有半日市。
+A 股：15:00（北京时间）收盘，没有半日市。
 美股（纽交所/纳斯达克）：常规 16:00（纽约时间）收盘；感恩节次日、7 月 3 日（周一至周四）、
 平安夜（周一至周四）提前到 13:00 收盘。
 
@@ -82,7 +83,9 @@ HK = Market("HK", "Asia/Hong_Kong", FULL_DAY_CLOSE, HALF_DAY_CLOSE, _hk_half_day
 US = Market("US", "America/New_York", FULL_DAY_CLOSE, time(13, 0), _us_half_day)
 # 韩国交易所：15:30 收盘，没有提前收盘的半日市（休市日由行情数据判断）
 KR = Market("KR", "Asia/Seoul", time(15, 30), time(15, 30), lambda day: False)
-MARKETS = {m.key: m for m in (HK, US, KR)}
+# A 股（上交所、深交所）：15:00 收盘，没有半日市（休市日由行情数据判断）
+CN = Market("CN", "Asia/Shanghai", time(15, 0), time(15, 0), lambda day: False)
+MARKETS = {m.key: m for m in (HK, US, KR, CN)}
 
 
 def get_market(key: str) -> Market:

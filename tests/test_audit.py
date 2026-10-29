@@ -57,7 +57,7 @@ def test_explain_lines_for_each_per_share_item():
     assert ps[0].startswith("每股营收 TTM = 营收 TTM 460 ÷ 股数 10") and "2024Q1 100" in ps[1]
     pb = explain("book_value_per_share", rec)
     assert pb[0].startswith("每股净资产 = 期末归母净资产 560 ÷ 股数 10")
-    assert any("暂用业绩发布会材料" in line for line in pb)
+    assert any("暂用初步数据" in line for line in pb)
 
 
 def history_with_reported_shares(basis=""):

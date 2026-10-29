@@ -10,6 +10,7 @@ import pandas as pd
 from valuation_monitor.config import Config, StockConfig
 from valuation_monitor.filings import EarningsHistory
 from valuation_monitor.market_calendar import get_market
+from valuation_monitor.providers.cninfo import CninfoProvider
 from valuation_monitor.providers.hkex import HkexProvider
 from valuation_monitor.providers.samsung import SamsungIrProvider
 from valuation_monitor.providers.sec import SecProvider
@@ -27,12 +28,13 @@ class StockData:
 
 
 class DataLoader:
-    def __init__(self, config: Config, prices: PriceStore, hkex: HkexProvider, sec: SecProvider, samsung: SamsungIrProvider, earnings: EarningsStore):
+    def __init__(self, config: Config, prices: PriceStore, hkex: HkexProvider, sec: SecProvider, samsung: SamsungIrProvider, cninfo: CninfoProvider, earnings: EarningsStore):
         self.config = config
         self.prices = prices
         self.hkex = hkex
         self.sec = sec
         self.samsung = samsung
+        self.cninfo = cninfo
         self.earnings = earnings
 
     def load(self, stock: StockConfig) -> StockData:
@@ -45,6 +47,8 @@ class DataLoader:
             filings = self.sec.results_announcements(stock.symbol, stock.cik, since)
         elif stock.market == "KR":
             filings = self.samsung.results_announcements(stock.symbol, since)
+        elif stock.market == "CN":
+            filings = self.cninfo.results_announcements(stock.symbol, since)
         else:
             filings = self.hkex.results_announcements(stock.symbol, since)
         earnings = self.earnings.load(stock.symbol, filings, prices.splits, prices.close.index, stock.filing_format, market)
