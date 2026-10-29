@@ -18,6 +18,7 @@ from pathlib import Path
 import pandas as pd
 from flask import Flask, abort, redirect, render_template, request, send_file, url_for
 
+from valuation_monitor.audit import explain
 from valuation_monitor.config import Config, load_config
 from valuation_monitor.service import PRICE_STATUS_LABELS, MetricResult, Monitor, StockReport
 from valuation_monitor.web import downloads
@@ -74,6 +75,34 @@ def view_data(reports: list[StockReport], config: Config, **extra) -> dict:
     return {"default": config.lookback_years, "options": config.lookback_options, "fields": fields, **extra}
 
 
+def audit_payload(report: StockReport, result: MetricResult, window: pd.Series) -> dict:
+    """走势图提示框要显示的计算过程：每天的收盘价、汇率、采用的业绩记录，以及各条业绩记录的算式。
+
+    提示框里的 比率 = 收盘价 ÷ （每股数据 × 汇率），其中每股数据又是怎么算出来的，都能在这里找到。
+    """
+    data = report.data
+    detail = result.metric.detail(data).loc[window.index]
+    records = {}
+    earnings = data.earnings
+    for i in sorted({int(r) for r in detail["record"].dropna()}):
+        row = data.fundamentals.iloc[i]
+        rec = {
+            "title": f"{earnings.ttm_detail[i]['period_label']} 业绩（{row['published']} 发布）" if earnings and earnings.ttm_detail else str(row["published"]),
+            "per_share": float(row[result.metric.column]),
+            "lines": explain(result.metric.column, earnings.ttm_detail[i]) if earnings and earnings.ttm_detail else [],
+        }
+        records[str(i)] = rec
+    fx = detail["fx"]
+    return {
+        "price": [round(float(v), 3) for v in detail["close"]],
+        "fx": None if (fx == 1).all() else [round(float(v), 6) for v in fx],
+        "rec": [int(r) for r in detail["record"]],
+        "records": records,
+        "price_ccy": data.price_currency,
+        "report_ccy": earnings.currency if earnings else data.price_currency,
+    }
+
+
 def chart_payload(report: StockReport, config: Config) -> dict:
     """走势图的数据：取最长回看年数内的全部数据，页面上按所选年数截取。"""
     charts = []
@@ -88,6 +117,7 @@ def chart_payload(report: StockReport, config: Config) -> dict:
                 "label": r.metric.label,
                 "dates": [f"{d:%Y-%m-%d}" for d in window.index],
                 "values": [round(float(v), 2) for v in window],
+                **audit_payload(report, r, window),
             }
         )
     close = report.data.close
@@ -99,6 +129,7 @@ def chart_payload(report: StockReport, config: Config) -> dict:
             "dates": [f"{d:%Y-%m-%d}" for d in close.index],
             "values": [round(float(v), 3) for v in close],
             "starts": {y: f"{as_of - pd.DateOffset(years=y):%Y-%m-%d}" for y in config.lookback_options},
+            "ccy": report.data.price_currency,
         },
     }
 
@@ -160,7 +191,9 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
     def download(symbol: str, name: str):
         if symbol not in {s.symbol for s in monitor.config.stocks} or name not in downloads.FILES:
             abort(404)
-        content = downloads.build(monitor, symbol, name)
+        if not state:
+            refresh()
+        content = downloads.build(monitor, symbol, name, state.get(symbol))
         return send_file(io.BytesIO(content), as_attachment=True, download_name=downloads.download_name(symbol, name))
 
     return app

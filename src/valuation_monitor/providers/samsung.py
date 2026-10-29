@@ -20,6 +20,7 @@ from pathlib import Path
 import pandas as pd
 from bs4 import BeautifulSoup
 
+from valuation_monitor.kifrs import eps_note_pages
 from valuation_monitor.providers.base import Filing
 from valuation_monitor.providers.http import HttpClient
 
@@ -29,7 +30,7 @@ STATEMENT_PAGES = [
     "https://www.samsung.com/global/ir/financial-information/earnings-release/",
 ]
 EVENTS_PAGE = "https://www.samsung.com/global/ir/ir-events-presentations/events/"
-STATEMENT_RE = re.compile(r"(?P<year>20\d\d)_con_quarter0(?P<q>[1-4])_(?P<kind>soi|bs)(?P<variant>_[a-z0-9]+)?\.pdf")
+STATEMENT_RE = re.compile(r"(?P<year>20\d\d)_con_quarter0(?P<q>[1-4])_(?P<kind>soi|bs|note)(?P<variant>_[a-z0-9]+)?\.pdf")
 CALL_RE = re.compile(r"^(?P<q>[1-4])Q ?(?:FY)?(?P<year>\d{2}|\d{4}) Earnings Conference Call")
 CALL_TIME_RE = re.compile(r"^(?P<date>[A-Z][a-z]+ \d{1,2}, \d{4})(?:, (?P<hour>\d{1,2}):(?P<minute>\d\d) a\.m\. KST)?")
 DECK_RE = re.compile(r"(?P<year>20\d\d)_(?P<q>[1-4])Q_conference_eng\w*\.pdf")
@@ -126,16 +127,30 @@ class SamsungIrProvider:
                     )
                 )
             else:
+                attachments = {"bs": (folder / e["files"]["bs"]).read_bytes()}
+                if e["files"].get("note"):
+                    attachments["note"] = (folder / e["files"]["note"]).read_bytes()  # EPS 附注页：加权平均股数
                 filings.append(
                     Filing(
                         title=title,
                         published=pd.Timestamp(e["published"]),
                         url=e["url"],
                         content=(folder / e["files"]["soi"]).read_bytes(),
-                        attachments={"bs": (folder / e["files"]["bs"]).read_bytes()},
+                        attachments=attachments,
                     )
                 )
         return filings
+
+    def _save_eps_note(self, folder: Path, year: int, quarter: int, kinds: dict[str, str]) -> str | None:
+        """下载附注 PDF，只保存 EPS 附注所在的页；没有这份文件或找不到该附注时返回 None（股数改为反推）。"""
+        if "note" not in kinds:
+            return None
+        cut = eps_note_pages(self.http.get_bytes(kinds["note"], cache=False))
+        if cut is None:
+            return None
+        name = f"{year}Q{quarter}_{kinds['note'].rsplit('/', 1)[-1].replace('.pdf', '')}_eps.pdf"
+        (folder / name).write_bytes(cut)
+        return name
 
     def _fetch_new(self, symbol, since, folder, index, known) -> bool:
         pages = [self.http.get_bytes(url).decode("utf-8", "replace") for url in STATEMENT_PAGES]
@@ -163,13 +178,20 @@ class SamsungIrProvider:
                 index.remove(old)
             folder.mkdir(parents=True, exist_ok=True)
             files = {}
-            for kind, url in kinds.items():
-                files[kind] = f"{year}Q{quarter}_{url.rsplit('/', 1)[-1]}"
-                (folder / files[kind]).write_bytes(self.http.get_bytes(url, cache=False))
+            for kind in ("soi", "bs"):
+                files[kind] = f"{year}Q{quarter}_{kinds[kind].rsplit('/', 1)[-1]}"
+                (folder / files[kind]).write_bytes(self.http.get_bytes(kinds[kind], cache=False))
+            files["note"] = self._save_eps_note(folder, year, quarter, kinds)
             index.append({"year": year, "quarter": quarter, "published": f"{published:%Y-%m-%dT%H:%M:%S}", "url": kinds["soi"], "files": files})
             known.add((year, quarter))
             added = True
             print(f"{symbol}: 新财报 {year}Q{quarter}，业绩发布会 {published}", file=sys.stderr)
+
+        # 早先保存的财报还没取过 EPS 附注（公告披露的加权平均股数）：补取
+        for e in index:
+            if not e.get("provisional") and "note" not in e["files"] and (e["year"], e["quarter"]) in statements:
+                e["files"]["note"] = self._save_eps_note(folder, e["year"], e["quarter"], statements[(e["year"], e["quarter"])])
+                added = True
 
         # 还没有英文财报的最新季度：先用业绩发布会材料里的数据（发布会当天就有）
         have_provisional = {(e["year"], e["quarter"]) for e in index if e.get("provisional")}

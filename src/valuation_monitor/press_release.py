@@ -31,7 +31,8 @@ EQUITY_LABEL_RE = re.compile(r"^total jd\.com,? inc\.? shareholders.? equity", r
 TOTAL_EQUITY_LABEL_RE = re.compile(r"^total shareholders?'?s? equity$", re.I)
 MONTHS = {m: i for i, m in enumerate(
     ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], 1)}
-AMOUNT_KEYS = ("revenue", "profit")
+AMOUNT_KEYS = ("revenue", "profit", "wa_shares")  # 金额类的行，按表格的单位换算成百万
+ADS_RATIO = 2  # 1 份 ADS = 2 股普通股（京东上市以来没有变过）
 TOLERANCE = 0.001  # 同一数值在不同表格里的允许差异（相对）
 
 
@@ -116,6 +117,16 @@ def columns_by_date(header: Header, group: int, values: list[float]) -> dict[pd.
     return out
 
 
+def leading_columns(header: Header, group: int, values: list[float]) -> dict[pd.Timestamp, float]:
+    """股数行里的数：只有第一组（三个月）的人民币列按日期对应；这一行的美元列有的年份留空、有的重复，所以只取开头的几个数。"""
+    if group != 0:
+        return {}
+    rmb = [c for c in header.groups[0] if header.currencies[c] == "RMB"]
+    if len(values) < len(rmb):
+        return {}
+    return {header.dates[c]: values[k] for k, c in enumerate(rmb)}
+
+
 def numbers(row: list[str]) -> list[float]:
     return [v for c in row[1:] if (v := to_number(c)) is not None]
 
@@ -146,6 +157,9 @@ def parse_flow_rows(rows, header: Header, scale: float | None) -> dict[str, tupl
         nums = numbers(row)
         low = label.lower()
         if not nums:
+            if re.match(r"weighted average (?:number of )?shares", low):  # 基本 EPS 所用的加权平均股数（千股或百万股）
+                section = "wa_shares"
+                continue
             if "per ads" in low:
                 section = "non_ifrs_eps" if re.search("non-gaap|adjusted", low) else "eps" if low.startswith("net ") else None
                 basic = False
@@ -156,7 +170,9 @@ def parse_flow_rows(rows, header: Header, scale: float | None) -> dict[str, tupl
             else:
                 section = None
             continue
-        if section and section not in found and (low == "basic" or (basic and re.match(r"net (income|loss).*per ads", low))):
+        if section == "wa_shares" and low == "basic" and "wa_shares" not in found:
+            found["wa_shares"] = leading_columns(header, group, nums)
+        elif section and section not in found and section != "wa_shares" and (low == "basic" or (basic and re.match(r"net (income|loss).*per ads", low))):
             found[section] = columns_by_date(header, group, nums)
         elif re.match(r"total net revenues", low) and "revenue" not in found:
             found["revenue"] = columns_by_date(header, group, nums)
@@ -170,7 +186,7 @@ def parse_flow_rows(rows, header: Header, scale: float | None) -> dict[str, tupl
         if key in AMOUNT_KEYS:
             if scale is None:
                 continue  # 单位不明的表格不用，其他表格里还有同样的数
-            vals = [v * scale for v in vals]
+            vals = [v * scale / (ADS_RATIO if key == "wa_shares" else 1) for v in vals]  # 股数：千股/百万股 -> 百万份 ADS
         out[key] = (period, vals)
     return out
 

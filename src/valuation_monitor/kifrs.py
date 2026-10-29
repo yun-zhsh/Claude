@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import io
 import re
+import sys
 
 import pandas as pd
 from pypdf import PdfReader
@@ -31,10 +32,19 @@ TOTAL_EQUITY_RE = re.compile(rf"Total equity (?P<a>{AMT}) (?P<b>{AMT})")
 NCI_RE = re.compile(rf"Non-controlling interests(?: \d{{1,2}})? (?P<a>{AMT}) (?P<b>{AMT})", re.I)
 
 
+def read_text_of_page(page) -> str:
+    return clean_text(page.extract_text() or "")
+
+
 def read_text(pdf: bytes) -> str:
-    text = " ".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(pdf)).pages)
+    return clean_text(" ".join((p.extract_text() or "") for p in PdfReader(io.BytesIO(pdf)).pages))
+
+
+def clean_text(text: str) -> str:
     text = " ".join(re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", " ", text).split())  # 个别文件里夹着控制字符
-    return re.sub(r"(\d), (\d{3})\b", r"\1,\2", text)  # PDF 文字提取会在千位分隔符后插入空格，如“44, 260,956”
+    text = re.sub(r"(\d), (\d{3})\b", r"\1,\2", text)  # PDF 文字提取会在千位分隔符后插入空格，如“44, 260,956”
+    # 也会把最后一组数字拆开，如“5,969,78 3”：前面不足三位、加上后面刚好三位的才合并
+    return re.sub(r"(?<![\d,])(\d{1,3}(?:,\d{3})*,)(\d{1,2}) (\d{1,2})(?![\d,])", lambda m: m.group(1) + m.group(2) + m.group(3) if len(m.group(2) + m.group(3)) == 3 else m.group(0), text)
 
 
 def to_number(token: str) -> float:
@@ -49,7 +59,67 @@ def pair(regex: re.Pattern, text: str, name: str) -> list[float]:
     return [to_number(m.group("a")), to_number(m.group("b"))]
 
 
-def parse_kifrs(title: str, soi: bytes, bs: bytes) -> Parsed:
+# EPS 附注（Notes 里的 Earnings per Share）：加权平均股数，单位千股。
+# 第一、二、三季度的附注里每年两列（三个月、累计），共四个数：本年三个月、本年累计、去年三个月、去年累计；
+# 第一季度和全年只有本年、去年两个数。
+SHARE_ROW = r"Weighted-average number of {kind} shares outstanding(?: \(in thousands\))? (?P<n>(?:[\d,]+ ){{1,4}})"
+COMMON_SHARES_RE = re.compile(SHARE_ROW.format(kind="(?:ordinary|common)"))
+PREFERRED_SHARES_RE = re.compile(SHARE_ROW.format(kind="(?:preferred|preference)"))
+
+
+def eps_note_pages(note: bytes) -> bytes | None:
+    """从完整的附注 PDF 里只留下 Earnings per Share 附注所在的页（原文页面原样保留；优先股部分常在下一页），
+    下载保存时用，省得每个季度存几百 KB。"""
+    from pypdf import PdfWriter
+
+    reader = PdfReader(io.BytesIO(note))
+    texts = [read_text_of_page(page) for page in reader.pages]
+    # 要的是附注里的表（“Weighted-average number of ordinary shares outstanding 5,767,030 …”），不是会计政策里的文字说明
+    first = next((i for i, t in enumerate(texts) if COMMON_SHARES_RE.search(t + " ")), None)
+    if first is None:
+        return None
+    writer = PdfWriter()
+    for i in range(first, min(first + 2, len(texts))):
+        writer.add_page(reader.pages[i])
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
+def current_and_prior(numbers: str) -> tuple[float, float] | None:
+    values = [to_number(t) for t in numbers.split()]
+    if len(values) == 4:
+        return values[0], values[2]
+    if len(values) == 2:
+        return values[0], values[1]
+    return None
+
+
+def parse_weighted_shares(note: bytes) -> list[float] | None:
+    """附注里披露的普通股加优先股基本 EPS 加权平均股数（附注原样的数，单位不定），依次为本期、去年同期。
+
+    单位在不同年份的附注里不一样（千股、股），由调用方对照净利润 ÷ EPS 的量级来判断。
+    """
+    text = read_text(note) + " "
+    common = COMMON_SHARES_RE.search(text)
+    if not common or not (c := current_and_prior(common.group("n"))):
+        return None
+    preferred = PREFERRED_SHARES_RE.search(text)
+    p = current_and_prior(preferred.group("n")) if preferred else (0.0, 0.0)
+    if p is None:
+        return None
+    return [c[0] + p[0], c[1] + p[1]]
+
+
+def scale_to_millions(raw: list[float], implied_millions: float) -> list[float] | None:
+    """附注里的股数是千股还是股？按哪个单位换算后与“归母净利润 ÷ 基本 EPS”相差不到 5% 就用哪个。"""
+    for factor in (1e-6, 1e-3, 1.0):
+        if abs(raw[0] * factor / implied_millions - 1) < 0.05:
+            return [v * factor for v in raw]
+    return None
+
+
+def parse_kifrs(title: str, soi: bytes, bs: bytes, note: bytes | None = None) -> Parsed:
     m = TITLE_RE.search(title)
     if not m:
         raise ValueError(f"无法从标题识别报告期: {title}")
@@ -65,6 +135,12 @@ def parse_kifrs(title: str, soi: bytes, bs: bytes) -> Parsed:
         "eps": pair(EPS_RE, income, "Basic EPS"),
         "equity": [t - n for t, n in zip(total, nci)],
     }
+    if note is not None and (raw := parse_weighted_shares(note)):
+        scaled = scale_to_millions(raw, values["profit"][0] / values["eps"][0])
+        if scaled is None:
+            print(f"{title}: 附注里的股数 {raw[0]:,.0f} 与净利润 ÷ EPS 的量级对不上，无法判断单位，股数改为反推", file=sys.stderr)
+        else:
+            values["wa_shares"] = scaled
     return Parsed("KRW", values, pd.Period(year=year, quarter=quarter, freq="Q"), quarterly=quarter != 4)
 
 

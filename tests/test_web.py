@@ -40,7 +40,7 @@ def monitor(tmp_path):
     paths = monitor.earnings.paths("0700.HK")
     paths["periods"].parent.mkdir(parents=True)
     paths["periods"].write_text(earnings.periods_frame().to_csv(index=False))
-    paths["ttm"].write_text(earnings.ttm.to_csv(index=False))
+    paths["ttm"].write_text(earnings.ttm_frame().to_csv(index=False))
 
     return monitor
 
@@ -174,3 +174,42 @@ def test_export_includes_app_script(monitor, tmp_path):
     export_site(monitor, out, base_path="/Claude")
     assert (out / "static" / "app.js").exists()
     assert 'id="years-select"' in (out / "index.html").read_text(encoding="utf-8")
+
+
+def test_valuation_download_shows_how_each_ratio_is_calculated(client):
+    import io
+
+    raw = client.get("/stock/0700.HK/download/valuation.csv").data.decode("utf-8-sig")
+    df = pd.read_csv(io.StringIO(raw))
+    close = "收盘价（股价币种）"
+    converted = "PE (TTM)｜每股数据（换算成股价币种）= 每股数据 × 汇率"
+    ratio = "PE (TTM)｜比率 = 收盘价 ÷ 换算后每股数据"
+    ok = df[ratio].notna()
+    assert ok.any()
+    assert ((df.loc[ok, close] / df.loc[ok, converted]) - df.loc[ok, ratio]).abs().max() < 1e-9
+    assert (df["PE (TTM)｜每股数据（财报币种）"] * df["汇率（1 单位财报币种 = 多少股价币种）"] - df[converted]).abs().max() < 1e-9
+    assert df.loc[ok, "PE (TTM)｜业绩记录（报告期）"].iloc[-1] == "2024Q2"
+
+
+def test_ttm_download_shows_the_components_and_formulas(client):
+    import io
+
+    df = pd.read_csv(io.StringIO(client.get("/stock/0700.HK/download/ttm.csv").data.decode("utf-8-sig")))
+    row = df[df["TTM 第4期"] == "2024Q2"].iloc[0]
+    parts = [row[f"第{k}期 基本 EPS"] for k in range(1, 5)]
+    assert row["TTM EPS = 各期基本 EPS 之和"] == pytest.approx(sum(parts))
+    assert row["TTM EPS 算式（* 表示由累计数相减得到）"].endswith(f"= {row['TTM EPS = 各期基本 EPS 之和']:g}")
+    assert "2023Q3" in row["TTM EPS 算式（* 表示由累计数相减得到）"]
+
+
+def test_chart_payload_carries_the_calculation_for_the_tooltip(client):
+    html = client.get("/stock/0700.HK/").get_data(as_text=True)
+    charts = view_json(html)["charts"]["metrics"][0]
+    n = len(charts["dates"])
+    assert len(charts["price"]) == len(charts["rec"]) == n
+    assert charts["fx"] and len(charts["fx"]) == n and charts["price_ccy"] == "HKD" and charts["report_ccy"] == "CNY"
+    rec = charts["records"][str(charts["rec"][-1])]
+    assert "TTM EPS" in rec["lines"][0] and "2024Q2" in rec["title"]
+    # 提示框里重算的比率与走势图上的值一致
+    k = n - 1
+    assert charts["price"][k] / (rec["per_share"] * charts["fx"][k]) == pytest.approx(charts["values"][k], abs=0.006)
