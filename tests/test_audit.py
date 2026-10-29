@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from valuation_monitor.audit import Component, explain, num, split_notes, sum_formula
 from valuation_monitor.filings import Announcement, build_history
@@ -43,7 +44,8 @@ def test_ttm_frame_lists_components_and_formulas_that_add_up():
     assert [row[f"eps_{k}"] for k in range(1, 5)] == [1.0, 2.0, 3.0, 4.0]
     assert row["eps_ttm"] == 10.0 and row["eps_ttm_formula"] == "2024Q1 1 + 2024Q2 2 + 2024Q3 3 + 2024Q4 4 = 10"
     assert row["revenue_ttm"] == 460.0 and row["shares"] == 10.0  # 股数 = 40 ÷ 4
-    assert row["shares_formula"].startswith("归母净利润 40 ÷ 基本 EPS 4 = 10")
+    assert row["shares_formula"] == "公告没有披露股数，用归母净利润 40 ÷ 基本 EPS 4 反推 = 10（2024Q4，百万股；ADR 为百万份 ADS）"
+    assert row["shares_source"] == "反推"
     assert row["revenue_per_share_formula"] == "460 ÷ 10 = 46"
     assert row["book_value_per_share_formula"] == "560 ÷ 10 = 56"
 
@@ -56,3 +58,41 @@ def test_explain_lines_for_each_per_share_item():
     pb = explain("book_value_per_share", rec)
     assert pb[0].startswith("每股净资产 = 期末归母净资产 560 ÷ 股数 10")
     assert any("暂用业绩发布会材料" in line for line in pb)
+
+
+def history_with_reported_shares(basis=""):
+    def a(period, published, eps, profit, equity, shares, **kw):
+        return Announcement(pd.Period(period, freq="Q"), pd.Timestamp(published), f"u-{period}", "CNY", True,
+                            {"eps": eps, "revenue": [100.0] * len(eps), "profit": profit, "equity": equity, "wa_shares": shares}, **kw)
+
+    return build_history(
+        [
+            a("2024Q1", "2024-05-01 17:00", [1.0, 0.5], [10.0, 5.0], [500.0, 480.0], [10.2, 10.4]),
+            a("2024Q2", "2024-08-01 17:00", [2.0, 1.5], [20.0, 15.0], [520.0, 480.0], [10.1, 10.3]),
+            a("2024Q3", "2024-11-01 17:00", [3.0, 2.5], [30.0, 25.0], [540.0, 480.0], [10.0, 10.2]),
+            a("2024Q4", "2025-02-01 17:00", [4.0, 3.5], [40.0, 35.0], [560.0, 480.0], [9.9, 10.1], shares_basis=basis),
+        ]
+    )
+
+
+def test_reported_weighted_average_shares_are_used_before_the_implied_ones():
+    h = history_with_reported_shares()
+    row = h.ttm_frame().iloc[-1]
+    assert row["shares"] == 9.9 and row["shares_source"] == "公告披露" and row["shares_implied"] == 10.0  # 反推的 40 ÷ 4 只作对照
+    assert row["book_value_per_share"] == round(560.0 / 9.9, 4)
+    assert row["shares_formula"].startswith("公告披露的2024Q4基本 EPS 加权平均股数 9.9")
+    assert "对照：归母净利润 40 ÷ 基本 EPS 4 反推 10" in row["shares_formula"]
+
+
+def test_full_year_basis_is_disclosed():
+    row = history_with_reported_shares("全年").ttm_frame().iloc[-1]
+    assert "公告披露的是全年数" in row["shares_formula"]
+
+
+def test_share_counts_are_multiplied_by_splits():
+    from valuation_monitor.filings import adjust_for_splits
+
+    a = Announcement(pd.Period("2018Q1", freq="Q"), pd.Timestamp("2018-04-26 10:00"), "u", "KRW", True,
+                     {"eps": [85435.0], "wa_shares": [135.92]})
+    adjusted = adjust_for_splits([a], pd.Series([50.0], index=[pd.Timestamp("2018-05-04")]))[0]
+    assert adjusted.values["eps"] == [1708.7] and adjusted.values["wa_shares"] == pytest.approx([6796.0])

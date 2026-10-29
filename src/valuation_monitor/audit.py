@@ -40,9 +40,18 @@ def sum_formula(components: list[Component] | None, total: float | None) -> str:
 
 
 def shares_formula(rec: dict) -> str:
+    """股数的来源：公告披露的加权平均股数优先，公告没有披露才用净利润 ÷ 基本 EPS 反推。"""
     if rec.get("shares") is None:
         return ""
-    return f"归母净利润 {num(rec['profit'])} ÷ 基本 EPS {num(rec['eps_latest'])} = {num(rec['shares'])}（{rec['period_label']}，百万股；ADR 为百万份 ADS）"
+    unit = "百万股；ADR 为百万份 ADS"
+    implied = rec.get("shares_implied")
+    if rec.get("shares_source") == "reported":
+        basis = "，公告披露的是全年数" if rec.get("shares_basis") else ""
+        check = f"；对照：归母净利润 {num(rec['profit'])} ÷ 基本 EPS {num(rec['eps_latest'])} 反推 {num(implied)}" if implied else ""
+        return f"公告披露的{rec['period_label']}基本 EPS 加权平均股数 {num(rec['shares'])}（{unit}{basis}）{check}"
+    if implied is None:
+        return ""
+    return f"公告没有披露股数，用归母净利润 {num(rec['profit'])} ÷ 基本 EPS {num(rec['eps_latest'])} 反推 = {num(rec['shares'])}（{rec['period_label']}，{unit}）"
 
 
 def ratio_formula(numerator_name: str, numerator: float | None, denominator_name: str, denominator: float | None, result: float | None) -> str:

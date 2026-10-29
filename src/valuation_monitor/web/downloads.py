@@ -28,6 +28,7 @@ SERIES_NAMES = {  # 系列 -> (带单位的完整名称, 其他列名里用的�
     "revenue": ("营收（百万元）", "营收"),
     "profit": ("归母净利润（百万元）", "归母净利润"),
     "equity": ("期末归母净资产（百万元）", "期末归母净资产"),
+    "wa_shares": ("公告披露的加权平均股数（百万股；ADR 为百万份 ADS）", "加权平均股数"),
 }
 PERIOD_COLUMNS = {"period": "报告期（季度或半年）", "currency": "币种"}
 for _key, (_name, _short) in SERIES_NAMES.items():
@@ -38,7 +39,7 @@ for _key, (_name, _short) in SERIES_NAMES.items():
         f"{_key}_sources": f"{_short} 证实公告数",
         f"{_key}_max_deviation": f"{_short} 各公告最大偏差",
     }
-PERIOD_COLUMNS |= {"shares": "反推股数（百万股；ADR 为百万份 ADS；归母净利润 ÷ 基本 EPS）", "first_source": "最早公布该期数据的公告"}
+PERIOD_COLUMNS |= {"shares": "反推股数（对照用：归母净利润 ÷ 基本 EPS，百万股）", "first_source": "最早公布该期数据的公告"}
 
 TTM_COLUMNS = {
     "report_date": "报告期末",
@@ -47,7 +48,9 @@ TTM_COLUMNS = {
     "effective_date": "生效交易日",
     "provisional": "是否暂用初步数据（1=业绩发布会材料，财报发布后替换）",
     "revenue_ttm": "TTM 营收 = 各期营收之和（百万）",
-    "shares": "股数 = 最新期归母净利润 ÷ 最新期基本 EPS（百万股；ADR 为百万份 ADS）",
+    "shares": "股数（百万股；ADR 为百万份 ADS）：优先用公告披露的加权平均股数，没有才反推",
+    "shares_source": "股数来源（公告披露 / 反推）",
+    "shares_implied": "对照：反推股数 = 最新期归母净利润 ÷ 最新期基本 EPS",
     "profit_latest": "最新期归母净利润（百万）",
     "eps_latest": "最新期基本 EPS",
     "eps_ttm": "TTM EPS = 各期基本 EPS 之和",
