@@ -18,8 +18,8 @@ from pathlib import Path
 import pandas as pd
 from flask import Flask, abort, redirect, render_template, request, send_file, url_for
 
-from valuation_monitor.config import load_config
-from valuation_monitor.service import PRICE_STATUS_LABELS, Monitor, StockReport
+from valuation_monitor.config import Config, load_config
+from valuation_monitor.service import PRICE_STATUS_LABELS, MetricResult, Monitor, StockReport
 from valuation_monitor.web import downloads
 
 # 从低估到高估的配色：深绿、绿、灰、橙、红
@@ -33,27 +33,74 @@ def level_color(index: int | None, count: int) -> str:
     return LEVEL_COLORS[pos]
 
 
-def chart_payload(report: StockReport, lookback_years: int) -> dict:
-    """页面上画图需要的数据（只取回看区间内的部分）。"""
+def window_fields(result: MetricResult, years: int, level_count: int) -> dict:
+    """某个回看年数下，页面上要显示的各项数值（已格式化成文字）。
+
+    页面初始渲染（Jinja）和在浏览器里切换回看年数（app.js）用的是同一份，格式不会不一致。
+    """
+    w = result.windows[years]
+    v = w.valuation
+    return {
+        "current": f"{v.current:.2f}",
+        "percentile": f"{v.percentile:.1f}",
+        "level": v.level,
+        "color": level_color(w.level_index, level_count),
+        "range": f"{v.window_start:%Y-%m-%d} ~ {v.as_of:%Y-%m-%d}（{v.observations} 个交易日）",
+        "stats": f"{v.min:.1f} / {v.mean:.1f} / {v.max:.1f}",
+        "bands": " · ".join(f"P{p} {val:.1f}" for p, val in v.bands.items()),
+        "start": f"{v.window_start:%Y-%m-%d}",  # 走势图从这天开始画
+        "band_values": {f"P{p}": round(val, 2) for p, val in v.bands.items()},
+    }
+
+
+def metric_views(report: StockReport, config: Config) -> list[dict]:
+    """每个指标在各个回看年数下的显示内容。"""
+    return [
+        {
+            "key": r.metric.key,
+            "label": r.metric.label,
+            "error": r.error,
+            "windows": {y: window_fields(r, y, len(config.levels)) for y in r.windows},
+        }
+        for r in report.metrics
+    ]
+
+
+def view_data(reports: list[StockReport], config: Config, **extra) -> dict:
+    """嵌入页面的数据：app.js 据此在切换回看年数时更新页面。"""
+    fields = {
+        f"{r.stock.symbol}|{m['key']}": m["windows"] for r in reports for m in metric_views(r, config)
+    }
+    return {"default": config.lookback_years, "options": config.lookback_options, "fields": fields, **extra}
+
+
+def chart_payload(report: StockReport, config: Config) -> dict:
+    """走势图的数据：取最长回看年数内的全部数据，页面上按所选年数截取。"""
     charts = []
     for r in report.metrics:
-        if r.valuation is None:
+        if not r.windows:
             continue
-        window = r.series[r.series.index >= r.valuation.window_start].dropna()
+        start = r.windows[max(r.windows)].valuation.window_start
+        window = r.series[r.series.index >= start].dropna()
         charts.append(
             {
                 "key": r.metric.key,
                 "label": r.metric.label,
                 "dates": [f"{d:%Y-%m-%d}" for d in window.index],
                 "values": [round(float(v), 2) for v in window],
-                "bands": {f"P{p}": round(v, 2) for p, v in r.valuation.bands.items()},
-                "current": round(r.valuation.current, 2),
             }
         )
     close = report.data.close
-    close = close[close.index >= close.index[-1] - pd.DateOffset(years=lookback_years)]
-    price = {"dates": [f"{d:%Y-%m-%d}" for d in close.index], "values": [round(float(v), 3) for v in close]}
-    return {"metrics": charts, "price": price}
+    as_of = close.index[-1]
+    close = close[close.index >= as_of - pd.DateOffset(years=config.max_lookback)]
+    return {
+        "metrics": charts,
+        "price": {
+            "dates": [f"{d:%Y-%m-%d}" for d in close.index],
+            "values": [round(float(v), 3) for v in close],
+            "starts": {y: f"{as_of - pd.DateOffset(years=y):%Y-%m-%d}" for y in config.lookback_options},
+        },
+    }
 
 
 def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
@@ -77,7 +124,9 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
             "levels": levels,
             "level_colors": [level_color(i, len(levels)) for i in range(len(levels))],
             "status_labels": PRICE_STATUS_LABELS,
-            "lookback_years": monitor.config.lookback_years,
+            "default_years": monitor.config.lookback_years,
+            "year_options": monitor.config.lookback_options,
+            "max_lookback_years": monitor.config.max_lookback,
             "static_site": static_site,
             "download_name": downloads.download_name,
         }
@@ -86,7 +135,9 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
     def index():
         if not state:
             refresh()
-        return render_template("index.html", reports=list(state.values()))
+        reports = list(state.values())
+        views = {r.stock.symbol: metric_views(r, monitor.config) for r in reports}
+        return render_template("index.html", reports=reports, views=views, data=view_data(reports, monitor.config))
 
     # 页面网址以 / 结尾、下载文件网址带扩展名，这样导出成静态网站后网址保持不变
     @app.get("/stock/<symbol>/")
@@ -94,8 +145,9 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
         if not state:
             refresh()
         report = state.get(symbol) or abort(404)
-        payload = chart_payload(report, monitor.config.lookback_years) if report.data is not None else None
-        return render_template("stock.html", report=report, payload=payload)
+        payload = chart_payload(report, monitor.config) if report.data is not None else None
+        data = view_data([report], monitor.config, symbol=symbol, charts=payload)
+        return render_template("stock.html", report=report, views=metric_views(report, monitor.config), data=data)
 
     @app.post("/refresh")
     def refresh_view():

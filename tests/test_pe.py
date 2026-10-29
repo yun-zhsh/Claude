@@ -84,3 +84,15 @@ def test_parse_config_filing_format():
     assert parse_config({"stocks": [{"symbol": "0700.HK"}]}).stocks[0].filing_format == "highlights"
     with pytest.raises(ValueError, match="公告版式"):
         parse_config({"stocks": [{"symbol": "0700.HK", "filing_format": "xyz"}]})
+
+
+def test_parse_config_lookback_options():
+    raw = {"stocks": [{"symbol": "0700.HK"}]}
+    c = parse_config(raw)
+    assert c.lookback_options == [10, 5, 3, 2, 1] and c.lookback_years == 10 and c.max_lookback == 10
+    c = parse_config({**raw, "lookback_options": [1, 3, 3], "lookback_years": 3})
+    assert c.lookback_options == [3, 1] and c.lookback_years == 3 and c.max_lookback == 3
+    with pytest.raises(ValueError, match="lookback_years"):
+        parse_config({**raw, "lookback_options": [5, 1], "lookback_years": 10})  # 默认值必须是可选年数之一
+    with pytest.raises(ValueError, match="正整数"):
+        parse_config({**raw, "lookback_options": [0, 3], "lookback_years": 3})

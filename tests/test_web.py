@@ -129,3 +129,48 @@ def test_download_headers_are_unique():
     for columns in (downloads.PERIOD_COLUMNS, downloads.TTM_COLUMNS, downloads.PRICE_COLUMNS):
         names = list(columns.values())
         assert [n for n, c in collections.Counter(names).items() if c > 1] == []
+
+
+def view_json(html):
+    import json
+    import re
+
+    return json.loads(re.search(r'<script type="application/json" id="view-data">(.*?)</script>', html, re.S).group(1))
+
+
+def test_index_has_years_dropdown_and_all_windows(client):
+    html = client.get("/").get_data(as_text=True)
+    assert 'id="years-select"' in html
+    for y in (10, 5, 3, 2, 1):
+        assert f'<option value="{y}"' in html and f"过去 {y} 年" in html
+    assert '<option value="10" selected>' in html  # 默认 10 年
+    assert 'data-keep-years' in html and 'data-ref="0700.HK|pe"' in html and "static/app.js" in html
+
+    view = view_json(html)
+    assert view["default"] == 10 and view["options"] == [10, 5, 3, 2, 1]
+    windows = view["fields"]["0700.HK|pe"]
+    assert set(windows) == {"10", "5", "3", "2", "1"}  # 键的顺序不重要，页面按键查找
+    f = windows["1"]
+    assert set(f) == {"current", "percentile", "level", "color", "range", "stats", "bands", "start", "band_values"}
+    assert f["start"] > windows["10"]["start"]  # 一年窗口比十年窗口的起点晚
+    assert set(f["band_values"]) == {"P10", "P30", "P50", "P70", "P90"}
+
+
+def test_stock_page_has_chart_data_for_every_window(client):
+    html = client.get("/stock/0700.HK/").get_data(as_text=True)
+    view = view_json(html)
+    assert view["symbol"] == "0700.HK"
+    charts = view["charts"]
+    assert {m["key"] for m in charts["metrics"]} == {"pe", "pe_non_ifrs"}
+    assert set(charts["price"]["starts"]) == {"10", "5", "3", "2", "1"}
+    # 走势图数据覆盖最长的回看年数，页面上再按所选年数截取
+    assert charts["metrics"][0]["dates"][0] >= view["fields"]["0700.HK|pe"]["10"]["start"]
+    assert 'data-f="percentile"' in html and "ValuationView.onChange" in html
+    assert 'href="/"' in html and "data-keep-years" in html
+
+
+def test_export_includes_app_script(monitor, tmp_path):
+    out = tmp_path / "site2"
+    export_site(monitor, out, base_path="/Claude")
+    assert (out / "static" / "app.js").exists()
+    assert 'id="years-select"' in (out / "index.html").read_text(encoding="utf-8")

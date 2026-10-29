@@ -22,11 +22,20 @@ class StockConfig:
     filing_format: str = "highlights"  # 业绩公告的版式，见 filings.FORMATS
 
 
+DEFAULT_LOOKBACK_OPTIONS = [10, 5, 3, 2, 1]
+
+
 @dataclass(frozen=True)
 class Config:
     stocks: list[StockConfig]
-    lookback_years: int = 10
+    lookback_years: int = 10  # 默认选中的回看年数
     levels: list[Level] = field(default_factory=list)
+    lookback_options: list[int] = field(default_factory=lambda: list(DEFAULT_LOOKBACK_OPTIONS))  # 网页上可选的回看年数
+
+    @property
+    def max_lookback(self) -> int:
+        """最长的回看年数，决定需要准备多少年的行情和业绩数据。"""
+        return max(self.lookback_options)
 
 
 DEFAULT_LEVELS = [
@@ -69,4 +78,10 @@ def parse_config(raw: dict) -> Config:
     if levels[-1].upper < 100:
         raise ValueError("levels 最后一档的 upper 必须为 100")
 
-    return Config(stocks=stocks, lookback_years=int(raw.get("lookback_years", 10)), levels=levels)
+    options = sorted({int(y) for y in raw.get("lookback_options") or DEFAULT_LOOKBACK_OPTIONS}, reverse=True)
+    if options[-1] < 1:
+        raise ValueError("lookback_options 里的年数必须是正整数")
+    default = int(raw.get("lookback_years", options[0]))
+    if default not in options:
+        raise ValueError(f"lookback_years={default} 必须是 lookback_options {options} 之一")
+    return Config(stocks=stocks, lookback_years=default, levels=levels, lookback_options=options)

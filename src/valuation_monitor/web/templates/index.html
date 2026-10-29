@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>跟踪的股票</h1>
-<p class="muted">点击股票查看估值走势、数据核对情况，并下载历史数据。</p>
+<p class="muted">点击股票查看估值走势、数据核对情况，并下载历史数据。历史分位按右上角选择的年数计算。</p>
 
 <div class="stock-list">
   {% for r in reports %}
-  <a class="card stock-card" href="{{ url_for('stock', symbol=r.stock.symbol) }}">
+  <a class="card stock-card" href="{{ url_for('stock', symbol=r.stock.symbol) }}" data-keep-years>
     <div class="stock-head">
       <div>
         <div class="stock-name">{{ r.stock.name }}</div>
@@ -22,13 +22,14 @@
     <div class="error">{{ r.error }}</div>
     {% else %}
     <div class="metric-rows">
-      {% for m in r.metrics %}
-      <div class="metric-row">
-        <span class="metric-label">{{ m.metric.label }}</span>
-        {% if m.valuation %}
-        <span class="metric-value">{{ "%.2f"|format(m.valuation.current) }}</span>
-        <span class="muted">分位 {{ "%.1f"|format(m.valuation.percentile) }}%</span>
-        <span class="badge" style="--c: {{ level_color(m.level_index) }}">{{ m.valuation.level }}</span>
+      {% for m in views[r.stock.symbol] %}
+      <div class="metric-row" data-ref="{{ r.stock.symbol }}|{{ m.key }}">
+        <span class="metric-label">{{ m.label }}</span>
+        {% if m.windows %}
+        {% set f = m.windows[default_years] %}
+        <span class="metric-value" data-f="current">{{ f.current }}</span>
+        <span class="muted">分位 <span data-f="percentile">{{ f.percentile }}</span>%</span>
+        <span class="badge" data-f="level" data-f-color style="--c: {{ f.color }}">{{ f.level }}</span>
         {% else %}
         <span class="error">{{ m.error }}</span>
         {% endif %}

@@ -35,6 +35,12 @@ h2 { font-size: 1.1rem; margin: 0 0 0.75rem; }
   padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--border);
 }
 .brand { font-weight: 600; text-decoration: none; }
+.topbar-right { display: flex; align-items: center; gap: 12px; }
+.years-select { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.9rem; }
+.years-select select {
+  font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 8px; cursor: pointer;
+}
 .footer { color: var(--muted); font-size: 0.85rem; padding-top: 16px; padding-bottom: 32px; }
 
 .muted { color: var(--muted); }

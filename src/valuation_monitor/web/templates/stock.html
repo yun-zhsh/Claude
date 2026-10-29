@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ report.stock.name }} - 股票估值监控{% endblock %}
 {% block content %}
-<a class="back" href="{{ url_for('index') }}">← 返回股票列表</a>
+<a class="back" href="{{ url_for('index') }}" data-keep-years>← 返回股票列表</a>
 <div class="stock-head page-head">
   <div>
     <h1>{{ report.stock.name }} <span class="muted">{{ report.stock.symbol }}</span></h1>
@@ -20,21 +20,21 @@
 {% else %}
 
 <section class="summary-grid">
-  {% for m in report.metrics %}
-  <div class="card">
-    <div class="metric-label">{{ m.metric.label }}</div>
-    {% if m.valuation %}
-    {% set v = m.valuation %}
-    <div class="big">{{ "%.2f"|format(v.current) }}</div>
+  {% for m in views %}
+  <div class="card" data-ref="{{ report.stock.symbol }}|{{ m.key }}">
+    <div class="metric-label">{{ m.label }}</div>
+    {% if m.windows %}
+    {% set f = m.windows[default_years] %}
+    <div class="big" data-f="current">{{ f.current }}</div>
     <div class="percentile">
-      <span>历史分位 <strong>{{ "%.1f"|format(v.percentile) }}%</strong></span>
-      <span class="badge" style="--c: {{ level_color(m.level_index) }}">{{ v.level }}</span>
+      <span>历史分位 <strong><span data-f="percentile">{{ f.percentile }}</span>%</strong></span>
+      <span class="badge" data-f="level" data-f-color style="--c: {{ f.color }}">{{ f.level }}</span>
     </div>
-    <div class="meter"><div class="meter-dot" style="left: {{ v.percentile }}%; --c: {{ level_color(m.level_index) }}"></div></div>
+    <div class="meter"><div class="meter-dot" data-f-left data-f-color style="left: {{ f.percentile }}%; --c: {{ f.color }}"></div></div>
     <dl class="stats">
-      <dt>回看区间</dt><dd>{{ v.window_start.strftime("%Y-%m-%d") }} ~ {{ v.as_of.strftime("%Y-%m-%d") }}（{{ v.observations }} 个交易日）</dd>
-      <dt>最低 / 均值 / 最高</dt><dd>{{ "%.1f"|format(v.min) }} / {{ "%.1f"|format(v.mean) }} / {{ "%.1f"|format(v.max) }}</dd>
-      <dt>分位参考</dt><dd>{% for p, val in v.bands.items() %}P{{ p }} {{ "%.1f"|format(val) }}{% if not loop.last %} · {% endif %}{% endfor %}</dd>
+      <dt>回看区间</dt><dd data-f="range">{{ f.range }}</dd>
+      <dt>最低 / 均值 / 最高</dt><dd data-f="stats">{{ f.stats }}</dd>
+      <dt>分位参考</dt><dd data-f="bands">{{ f.bands }}</dd>
     </dl>
     {% else %}
     <div class="error">{{ m.error }}</div>
@@ -43,15 +43,15 @@
   {% endfor %}
 </section>
 
-{% for c in payload.metrics %}
+{% for c in data.charts.metrics %}
 <section class="card chart-card">
-  <h2>{{ c.label }} 走势</h2>
+  <h2>{{ c.label }} 走势（过去 <span data-years-label>{{ default_years }}</span> 年）</h2>
   <div class="chart-box"><canvas id="chart-{{ c.key }}"></canvas></div>
 </section>
 {% endfor %}
 
 <section class="card chart-card">
-  <h2>股价走势（{{ report.data.price_currency }}，实际成交价）</h2>
+  <h2>股价走势（{{ report.data.price_currency }}，实际成交价，过去 <span data-years-label>{{ default_years }}</span> 年）</h2>
   <div class="chart-box"><canvas id="chart-price"></canvas></div>
 </section>
 
@@ -77,7 +77,7 @@
     <dt>业绩数据</dt>
     <dd>港交所披露易 {{ report.data.earnings.announcements|length }} 份业绩公告原文，币种 {{ report.data.earnings.currency }}</dd>
     <dt>股价核对</dt>
-    <dd>腾讯证券 vs Yahoo（还原除权调整后），近 {{ lookback_years }} 年：
+    <dd>腾讯证券 vs Yahoo（还原除权调整后），近 {{ max_lookback_years }} 年：
       {% for k, n in report.price_check.items() %}{{ status_labels[k] }} {{ n }} 天{% if not loop.last %}，{% endif %}{% endfor %}</dd>
   </dl>
   {% if report.discrepancies %}
@@ -90,10 +90,12 @@
 {% endblock %}
 
 {% block scripts %}
-{% if payload %}
+{% if data.charts %}
 <script src="{{ url_for('static', filename='chart.umd.min.js') }}"></script>
 <script>
-  const payload = {{ payload|tojson }};
+  const view = ValuationView.view;
+  const charts = view.charts;
+  const symbol = view.symbol;
   const css = getComputedStyle(document.documentElement);
   const color = (name) => css.getPropertyValue(name).trim();
   Chart.defaults.color = color("--muted");
@@ -105,10 +107,10 @@
     P70: ["#fb923c", [6, 4]], P90: ["#dc2626", [2, 3]],
   };
 
-  function lineChart(id, dates, datasets) {
-    new Chart(document.getElementById(id), {
+  function lineChart(id, datasets) {
+    return new Chart(document.getElementById(id), {
       type: "line",
-      data: { labels: dates, datasets },
+      data: { labels: [], datasets },
       options: {
         maintainAspectRatio: false,
         animation: false,
@@ -123,19 +125,41 @@
     });
   }
 
-  payload.metrics.forEach((m) => {
-    const n = m.values.length;
-    const datasets = [{ label: m.label, data: m.values, borderColor: color("--accent"), borderWidth: 1.5 }];
-    Object.entries(m.bands).forEach(([name, value]) => {
+  // 每张图的数据在 setWindow 里按所选的回看年数截取；ISO 日期可以直接按字符串比较
+  const metricCharts = charts.metrics.map((m) => {
+    const names = Object.keys(view.fields[`${symbol}|${m.key}`][view.default].band_values);
+    const datasets = [{ label: m.label, data: [], borderColor: color("--accent"), borderWidth: 1.5 }];
+    names.forEach((name) => {
       const [c, dash] = bandStyles[name] || ["#9ca3af", [4, 4]];
-      datasets.push({ label: `${name} = ${value}`, data: Array(n).fill(value), borderColor: c, borderDash: dash, borderWidth: 1 });
+      datasets.push({ label: name, data: [], borderColor: c, borderDash: dash, borderWidth: 1 });
     });
-    lineChart(`chart-${m.key}`, m.dates, datasets);
+    return { m, names, chart: lineChart(`chart-${m.key}`, datasets) };
   });
-
-  lineChart("chart-price", payload.price.dates, [
-    { label: "收盘价", data: payload.price.values, borderColor: color("--accent"), borderWidth: 1.5 },
+  const priceChart = lineChart("chart-price", [
+    { label: "收盘价", data: [], borderColor: color("--accent"), borderWidth: 1.5 },
   ]);
+
+  function setWindow(years) {
+    metricCharts.forEach(({ m, names, chart }) => {
+      const f = view.fields[`${symbol}|${m.key}`][years];
+      const from = m.dates.findIndex((d) => d >= f.start);
+      const n = m.dates.length - from;
+      chart.data.labels = m.dates.slice(from);
+      chart.data.datasets[0].data = m.values.slice(from);
+      names.forEach((name, i) => {
+        const value = f.band_values[name];
+        chart.data.datasets[i + 1].label = `${name} = ${value}`;
+        chart.data.datasets[i + 1].data = Array(n).fill(value);
+      });
+      chart.update();
+    });
+    const price = charts.price;
+    const from = price.dates.findIndex((d) => d >= price.starts[years]);
+    priceChart.data.labels = price.dates.slice(from);
+    priceChart.data.datasets[0].data = price.values.slice(from);
+    priceChart.update();
+  }
+  ValuationView.onChange(setWindow);
 </script>
 {% endif %}
 {% endblock %}
