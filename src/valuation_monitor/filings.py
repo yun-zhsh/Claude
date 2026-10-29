@@ -499,7 +499,7 @@ class EarningsHistory:
         extra["non_ifrs_eps_ttm_formula"] = [sum_formula(r["non_ifrs_eps"], r["non_ifrs_eps_ttm"]) for r in self.ttm_detail]
         extra["revenue_ttm_formula"] = [sum_formula(r["revenue"], r["revenue_ttm"]) for r in self.ttm_detail]
         extra["shares_formula"] = [shares_formula(r) for r in self.ttm_detail]
-        extra["shares_source"] = ["公告披露" if r["shares_source"] == "reported" else "反推" for r in self.ttm_detail]
+        extra["shares_source"] = [{"reported": "公告披露", "derived": "由全年数推算", "implied": "反推"}[r["shares_source"]] for r in self.ttm_detail]
         extra["shares_implied"] = [r["shares_implied"] for r in self.ttm_detail]
         extra["revenue_per_share_formula"] = [
             _division(r["revenue_ttm"], r["shares"], r["revenue_per_share_ttm"]) for r in self.ttm_detail
@@ -615,7 +615,17 @@ def _ttm_row(
     eps, non_ifrs, revenue = components("eps"), components("non_ifrs_eps"), components("revenue")
     implied = implied_shares(quarters, a.period)
     reported = quarters["wa_shares"].get(a.period)
-    shares = reported.value if reported else implied  # 公告披露了加权平均股数就用披露的，没有才用净利润 ÷ 基本 EPS 反推
+    basis = shares_basis.get(a.period, "") if reported else ""
+    shares, source, parts = (reported.value, "reported", None) if reported else (implied, "implied", None)
+    if reported and basis:
+        # 公告只披露了全年数：全年数是各季度的按天加权平均，所以本期（第四季度或下半年）= 全年 × 全年天数 − 前面各期 × 各自天数，再除以本期天数
+        parts = _fiscal_year_parts(a.period, reported.value, quarters["wa_shares"], shares_basis, 4 // per_year)
+        if parts:
+            shares, source = parts["shares"], "derived"
+            for x in parts["parts"]:
+                x["period"] = period_label(x["period"], per_year)
+        else:
+            shares, source, basis = implied, "implied", ""  # 前面各期的股数也没有披露，改为反推
     revenue_ttm = total(revenue)
     equity = quarters["equity"].get(a.period)
     row = {
@@ -645,14 +655,34 @@ def _ttm_row(
         "profit": profit.value if profit else None,
         "eps_latest": eps_now.value if eps_now else None,
         "shares": row["shares"],
-        "shares_source": "reported" if reported else "implied",
-        "shares_basis": shares_basis.get(a.period, "") if reported else "",
+        "shares_source": source,
+        "shares_basis": basis,
+        "shares_parts": parts,
         "shares_implied": implied,
         "equity": row["equity"],
         "revenue_per_share_ttm": row["revenue_per_share_ttm"],
         "book_value_per_share": row["book_value_per_share"],
     }
     return row, detail
+
+
+def _days(p: pd.Period, step: int) -> int:
+    """一期的天数；step 为一期含几个季度（半年报的“期”是两个季度）。"""
+    return (p.end_time.normalize() - (p - (step - 1)).start_time.normalize()).days + 1
+
+
+def _fiscal_year_parts(
+    p: pd.Period, full_year: float, shares: dict[pd.Period, QuarterValue], basis: dict[pd.Period, str], step: int
+) -> dict | None:
+    """全年加权平均股数 → 本期（年内最后一期）的加权平均股数。需要年内前面各期披露的股数（本期自己的口径）。"""
+    earlier = _earlier_periods(p, step)
+    if not earlier or any(e not in shares or basis.get(e, "") for e in earlier):
+        return None
+    year_days = (pd.Timestamp(year=p.year, month=12, day=31) - pd.Timestamp(year=p.year, month=1, day=1)).days + 1
+    parts = [{"period": e, "shares": shares[e].value, "days": _days(e, step)} for e in sorted(earlier)]
+    days = _days(p, step)
+    value = (full_year * year_days - sum(x["shares"] * x["days"] for x in parts)) / days
+    return {"shares": value, "full_year": full_year, "year_days": year_days, "days": days, "parts": parts}
 
 
 def _earlier_periods(p: pd.Period, step: int) -> list[pd.Period]:

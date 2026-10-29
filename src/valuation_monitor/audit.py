@@ -45,6 +45,15 @@ def shares_formula(rec: dict) -> str:
         return ""
     unit = "百万股；ADR 为百万份 ADS"
     implied = rec.get("shares_implied")
+    parts = rec.get("shares_parts")
+    if rec.get("shares_source") == "derived" and parts:
+        earlier = " + ".join(f"{x['period']} {num(x['shares'])} × {x['days']} 天" for x in parts["parts"])
+        check = f"；对照：归母净利润 {num(rec['profit'])} ÷ 基本 EPS {num(rec['eps_latest'])} 反推 {num(implied)}" if implied else ""
+        return (
+            f"公告只披露了全年加权平均股数 {num(parts['full_year'])}，{rec['period_label']}由全年数推算："
+            f"（{num(parts['full_year'])} × {parts['year_days']} 天 − （{earlier}））÷ {parts['days']} 天 = {num(rec['shares'])}"
+            f"（百万股；ADR 为百万份 ADS）{check}"
+        )
     if rec.get("shares_source") == "reported":
         basis = "，公告披露的是全年数" if rec.get("shares_basis") else ""
         check = f"；对照：归母净利润 {num(rec['profit'])} ÷ 基本 EPS {num(rec['eps_latest'])} 反推 {num(implied)}" if implied else ""

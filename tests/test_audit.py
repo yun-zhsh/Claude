@@ -84,9 +84,29 @@ def test_reported_weighted_average_shares_are_used_before_the_implied_ones():
     assert "对照：归母净利润 40 ÷ 基本 EPS 4 反推 10" in row["shares_formula"]
 
 
-def test_full_year_basis_is_disclosed():
-    row = history_with_reported_shares("全年").ttm_frame().iloc[-1]
-    assert "公告披露的是全年数" in row["shares_formula"]
+def test_full_year_shares_are_turned_into_fourth_quarter_shares():
+    """第四季度公告只披露全年加权平均股数：本期 = (全年 × 全年天数 − 前三季度各自股数 × 天数) ÷ 第四季度天数。"""
+    def a(period, published, shares, basis=""):
+        return Announcement(pd.Period(period, freq="Q"), pd.Timestamp(published), f"u-{period}", "CNY", True,
+                            {"eps": [1.0, 1.0], "revenue": [100.0, 100.0], "profit": [10.0, 10.0], "equity": [500.0, 480.0], "wa_shares": shares},
+                            shares_basis=basis)
+
+    h = build_history(
+        [
+            a("2024Q1", "2024-05-01 17:00", [10.2, 10.4]),
+            a("2024Q2", "2024-08-01 17:00", [10.1, 10.3]),
+            a("2024Q3", "2024-11-01 17:00", [10.05, 10.2]),
+            a("2024Q4", "2025-02-01 17:00", [10.0, 10.3], "全年"),  # 2024 年 366 天：91 + 91 + 92 + 92
+        ]
+    )
+    row = h.ttm_frame().iloc[-1]
+    expected = (10.0 * 366 - (10.2 * 91 + 10.1 * 91 + 10.05 * 92)) / 92
+    assert row["shares"] == pytest.approx(expected, abs=1e-3) and row["shares_source"] == "由全年数推算"
+    assert "（10 × 366 天 − （2024Q1 10.2 × 91 天 + 2024Q2 10.1 × 91 天 + 2024Q3 10.05 × 92 天））÷ 92 天 = 9.653" in row["shares_formula"]
+
+    # 前三季度没有披露股数时，不用全年数硬凑，改为反推
+    h = build_history([a("2024Q4", "2025-02-01 17:00", [10.0, 10.3], "全年")])
+    assert h.ttm_frame().iloc[-1]["shares_source"] == "反推"
 
 
 def test_share_counts_are_multiplied_by_splits():

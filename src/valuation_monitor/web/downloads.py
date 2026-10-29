@@ -49,7 +49,7 @@ TTM_COLUMNS = {
     "provisional": "是否暂用初步数据（1=业绩发布会材料，财报发布后替换）",
     "revenue_ttm": "TTM 营收 = 各期营收之和（百万）",
     "shares": "股数（百万股；ADR 为百万份 ADS）：优先用公告披露的加权平均股数，没有才反推",
-    "shares_source": "股数来源（公告披露 / 反推）",
+    "shares_source": "股数来源（公告披露 / 由全年数推算 / 反推）",
     "shares_implied": "对照：反推股数 = 最新期归母净利润 ÷ 最新期基本 EPS",
     "profit_latest": "最新期归母净利润（百万）",
     "eps_latest": "最新期基本 EPS",
