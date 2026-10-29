@@ -96,3 +96,25 @@ def test_parse_config_lookback_options():
         parse_config({**raw, "lookback_options": [5, 1], "lookback_years": 10})  # 默认值必须是可选年数之一
     with pytest.raises(ValueError, match="正整数"):
         parse_config({**raw, "lookback_options": [0, 3], "lookback_years": 3})
+
+
+def test_parse_config_us_stock():
+    raw = {"stocks": [{"symbol": "JD", "name": "京东（ADR）", "cik": 1549802, "metrics": ["pe", "pe_non_gaap"]}]}
+    jd = parse_config(raw).stocks[0]
+    assert (jd.market, jd.filing_format, jd.cik) == ("US", "press_release", 1549802)
+    assert jd.filing_source == "美国证监会 EDGAR" and not jd.cross_checks_prices
+    hk = parse_config({"stocks": [{"symbol": "0700.HK"}]}).stocks[0]
+    assert (hk.market, hk.cik, hk.filing_source, hk.cross_checks_prices) == ("HK", None, "港交所披露易", True)
+    with pytest.raises(ValueError, match="cik"):
+        parse_config({"stocks": [{"symbol": "JD"}]})
+    with pytest.raises(ValueError, match="不匹配"):
+        parse_config({"stocks": [{"symbol": "JD", "cik": 1, "filing_format": "highlights"}]})
+    with pytest.raises(ValueError, match="不匹配"):
+        parse_config({"stocks": [{"symbol": "0700.HK", "filing_format": "press_release"}]})
+    with pytest.raises(ValueError, match="未知的市场"):
+        parse_config({"stocks": [{"symbol": "X", "market": "JP"}]})
+
+
+def test_non_gaap_pe_uses_non_gaap_eps():
+    data = make_data({"2024-06-01": 100.0}, fx=2.0, ttm_rows=[("2024-01-01", 10.0, 20.0)])
+    assert METRICS["pe_non_gaap"].compute(data).iloc[0] == pytest.approx(100 / (20 * 2.0))

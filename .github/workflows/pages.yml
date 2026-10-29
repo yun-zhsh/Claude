@@ -38,6 +38,9 @@ jobs:
         run: pip install -e .
 
       - name: 更新数据并导出网页
+        env:
+          # 访问美国证监会 EDGAR 需要声明使用者，内容为“程序名 联系邮箱”，在仓库 Secrets 中设置
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: valuation-monitor-export --out _site --base-path "/${{ github.event.repository.name }}"
 
       - name: 提交更新后的数据

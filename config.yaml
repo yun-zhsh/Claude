@@ -17,11 +17,15 @@ levels:
 # 可用指标：
 #   pe           PE (TTM)，按 IFRS 口径的归母净利润
 #   pe_non_ifrs  PE Non-IFRS (TTM)，按公司披露的 Non-IFRS 利润，剔除投资收益等一次性项目
+#   pe_non_gaap  PE Non-GAAP (TTM)，美股公司披露的 Non-GAAP 利润（剔除股权激励等），口径同 pe_non_ifrs
 #   ps           PS (TTM)，市销率，按最近 4 个季度营收
 #   pb           PB，市净率，按最新一期末归属股东净资产
 # filing_format：业绩公告的版式，决定怎样从公告里提取数据
 #   highlights  第一页有财务摘要表，每季度发布业绩（腾讯）
 #   statements  只有合并损益表和资产负债表，通常每半年发布业绩（舜宇光学）
+#   press_release  美股公司在美国证监会 EDGAR 提交的业绩新闻稿（6-K），每季度发布；需要配置 cik
+# market：HK（港交所披露易，symbol 以 .HK 结尾时默认）或 US（美国证监会 EDGAR）。
+# 访问 EDGAR 要求声明使用者：运行前设置环境变量 SEC_USER_AGENT="valuation-monitor 你的邮箱"（见 README）。
 stocks:
   - symbol: 0700.HK   # Yahoo Finance 代码
     name: 腾讯控股
@@ -31,3 +35,9 @@ stocks:
     name: 舜宇光学科技
     filing_format: statements   # 舜宇只披露 HKFRS 数据，没有 Non-IFRS，所以不配 pe_non_ifrs
     metrics: [pe, ps, pb]
+  - symbol: JD
+    name: 京东（ADR）
+    market: US
+    cik: 1549802   # 京东在美国证监会的编号
+    filing_format: press_release   # 股价是美元一股 ADS（2 股 A 类普通股），EPS 用每份 ADS 的人民币数据
+    metrics: [pe, pe_non_gaap, ps, pb]

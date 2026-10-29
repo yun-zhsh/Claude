@@ -6,7 +6,6 @@ from valuation_monitor.filings import (
     adjust_for_splits,
     announcements_from_frame,
     announcements_to_frame,
-    available_date,
     build_history,
     first_profit_match,
     infer_periods_per_year,
@@ -17,6 +16,7 @@ from valuation_monitor.filings import (
     parse_period,
     split_factor,
 )
+from valuation_monitor.market_calendar import available_date
 from valuation_monitor.providers.hkex import stock_code
 
 # 以下文字摘自腾讯业绩公告第一页（pypdf 提取结果）

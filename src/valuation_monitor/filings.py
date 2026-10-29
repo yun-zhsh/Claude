@@ -32,8 +32,9 @@ from dataclasses import dataclass, field, replace
 import pandas as pd
 from pypdf import PdfReader
 
-from valuation_monitor.market_calendar import available_date, effective_trading_day
-from valuation_monitor.providers.hkex import Filing
+from valuation_monitor.market_calendar import HK, Market, effective_trading_day, get_market
+from valuation_monitor.press_release import parse_press_release
+from valuation_monitor.providers.base import Filing
 
 MONTH_TO_QUARTER = {"MARCH": 1, "JUNE": 2, "SEPTEMBER": 3, "DECEMBER": 4}
 PERIOD_RE = re.compile(r"ENDED (\d{1,2}) (MARCH|JUNE|SEPTEMBER|DECEMBER) (\d{4})", re.I)
@@ -78,7 +79,7 @@ SERIES_LABELS = {
     "profit": "归母净利润",
     "equity": "归母净资产",
 }
-PARSER_VERSIONS = {"highlights": 2, "statements": 1}  # 解析规则变化时加 1，已保存的解析结果会自动重新解析
+PARSER_VERSIONS = {"highlights": 2, "statements": 1, "press_release": 1}  # 解析规则变化时加 1，已保存的解析结果会自动重新解析
 PER_SHARE_TOLERANCE = 0.005  # 不同公告对同一数值允许的差异：每股数据（四舍五入、累计数相减）
 AMOUNT_TOLERANCE = 0.001  # 金额按相对差异
 SHARES_CHANGE_LIMIT = 0.05  # 相邻季度反推股数变化超过 5% 时提示（可能提取错误）
@@ -102,11 +103,12 @@ class Announcement:
     currency: str
     is_quarterly_table: bool  # True：摘要表是单季数据；False：年初至今累计数据
     values: dict[str, list[float]]  # series -> 该行的数值（equity 为本期末、上年末）
+    market: str = "HK"  # 上市地，决定收盘时间
 
     @property
     def available(self) -> pd.Timestamp:
         """第一个可以用到这份公告的收盘价所在日期。"""
-        return available_date(self.published)
+        return get_market(self.market).available_date(self.published)
 
 
 @dataclass
@@ -272,13 +274,17 @@ def parse_statements(pages: Pages) -> tuple[str, dict[str, list[float]]]:
     return currency, values
 
 
-FORMATS = {"highlights": parse_highlights, "statements": parse_statements}
+FORMATS = {"highlights": parse_highlights, "statements": parse_statements}  # 港交所 PDF 公告
+FILING_FORMATS = {*FORMATS, "press_release"}  # 加上美国证监会的 HTML 新闻稿
 
 
-def parse_announcement(filing: Filing, fmt: str = "highlights") -> Announcement:
+def parse_announcement(filing: Filing, fmt: str = "highlights", market: Market = HK) -> Announcement:
     """解析一份业绩公告，数值保持公告原样（金额已换算成百万元，EPS 已换算成元；未做拆股调整）。"""
+    if fmt == "press_release":  # 美股新闻稿的表格每个季度都是单季数据，报告期取自表头的日期
+        parsed = parse_press_release(filing.content)
+        return Announcement(parsed.period, filing.published, filing.url, parsed.currency, True, parsed.values, market.key)
     period = parse_period(filing.title)
-    currency, values = FORMATS[fmt](Pages(filing.pdf))
+    currency, values = FORMATS[fmt](Pages(filing.content))
     counts = {len(values[k]) for k in FLOWS if k in values}
     if counts == {3}:
         quarterly = True
@@ -286,7 +292,7 @@ def parse_announcement(filing: Filing, fmt: str = "highlights") -> Announcement:
         quarterly = period.quarter == 1  # 一季度公告的“累计”就是单季
     else:
         raise ValueError(f"{filing.url}: 各行的数值个数不符合预期: {values}")
-    return Announcement(period, filing.published, filing.url, currency, quarterly, values)
+    return Announcement(period, filing.published, filing.url, currency, quarterly, values, market.key)
 
 
 def split_factor(published: pd.Timestamp, splits: pd.Series) -> float:
@@ -327,7 +333,7 @@ def announcements_to_frame(announcements: list[Announcement], parser_version: in
     return pd.DataFrame(rows, columns=ANNOUNCEMENT_COLUMNS)
 
 
-def announcements_from_frame(df: pd.DataFrame) -> list[Announcement]:
+def announcements_from_frame(df: pd.DataFrame, market: Market = HK) -> list[Announcement]:
     out = []
     for r in df.fillna("").to_dict("records"):
         out.append(
@@ -338,6 +344,7 @@ def announcements_from_frame(df: pd.DataFrame) -> list[Announcement]:
                 currency=r["currency"],
                 is_quarterly_table=r["table"] == "quarterly",
                 values={s: [float(v) for v in str(r[s]).split(";")] for s in SERIES if str(r.get(s, ""))},
+                market=market.key,
             )
         )
     return out

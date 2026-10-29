@@ -14,12 +14,22 @@ USER_AGENT = "Mozilla/5.0"
 
 
 class HttpClient:
-    def __init__(self, cache_dir: str | Path = ".cache", ttl_seconds: int = 12 * 3600, refresh: bool = False):
+    def __init__(
+        self,
+        cache_dir: str | Path = ".cache",
+        ttl_seconds: int = 12 * 3600,
+        refresh: bool = False,
+        user_agent: str = USER_AGENT,
+        min_interval: float = 0.0,
+    ):
+        """min_interval：两次真正的网络请求之间至少间隔多少秒（命中缓存的不算），用于遵守数据源的限速规定。"""
         self.cache_dir = Path(cache_dir)
         self.ttl_seconds = ttl_seconds
         self.refresh = refresh
+        self.min_interval = min_interval
+        self._last_request = 0.0
         self.session = requests.Session()
-        self.session.headers["User-Agent"] = USER_AGENT
+        self.session.headers["User-Agent"] = user_agent
 
     def get_bytes(
         self, url: str, params: dict | None = None, immutable: bool = False, cache: bool = True, retries: int = 3
@@ -33,6 +43,10 @@ class HttpClient:
             return path.read_bytes()
 
         for attempt in range(retries):
+            wait = self._last_request + self.min_interval - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            self._last_request = time.monotonic()
             try:
                 resp = self.session.get(url, params=params, timeout=60)
                 resp.raise_for_status()

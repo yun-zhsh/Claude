@@ -36,3 +36,17 @@ def test_effective_trading_day_skips_closed_days():
     assert effective_trading_day(available, days) == pd.Timestamp("2024-05-16")
     assert effective_trading_day(pd.Timestamp("2024-05-18"), days) is None  # 尚未开市
     assert effective_trading_day(pd.Timestamp("2024-05-01"), days) is None  # 早于行情数据
+
+
+def test_us_calendar_early_closes_and_after_close():
+    from valuation_monitor.market_calendar import US
+
+    assert US.is_half_day(pd.Timestamp("2025-11-28"))  # 感恩节次日
+    assert US.is_half_day(pd.Timestamp("2024-07-03")) and not US.is_half_day(pd.Timestamp("2025-07-03") + pd.Timedelta(days=1))
+    assert US.is_half_day(pd.Timestamp("2024-12-24")) and not US.is_half_day(pd.Timestamp("2026-12-24") + pd.Timedelta(days=1))
+    assert not US.is_half_day(pd.Timestamp("2025-11-27"))
+    # 盘前 / 盘中 / 收盘后
+    assert US.available_date(pd.Timestamp("2026-08-13 06:05")) == pd.Timestamp("2026-08-13")
+    assert US.available_date(pd.Timestamp("2026-08-13 15:59")) == pd.Timestamp("2026-08-13")
+    assert US.available_date(pd.Timestamp("2026-08-13 16:00")) == pd.Timestamp("2026-08-14")
+    assert US.available_date(pd.Timestamp("2025-11-28 13:30")) == pd.Timestamp("2025-11-29")

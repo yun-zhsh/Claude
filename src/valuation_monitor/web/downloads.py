@@ -23,8 +23,8 @@ SOURCE_LABELS = {"tencent": "腾讯证券", "yahoo": "Yahoo"}
 
 # 逐季明细：每项数据都有数值、首次公布时间、生效交易日、证实公告数、各公告最大偏差
 SERIES_NAMES = {  # 系列 -> (带单位的完整名称, 其他列名里用的简称，必须互不相同)
-    "eps": ("基本 EPS（IFRS，元/股）", "IFRS EPS"),
-    "non_ifrs_eps": ("基本 EPS（Non-IFRS，元/股）", "Non-IFRS EPS"),
+    "eps": ("基本 EPS（IFRS/GAAP，元/股；ADR 为元/份 ADS）", "IFRS EPS"),
+    "non_ifrs_eps": ("基本 EPS（Non-IFRS/Non-GAAP，元/股；ADR 为元/份 ADS）", "Non-IFRS EPS"),
     "revenue": ("营收（百万元）", "营收"),
     "profit": ("归母净利润（百万元）", "归母净利润"),
     "equity": ("期末归母净资产（百万元）", "期末归母净资产"),
@@ -38,20 +38,20 @@ for _key, (_name, _short) in SERIES_NAMES.items():
         f"{_key}_sources": f"{_short} 证实公告数",
         f"{_key}_max_deviation": f"{_short} 各公告最大偏差",
     }
-PERIOD_COLUMNS |= {"shares": "反推股数（百万股，归母净利润 ÷ 基本 EPS）", "first_source": "最早公布该期数据的公告"}
+PERIOD_COLUMNS |= {"shares": "反推股数（百万股；ADR 为百万份 ADS；归母净利润 ÷ 基本 EPS）", "first_source": "最早公布该期数据的公告"}
 
 TTM_COLUMNS = {
     "report_date": "报告期末",
-    "published": "公告发布时间（香港时间）",
+    "published": "公告发布时间（交易所所在地时间）",
     "available_date": "可用日期（自然日）",
     "effective_date": "生效交易日",
-    "eps_ttm": "TTM EPS（IFRS，元/股）",
-    "non_ifrs_eps_ttm": "TTM EPS（Non-IFRS，元/股）",
+    "eps_ttm": "TTM EPS（IFRS/GAAP，元/股；ADR 为元/份 ADS）",
+    "non_ifrs_eps_ttm": "TTM EPS（Non-IFRS/Non-GAAP，元/股；ADR 为元/份 ADS）",
     "revenue_ttm": "TTM 营收（百万元）",
-    "shares": "股数（百万股，最新一期加权平均）",
-    "revenue_per_share_ttm": "每股营收 TTM（元/股）",
+    "shares": "股数（百万股；ADR 为百万份 ADS；最新一期加权平均）",
+    "revenue_per_share_ttm": "每股营收 TTM（元/股或元/份 ADS）",
     "equity": "期末归母净资产（百万元）",
-    "book_value_per_share": "每股净资产（元/股）",
+    "book_value_per_share": "每股净资产（元/股或元/份 ADS）",
 }
 
 # 网址中的文件名 -> 下载时保存的文件名（不含股票代码）
@@ -80,7 +80,7 @@ def drop_empty_series(df: pd.DataFrame) -> pd.DataFrame:
 
 def build(monitor: Monitor, symbol: str, name: str) -> bytes:
     if name == "prices.csv":
-        df = pd.read_csv(monitor.prices.final_path(symbol))
+        df = pd.read_csv(monitor.prices.final_path(symbol)).dropna(axis=1, how="all")  # 美股没有腾讯证券的数据
         df["status"] = df["status"].map(PRICE_STATUS_LABELS)
         df["source"] = df["source"].map(SOURCE_LABELS)
         return to_csv_bytes(df.rename(columns=PRICE_COLUMNS))
@@ -96,7 +96,7 @@ def build(monitor: Monitor, symbol: str, name: str) -> bytes:
 
 
 def raw_zip(data_dir: Path, symbol: str) -> bytes:
-    """data/ 目录中与该股票相关的原始数据文件（公告 PDF 除外，只含其索引）。"""
+    """data/ 目录中与该股票相关的原始数据文件（公告原文除外，只含其索引）。"""
     files = [
         *sorted((data_dir / "prices" / symbol).glob("*")),
         *sorted((data_dir / "eps").glob(f"{symbol}_*")),

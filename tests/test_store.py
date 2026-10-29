@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from valuation_monitor.filings import Announcement
-from valuation_monitor.providers.hkex import Filing
+from valuation_monitor.providers.base import Filing
 from valuation_monitor.providers.yahoo import PriceHistory
 from valuation_monitor.store import EarningsStore, PriceStore
 
@@ -118,10 +118,35 @@ def test_price_store_adjusts_raw_prices_for_splits_in_memory(tmp_path):
     assert h.close.tolist() == pytest.approx([100.0, 102.0, 103.0])
 
 
+def test_us_stock_uses_yahoo_only_and_is_not_split_adjusted_again(tmp_path):
+    from valuation_monitor.market_calendar import US
+
+    class UsYahoo(FakeYahoo):
+        def price_history(self, symbol, start):
+            h = super().price_history(symbol, start)
+            return PriceHistory(h.close, h.splits, "USD", "America/New_York", bars=h.bars)
+
+    # 只传一个来源：腾讯证券不会被调用；Yahoo 的收盘价已经按拆股调整，不能再除一次
+    yahoo = UsYahoo({days_ago(10): 20.0, days_ago(5): 21.0, days_ago(2): 22.0}, splits={days_ago(3): 5.0})
+    store = PriceStore(None, yahoo, tmp_path)
+    h = store.prices("JD", days_ago(20).to_pydatetime(), US)
+    assert h.close.tolist() == [20.0, 21.0, 22.0]
+    assert h.currency == "USD" and h.timezone == "America/New_York"
+    assert h.splits.to_dict() == {days_ago(3): 5.0}  # 拆股记录仍然用来调整 EPS
+    folder = tmp_path / "prices" / "JD"
+    assert not (folder / "tencent.csv").exists()
+    final = read(folder / "final.csv")
+    assert set(final["status"]) == {"yahoo_only"} and final["close"].tolist() == [20.0, 21.0, 22.0]
+
+    yahoo.offline = True  # 离线时用已保存的数据，币种也记在 yahoo.json 里
+    h = store.prices("JD", days_ago(20).to_pydatetime(), US)
+    assert h.close.tolist() == [20.0, 21.0, 22.0] and h.currency == "USD"
+
+
 def test_earnings_store_parses_each_filing_once(tmp_path, monkeypatch):
     calls = []
 
-    def fake_parse(filing, fmt):
+    def fake_parse(filing, fmt, market):
         calls.append(filing.url)
         return Announcement(
             period=pd.Period("2026Q2", freq="Q"),
