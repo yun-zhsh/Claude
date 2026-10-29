@@ -159,3 +159,33 @@ def test_provider_falls_back_to_deck_then_replaces_it(tmp_path):
     found = provider.results_announcements("005930.KS", datetime(2026, 1, 1))
     assert [(f.title.split()[2], f.provisional, f.published) for f in found][-1] == ("3Q", False, pd.Timestamp("2026-10-29 10:00"))
     assert not list(tmp_path.glob("005930.KS/*conference_eng*"))
+
+
+# 摘自 4Q25 发布会材料（pypdf 提取结果）
+DECK_4Q25 = (
+    "4Q 2025 Results & Financial Data Based on consolidated financial statements "
+    "KRW trillion 4Q24 3Q25 % of sales 4Q25 % of sales 2024 % of sales 2025 % of sales "
+    "Sales 75.8 86.1 100.0% 93.8 100.0% 300.9 100.0% 333.6 100.0% "
+    "Profitattributable to owners of the parent 7.6 12.0 14.0% 19.3 20.6% 33.6 11.2% 44.3 13.3% "
+    "EPS (KRW) ※ Common stock 1,116 1,802 2,909 4,950 6,605 4Q24 3Q25 4Q25 2024 2025 ROE 8% "
+    "Shareholder equity 402,192.1 413,501.5 436,320.3 Capital stock 897.5"
+)
+
+
+@pytestmark_saved
+def test_fourth_quarter_deck_is_read_as_full_year_figures(monkeypatch):
+    from valuation_monitor import kifrs
+
+    real = kifrs.read_text
+    monkeypatch.setattr(kifrs, "read_text", lambda pdf: DECK_4Q25 if pdf == b"deck" else real(pdf))
+    prev = next(e for e in json.loads((FOLDER / "index.json").read_text(encoding="utf-8")) if (e["year"], e["quarter"]) == (2025, 3))
+    bs = (FOLDER / prev["files"]["bs"]).read_bytes()
+    p = kifrs.parse_kifrs_deck("Samsung Electronics 4Q 2025 x", b"deck", bs)
+    assert not p.quarterly and p.period == pd.Period("2025Q4")  # 和年报一样当作全年累计数，单季数由全年减前三季度得出
+    assert p.values["eps"] == [6605, 4950]  # 全年 EPS 精确，与年报一致
+    assert p.values["revenue"] == [333_600_000, 300_900_000] and p.values["profit"] == [44_300_000, 33_600_000]
+    assert p.values["equity"][0] == pytest.approx(436_320_300 * 0.975, rel=0.01)  # 合计权益按归母比例折算
+
+    monkeypatch.setattr(kifrs, "read_text", lambda pdf: DECK_4Q25.replace("4Q 2025 Results", "4Q 2025 Result") if pdf == b"deck" else real(pdf))
+    with pytest.raises(ValueError, match="版式已变"):
+        kifrs.parse_kifrs_deck("Samsung Electronics 4Q 2025 x", b"deck", bs)
