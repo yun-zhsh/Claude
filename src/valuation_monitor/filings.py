@@ -33,6 +33,7 @@ import pandas as pd
 from pypdf import PdfReader
 
 from valuation_monitor.market_calendar import HK, Market, effective_trading_day, get_market
+from valuation_monitor.audit import Component, num, shares_formula, split_notes, sum_formula
 from valuation_monitor.kifrs import parse_kifrs, parse_kifrs_deck
 from valuation_monitor.press_release import parse_press_release
 from valuation_monitor.providers.base import Filing
@@ -86,6 +87,17 @@ PER_SHARE_RELATIVE_TOLERANCE = 5e-4
 AMOUNT_TOLERANCE = 0.001  # 金额按相对差异
 SHARES_CHANGE_LIMIT = 0.05  # 相邻季度反推股数变化超过 5% 时提示（可能提取错误）
 
+# 下载的 TTM 文件里的列顺序：先是公告信息，再是各期原始数据 → TTM 合计 → 公式 → 每股数据
+TTM_FRAME_ORDER = [
+    "report_date", "published", "available_date", "effective_date", "provisional",
+    *[f"period_{k}" for k in range(1, 5)],
+    *[f"eps_{k}" for k in range(1, 5)], "eps_ttm", "eps_ttm_formula",
+    *[f"non_ifrs_eps_{k}" for k in range(1, 5)], "non_ifrs_eps_ttm", "non_ifrs_eps_ttm_formula",
+    *[f"revenue_{k}" for k in range(1, 5)], "revenue_ttm", "revenue_ttm_formula",
+    "profit_latest", "eps_latest", "shares", "shares_formula",
+    "revenue_per_share_ttm", "revenue_per_share_formula",
+    "equity", "book_value_per_share", "book_value_per_share_formula", "split_note",
+]
 TTM_COLUMNS = [
     "report_date", "published", "available_date",
     "eps_ttm", "non_ifrs_eps_ttm", "revenue_ttm", "shares",
@@ -379,6 +391,7 @@ class EarningsHistory:
     ttm: pd.DataFrame  # 每份公告发布后可用的数据，列见 TTM_COLUMNS
     announcements: list[Announcement]
     periods_per_year: int = 4  # 每年发布几期业绩：4（季度）、2（半年）、1（年度）
+    ttm_detail: list[dict] = field(default_factory=list)  # 与 ttm 逐行对应：各项数据是怎么算出来的（见 audit.py）
 
     @property
     def step(self) -> int:
@@ -433,9 +446,39 @@ class EarningsHistory:
         return pd.DataFrame(rows)
 
     def ttm_frame(self, trading_days: pd.DatetimeIndex | None = None) -> pd.DataFrame:
+        """每份公告发布后可用的数据，带上计算过程：TTM 覆盖的各期数值、公式和中间量。"""
         df = self.ttm.copy()
         df.insert(3, "effective_date", [effective_day(d, trading_days) for d in df["available_date"]])
-        return df
+        slots = 4
+        extra = {"provisional": [int(r["provisional"]) for r in self.ttm_detail]}
+        for k in range(slots):
+            extra[f"period_{k + 1}"] = [r["periods"][k] if k < len(r["periods"]) else None for r in self.ttm_detail]
+        for series in ("eps", "non_ifrs_eps", "revenue"):
+            for k in range(slots):
+                extra[f"{series}_{k + 1}"] = [
+                    r[series][k].value if r[series] and k < len(r[series]) else None for r in self.ttm_detail
+                ]
+        extra["profit_latest"] = [r["profit"] for r in self.ttm_detail]
+        extra["eps_latest"] = [r["eps_latest"] for r in self.ttm_detail]
+        extra["eps_ttm_formula"] = [sum_formula(r["eps"], r["eps_ttm"]) for r in self.ttm_detail]
+        extra["non_ifrs_eps_ttm_formula"] = [sum_formula(r["non_ifrs_eps"], r["non_ifrs_eps_ttm"]) for r in self.ttm_detail]
+        extra["revenue_ttm_formula"] = [sum_formula(r["revenue"], r["revenue_ttm"]) for r in self.ttm_detail]
+        extra["shares_formula"] = [shares_formula(r) for r in self.ttm_detail]
+        extra["revenue_per_share_formula"] = [
+            _division(r["revenue_ttm"], r["shares"], r["revenue_per_share_ttm"]) for r in self.ttm_detail
+        ]
+        extra["book_value_per_share_formula"] = [_division(r["equity"], r["shares"], r["book_value_per_share"]) for r in self.ttm_detail]
+        extra["split_note"] = [
+            "；".join(split_notes(r["eps"]) + split_notes(r["non_ifrs_eps"])) for r in self.ttm_detail
+        ]
+        df = pd.concat([df.reset_index(drop=True), pd.DataFrame(extra)], axis=1)
+        return df[[c for c in TTM_FRAME_ORDER if c in df]]
+
+
+def _division(numerator: float | None, denominator: float | None, result: float | None) -> str:
+    if numerator is None or not denominator or result is None:
+        return ""
+    return f"{num(numerator)} ÷ {num(denominator)} = {num(result)}"
 
 
 def effective_day(available: pd.Timestamp, trading_days: pd.DatetimeIndex | None):
@@ -454,7 +497,7 @@ def infer_periods_per_year(periods: list[pd.Period]) -> int:
     return 2 if 2 in quarters else 1
 
 
-def build_history(parsed: list[Announcement]) -> EarningsHistory:
+def build_history(parsed: list[Announcement], splits: pd.Series | None = None) -> EarningsHistory:
     announcements: dict[pd.Period, Announcement] = {}
     for a in sorted(parsed, key=lambda x: x.available):
         announcements.setdefault(a.period, a)  # 同一报告期的重复公告只取最早一份
@@ -467,7 +510,7 @@ def build_history(parsed: list[Announcement]) -> EarningsHistory:
 
     quarters: dict[str, dict[pd.Period, QuarterValue]] = {s: {} for s in SERIES}
     ytd: dict[str, dict[pd.Period, float]] = {s: {} for s in FLOWS}
-    ttm_rows = []
+    ttm_rows, details = [], []
 
     def record(series: str, period: pd.Period, value: float, a: Announcement, derived: bool) -> None:
         q = quarters[series].setdefault(period, QuarterValue(value, a.available, a.published))
@@ -491,38 +534,76 @@ def build_history(parsed: list[Announcement]) -> EarningsHistory:
                 _derive_from_ytd(series, quarters[series], ytd[series], a, record, step)
                 _cross_check_ytd(quarters[series], touched, a, step)
 
-        ttm_rows.append(_ttm_row(a, quarters, per_year))
+        row, detail = _ttm_row(a, quarters, per_year, splits if splits is not None else pd.Series(dtype=float))
+        ttm_rows.append(row)
+        details.append(detail)
 
     ttm = pd.DataFrame(ttm_rows, columns=TTM_COLUMNS)
-    return EarningsHistory(currencies.pop(), quarters, ttm, list(announcements.values()), per_year)
+    return EarningsHistory(currencies.pop(), quarters, ttm, list(announcements.values()), per_year, details)
 
 
-def _ttm_row(a: Announcement, quarters: dict[str, dict[pd.Period, QuarterValue]], per_year: int) -> dict:
-    """这份公告发布后可用的数据：各项 TTM（最近一年各期之和）、股数、每股营收、每股净资产。"""
+def _ttm_row(a: Announcement, quarters: dict[str, dict[pd.Period, QuarterValue]], per_year: int, splits: pd.Series) -> tuple[dict, dict]:
+    """这份公告发布后可用的数据：各项 TTM（最近一年各期之和）、股数、每股营收、每股净资产。
+
+    返回（数值行, 计算过程）。计算过程记录每项 TTM 由哪几期的哪些数值相加得到，供核对。
+    """
     last_year = [a.period - k * (4 // per_year) for k in range(per_year)]
+    periods = list(reversed(last_year))  # 从早到晚
 
-    def ttm(series: str) -> float | None:
+    def components(series: str) -> list[Component] | None:
         qs = quarters[series]
-        return sum(qs[p].value for p in last_year) if all(p in qs for p in last_year) else None
+        if not all(p in qs for p in periods):
+            return None
+        out = []
+        for p in periods:
+            q = qs[p]
+            derived = q.observations[0].derived
+            factor = split_factor(q.published, splits) if series in PER_SHARE and not derived else 1.0
+            out.append(Component(period_label(p, per_year), q.value, derived, q.value * factor if factor != 1.0 else None))
+        return out
+
+    def total(comps: list[Component] | None) -> float | None:
+        return sum(c.value for c in comps) if comps else None
 
     def rounded(value: float | None, digits: int = 4) -> float | None:
         return round(value, digits) if value is not None else None
 
+    eps, non_ifrs, revenue = components("eps"), components("non_ifrs_eps"), components("revenue")
     shares = implied_shares(quarters, a.period)
-    revenue = ttm("revenue")
+    revenue_ttm = total(revenue)
     equity = quarters["equity"].get(a.period)
-    return {
+    row = {
         "report_date": a.period.end_time.normalize(),
         "published": f"{a.published:%Y-%m-%d %H:%M}",
         "available_date": a.available,
-        "eps_ttm": rounded(ttm("eps")),
-        "non_ifrs_eps_ttm": rounded(ttm("non_ifrs_eps")),
-        "revenue_ttm": rounded(revenue, 1),
+        "eps_ttm": rounded(total(eps)),
+        "non_ifrs_eps_ttm": rounded(total(non_ifrs)),
+        "revenue_ttm": rounded(revenue_ttm, 1),
         "shares": rounded(shares, 1),
-        "revenue_per_share_ttm": rounded(revenue / shares) if revenue is not None and shares else None,
+        "revenue_per_share_ttm": rounded(revenue_ttm / shares) if revenue_ttm is not None and shares else None,
         "equity": rounded(equity.value, 1) if equity else None,
         "book_value_per_share": rounded(equity.value / shares) if equity and shares else None,
     }
+    profit, eps_now = quarters["profit"].get(a.period), quarters["eps"].get(a.period)
+    detail = {
+        "period_label": period_label(a.period, per_year),
+        "published": f"{a.published:%Y-%m-%d %H:%M}",
+        "provisional": a.provisional,
+        "periods": [period_label(p, per_year) for p in periods],
+        "eps": eps,
+        "non_ifrs_eps": non_ifrs,
+        "revenue": revenue,
+        "eps_ttm": row["eps_ttm"],
+        "non_ifrs_eps_ttm": row["non_ifrs_eps_ttm"],
+        "revenue_ttm": row["revenue_ttm"],
+        "profit": profit.value if profit else None,
+        "eps_latest": eps_now.value if eps_now else None,
+        "shares": row["shares"],
+        "equity": row["equity"],
+        "revenue_per_share_ttm": row["revenue_per_share_ttm"],
+        "book_value_per_share": row["book_value_per_share"],
+    }
+    return row, detail
 
 
 def _earlier_periods(p: pd.Period, step: int) -> list[pd.Period]:

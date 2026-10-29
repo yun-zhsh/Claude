@@ -45,20 +45,38 @@ TTM_COLUMNS = {
     "published": "公告发布时间（交易所所在地时间）",
     "available_date": "可用日期（自然日）",
     "effective_date": "生效交易日",
-    "eps_ttm": "TTM EPS（IFRS/GAAP，元/股；ADR 为元/份 ADS）",
-    "non_ifrs_eps_ttm": "TTM EPS（Non-IFRS/Non-GAAP，元/股；ADR 为元/份 ADS）",
-    "revenue_ttm": "TTM 营收（百万元）",
-    "shares": "股数（百万股；ADR 为百万份 ADS；最新一期加权平均）",
-    "revenue_per_share_ttm": "每股营收 TTM（元/股或元/份 ADS）",
-    "equity": "期末归母净资产（百万元）",
-    "book_value_per_share": "每股净资产（元/股或元/份 ADS）",
+    "provisional": "是否暂用初步数据（1=业绩发布会材料，财报发布后替换）",
+    "revenue_ttm": "TTM 营收 = 各期营收之和（百万）",
+    "shares": "股数 = 最新期归母净利润 ÷ 最新期基本 EPS（百万股；ADR 为百万份 ADS）",
+    "profit_latest": "最新期归母净利润（百万）",
+    "eps_latest": "最新期基本 EPS",
+    "eps_ttm": "TTM EPS = 各期基本 EPS 之和",
+    "eps_ttm_formula": "TTM EPS 算式（* 表示由累计数相减得到）",
+    "non_ifrs_eps_ttm": "TTM Non-IFRS/Non-GAAP EPS = 各期之和",
+    "non_ifrs_eps_ttm_formula": "TTM Non-IFRS/Non-GAAP EPS 算式",
+    "revenue_ttm_formula": "TTM 营收算式",
+    "shares_formula": "股数算式",
+    "revenue_per_share_ttm": "每股营收 TTM = TTM 营收 ÷ 股数（财报币种）",
+    "revenue_per_share_formula": "每股营收算式",
+    "equity": "最新期末归母净资产（百万）",
+    "book_value_per_share": "每股净资产 = 期末归母净资产 ÷ 股数（财报币种）",
+    "book_value_per_share_formula": "每股净资产算式",
+    "split_note": "拆股调整说明（公告原文数值 → 调整后）",
 }
+for _k in range(1, 5):  # TTM 覆盖的各期（从早到晚）及各期数值，加总即得 TTM
+    TTM_COLUMNS |= {
+        f"period_{_k}": f"TTM 第{_k}期",
+        f"eps_{_k}": f"第{_k}期 基本 EPS",
+        f"non_ifrs_eps_{_k}": f"第{_k}期 Non-IFRS/Non-GAAP EPS",
+        f"revenue_{_k}": f"第{_k}期 营收（百万）",
+    }
 
 # 网址中的文件名 -> 下载时保存的文件名（不含股票代码）
 FILES = {
     "prices.csv": "历史股价.csv",
     "eps.csv": "历史业绩.csv",
     "ttm.csv": "历史业绩_每股指标.csv",
+    "valuation.csv": "每日估值明细.csv",
     "raw.zip": "全部原始数据.zip",
 }
 
@@ -78,7 +96,7 @@ def drop_empty_series(df: pd.DataFrame) -> pd.DataFrame:
     return df.drop(columns=[f"{key}{suffix}" for key in empty for suffix in suffixes])
 
 
-def build(monitor: Monitor, symbol: str, name: str) -> bytes:
+def build(monitor: Monitor, symbol: str, name: str, report=None) -> bytes:
     if name == "prices.csv":
         df = pd.read_csv(monitor.prices.final_path(symbol)).dropna(axis=1, how="all")  # 美股没有腾讯证券的数据
         df["status"] = df["status"].map(PRICE_STATUS_LABELS)
@@ -90,6 +108,8 @@ def build(monitor: Monitor, symbol: str, name: str) -> bytes:
     if name == "ttm.csv":
         df = pd.read_csv(monitor.earnings.paths(symbol)["ttm"]).dropna(axis=1, how="all")
         return to_csv_bytes(df.rename(columns=TTM_COLUMNS))
+    if name == "valuation.csv":
+        return to_csv_bytes(valuation_frame(monitor, symbol, report))
     if name == "raw.zip":
         return raw_zip(monitor.data_dir, symbol)
     raise KeyError(name)
@@ -109,3 +129,35 @@ def raw_zip(data_dir: Path, symbol: str) -> bytes:
             if f.is_file():
                 zf.write(f, f.relative_to(data_dir).as_posix())
     return buf.getvalue()
+
+
+def valuation_frame(monitor: Monitor, symbol: str, report) -> pd.DataFrame:
+    """每个交易日、每项指标的完整计算过程：比率 = 收盘价 ÷ （每股数据 × 汇率）。
+
+    “业绩记录”指当天采用的是哪一期业绩（和哪天发布的），对应 TTM 文件里的同一行，那里有每股数据的算式。
+    """
+    data = report.data
+    earnings = data.earnings
+    out = pd.DataFrame({"日期": data.close.index, "收盘价（股价币种）": data.close.to_numpy()})
+    final_path = monitor.prices.final_path(symbol)
+    if final_path.exists():
+        final = pd.read_csv(final_path, index_col="date", parse_dates=True)
+        out["价格来源"] = final["source"].map(SOURCE_LABELS).reindex(data.close.index).to_numpy()
+    out["汇率（1 单位财报币种 = 多少股价币种）"] = data.fx.to_numpy()
+    for r in report.metrics:
+        if r.error or not hasattr(r.metric, "detail"):
+            continue
+        d = r.metric.detail(data)
+        fundamentals = data.fundamentals.reset_index(drop=True)
+        rec = d["record"]
+        known = rec.notna()
+        idx = rec[known].astype(int)
+        label = r.metric.label
+        out[f"{label}｜业绩记录（报告期）"] = pd.Series(
+            [earnings.ttm_detail[i]["period_label"] for i in idx], index=idx.index
+        ).reindex(d.index).to_numpy() if earnings and earnings.ttm_detail else None
+        out[f"{label}｜业绩记录发布时间"] = pd.Series(fundamentals["published"].reindex(idx).to_numpy(), index=idx.index).reindex(d.index).to_numpy()
+        out[f"{label}｜每股数据（财报币种）"] = d["per_share"].to_numpy()
+        out[f"{label}｜每股数据（换算成股价币种）= 每股数据 × 汇率"] = d["per_share_converted"].to_numpy()
+        out[f"{label}｜比率 = 收盘价 ÷ 换算后每股数据"] = d["ratio"].to_numpy()
+    return out

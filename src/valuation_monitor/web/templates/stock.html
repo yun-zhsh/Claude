@@ -60,7 +60,8 @@
   <div class="downloads">
     <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='prices.csv') }}" download="{{ download_name(report.stock.symbol, 'prices.csv') }}">下载历史股价</a>
     <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='eps.csv') }}" download="{{ download_name(report.stock.symbol, 'eps.csv') }}">下载历史业绩</a>
-    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='ttm.csv') }}" download="{{ download_name(report.stock.symbol, 'ttm.csv') }}">每股指标</a>
+    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='ttm.csv') }}" download="{{ download_name(report.stock.symbol, 'ttm.csv') }}">每股指标（含算式）</a>
+    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='valuation.csv') }}" download="{{ download_name(report.stock.symbol, 'valuation.csv') }}">每日估值明细</a>
     <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='raw.zip') }}" download="{{ download_name(report.stock.symbol, 'raw.zip') }}">全部原始数据（zip）</a>
   </div>
   <ul class="muted small">
@@ -70,7 +71,8 @@
     <li>历史股价：每个交易日的收盘价（来自 Yahoo Finance，已按拆股调整）。</li>
     {% endif %}
     <li>历史业绩：从{{ report.stock.filing_source }}业绩公告原文提取的每期（季度或半年）营收、归母净利润、基本 EPS、期末归母净资产，含首次公布时间、生效交易日、被几份公告证实、原文链接。</li>
-    <li>每股指标：每份公告发布后计算估值所用的 TTM EPS、每股营收、每股净资产及股数。</li>
+    <li>每股指标：每份公告发布后计算估值所用的 TTM EPS、每股营收、每股净资产及股数，列出 TTM 覆盖的各期数值和每一步的算式（如 TTM EPS = 第1期 + 第2期 + 第3期 + 第4期），方便逐项核对。</li>
+    <li>每日估值明细：每个交易日、每项指标的计算过程：比率 = 收盘价 ÷（每股数据 × 汇率），以及当天采用的是哪一期业绩。走势图上把光标放在某一天，也能看到同样的算式。</li>
     <li>全部原始数据：各来源的原始行情、汇率、公告解析结果和公告索引。</li>
   </ul>
 </section>
@@ -115,7 +117,35 @@
     P70: ["#fb923c", [6, 4]], P90: ["#dc2626", [2, 3]],
   };
 
-  function lineChart(id, datasets) {
+  // 提示框：用网页元素自己画（Chart.js 自带的提示框不会自动换行），显示这一天比率的完整算式
+  const fmt = (x, d = 4) => Number(x).toLocaleString("en-US", { maximumFractionDigits: d });
+  let tip = null;
+  function showTip(ctx, build) {
+    const { chart, tooltip } = ctx;
+    if (!tip) {
+      tip = document.createElement("div");
+      tip.className = "audit-tip";
+      document.body.appendChild(tip);
+    }
+    if (tooltip.opacity === 0 || !tooltip.dataPoints || !tooltip.dataPoints.length) { tip.style.display = "none"; return; }
+    const rows = build(tooltip.dataPoints[0].dataIndex);
+    tip.replaceChildren(...rows.map(([text, cls]) => {
+      const div = document.createElement("div");
+      div.textContent = text;
+      if (cls) div.className = cls;
+      return div;
+    }));
+    tip.style.display = "block";
+    const rect = chart.canvas.getBoundingClientRect();
+    const x = rect.left + window.scrollX + tooltip.caretX;
+    const y = rect.top + window.scrollY + tooltip.caretY;
+    const w = tip.offsetWidth;
+    const left = x + 16 + w > window.scrollX + document.documentElement.clientWidth ? x - 16 - w : x + 16;
+    tip.style.left = Math.max(window.scrollX + 4, left) + "px";
+    tip.style.top = y + 12 + "px";
+  }
+
+  function lineChart(id, datasets, build) {
     return new Chart(document.getElementById(id), {
       type: "line",
       data: { labels: [], datasets },
@@ -126,7 +156,7 @@
         scales: { x: { ticks: { maxTicksLimit: 10, maxRotation: 0 } } },
         plugins: {
           legend: { position: "bottom", labels: { boxWidth: 14 } },
-          tooltip: { filter: (item) => item.datasetIndex === 0 },  // 分位线是水平线，提示框里只显示指标本身
+          tooltip: { enabled: false, filter: (item) => item.datasetIndex === 0, external: (ctx) => showTip(ctx, build) },  // 分位线是水平线，提示框里只显示指标本身
         },
         elements: { point: { radius: 0, hoverRadius: 3 } },
       },
@@ -141,16 +171,38 @@
       const [c, dash] = bandStyles[name] || ["#9ca3af", [4, 4]];
       datasets.push({ label: name, data: [], borderColor: c, borderDash: dash, borderWidth: 1 });
     });
-    return { m, names, chart: lineChart(`chart-${m.key}`, datasets) };
+    const entry = { m, names, from: 0 };
+    // 比率 = 收盘价 ÷（每股数据 × 汇率）；每股数据的算式来自 m.records（见 audit.py）
+    const build = (i) => {
+      const k = entry.from + i;
+      const rec = m.records[m.rec[k]];
+      const fx = m.fx ? m.fx[k] : 1;
+      const rows = [[`${m.dates[k]}　${m.label} = ${fmt(m.values[k], 2)}`, "audit-head"]];
+      rows.push([`${m.label} = 收盘价 ÷（每股数据 × 汇率）`]);
+      rows.push([`= ${fmt(m.price[k])} ${m.price_ccy} ÷（${fmt(rec.per_share)} ${m.report_ccy} × ${fmt(fx, 6)}）= ${fmt(m.price[k] / (rec.per_share * fx), 4)}`, "audit-calc"]);
+      if (m.fx) rows.push([`汇率：1 ${m.report_ccy} = ${fmt(fx, 6)} ${m.price_ccy}`]);
+      rows.push([`每股数据取自 ${rec.title}`, "audit-src"]);
+      rec.lines.forEach((l) => rows.push([l, "audit-line"]));
+      return rows;
+    };
+    entry.chart = lineChart(`chart-${m.key}`, datasets, build);
+    return entry;
   });
   const priceChart = lineChart("chart-price", [
     { label: "收盘价", data: [], borderColor: color("--accent"), borderWidth: 1.5 },
-  ]);
+  ], (i) => {
+    const p = charts.price;
+    const k = priceFrom + i;
+    return [[`${p.dates[k]}　收盘价 ${fmt(p.values[k])} ${p.ccy}`, "audit-head"]];
+  });
+  let priceFrom = 0;
 
   function setWindow(years) {
-    metricCharts.forEach(({ m, names, chart }) => {
+    metricCharts.forEach((entry) => {
+      const { m, names, chart } = entry;
       const f = view.fields[`${symbol}|${m.key}`][years];
       const from = m.dates.findIndex((d) => d >= f.start);
+      entry.from = from;
       const n = m.dates.length - from;
       chart.data.labels = m.dates.slice(from);
       chart.data.datasets[0].data = m.values.slice(from);
@@ -163,6 +215,7 @@
     });
     const price = charts.price;
     const from = price.dates.findIndex((d) => d >= price.starts[years]);
+    priceFrom = from;
     priceChart.data.labels = price.dates.slice(from);
     priceChart.data.datasets[0].data = price.values.slice(from);
     priceChart.update();

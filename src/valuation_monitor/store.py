@@ -264,7 +264,7 @@ class EarningsStore:
                 if not f.provisional:
                     raise
                 print(f"{symbol}: 无法解析暂用的初步数据 {f.url}（{e}），等正式财报", file=sys.stderr)
-        history = build_history(adjust_for_splits(parsed, splits))
+        history = build_history(adjust_for_splits(parsed, splits), splits)
 
         write_if_changed(paths["announcements"], announcements_to_frame(parsed, version).to_csv(index=False))
         write_if_changed(paths["periods"], history.periods_frame(trading_days).to_csv(index=False))
