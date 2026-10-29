@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}{{ report.stock.name }} - 股票估值监控{% endblock %}
+{% block content %}
+<a class="back" href="{{ url_for('index') }}">← 返回股票列表</a>
+<div class="stock-head page-head">
+  <div>
+    <h1>{{ report.stock.name }} <span class="muted">{{ report.stock.symbol }}</span></h1>
+    <div class="muted">数据更新于 {{ report.updated_at.strftime("%Y-%m-%d %H:%M") }}</div>
+  </div>
+  {% if report.latest_close %}
+  <div class="price">
+    <div class="price-value">{{ "%.2f"|format(report.latest_close[1]) }}</div>
+    <div class="muted">{{ report.data.price_currency }} · {{ report.latest_close[0].strftime("%Y-%m-%d") }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if report.error %}
+<div class="card error">{{ report.error }}</div>
+{% else %}
+
+<section class="summary-grid">
+  {% for m in report.metrics %}
+  <div class="card">
+    <div class="metric-label">{{ m.metric.label }}</div>
+    {% if m.valuation %}
+    {% set v = m.valuation %}
+    <div class="big">{{ "%.2f"|format(v.current) }}</div>
+    <div class="percentile">
+      <span>历史分位 <strong>{{ "%.1f"|format(v.percentile) }}%</strong></span>
+      <span class="badge" style="--c: {{ level_color(m.level_index) }}">{{ v.level }}</span>
+    </div>
+    <div class="meter"><div class="meter-dot" style="left: {{ v.percentile }}%; --c: {{ level_color(m.level_index) }}"></div></div>
+    <dl class="stats">
+      <dt>回看区间</dt><dd>{{ v.window_start.strftime("%Y-%m-%d") }} ~ {{ v.as_of.strftime("%Y-%m-%d") }}（{{ v.observations }} 个交易日）</dd>
+      <dt>最低 / 均值 / 最高</dt><dd>{{ "%.1f"|format(v.min) }} / {{ "%.1f"|format(v.mean) }} / {{ "%.1f"|format(v.max) }}</dd>
+      <dt>分位参考</dt><dd>{% for p, val in v.bands.items() %}P{{ p }} {{ "%.1f"|format(val) }}{% if not loop.last %} · {% endif %}{% endfor %}</dd>
+    </dl>
+    {% else %}
+    <div class="error">{{ m.error }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</section>
+
+{% for c in payload.metrics %}
+<section class="card chart-card">
+  <h2>{{ c.label }} 走势</h2>
+  <div class="chart-box"><canvas id="chart-{{ c.key }}"></canvas></div>
+</section>
+{% endfor %}
+
+<section class="card chart-card">
+  <h2>股价走势（{{ report.data.price_currency }}，实际成交价）</h2>
+  <div class="chart-box"><canvas id="chart-price"></canvas></div>
+</section>
+
+<section class="card">
+  <h2>下载数据</h2>
+  <div class="downloads">
+    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, kind='prices') }}">下载历史股价</a>
+    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, kind='eps') }}">下载历史业绩（逐季 EPS）</a>
+    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, kind='ttm') }}">TTM EPS</a>
+    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, kind='raw') }}">全部原始数据（zip）</a>
+  </div>
+  <ul class="muted small">
+    <li>历史股价：每个交易日最终采用的收盘价，以及腾讯证券、Yahoo 两个来源的价格和核对状态。</li>
+    <li>历史业绩：从港交所业绩公告原文提取的每季基本 EPS（IFRS 和 Non-IFRS），含被几份公告证实、原文链接。</li>
+    <li>全部原始数据：各来源的原始行情、汇率、公告解析结果和公告索引。</li>
+  </ul>
+</section>
+
+<section class="card">
+  <h2>数据来源与核对</h2>
+  <dl class="stats">
+    <dt>EPS</dt>
+    <dd>港交所披露易 {{ report.data.earnings.announcements|length }} 份业绩公告原文，币种 {{ report.data.earnings.currency }}</dd>
+    <dt>股价核对</dt>
+    <dd>腾讯证券 vs Yahoo（还原除权调整后），近 {{ lookback_years }} 年：
+      {% for k, n in report.price_check.items() %}{{ status_labels[k] }} {{ n }} 天{% if not loop.last %}，{% endif %}{% endfor %}</dd>
+  </dl>
+  {% if report.discrepancies %}
+  <div class="warnings">
+    {% for d in report.discrepancies %}<div>⚠ {{ d }}</div>{% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if payload %}
+<script src="{{ url_for('static', filename='chart.umd.min.js') }}"></script>
+<script>
+  const payload = {{ payload|tojson }};
+  const css = getComputedStyle(document.documentElement);
+  const color = (name) => css.getPropertyValue(name).trim();
+  Chart.defaults.color = color("--muted");
+  Chart.defaults.borderColor = color("--grid");
+  Chart.defaults.font.family = css.getPropertyValue("font-family");
+
+  const bandStyles = {
+    P10: ["#15803d", [2, 3]], P30: ["#4ade80", [6, 4]], P50: ["#9ca3af", []],
+    P70: ["#fb923c", [6, 4]], P90: ["#dc2626", [2, 3]],
+  };
+
+  function lineChart(id, dates, datasets) {
+    new Chart(document.getElementById(id), {
+      type: "line",
+      data: { labels: dates, datasets },
+      options: {
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "index", intersect: false },
+        scales: { x: { ticks: { maxTicksLimit: 10, maxRotation: 0 } } },
+        plugins: {
+          legend: { position: "bottom", labels: { boxWidth: 14 } },
+          tooltip: { filter: (item) => item.datasetIndex === 0 },  // 分位线是水平线，提示框里只显示指标本身
+        },
+        elements: { point: { radius: 0, hoverRadius: 3 } },
+      },
+    });
+  }
+
+  payload.metrics.forEach((m) => {
+    const n = m.values.length;
+    const datasets = [{ label: m.label, data: m.values, borderColor: color("--accent"), borderWidth: 1.5 }];
+    Object.entries(m.bands).forEach(([name, value]) => {
+      const [c, dash] = bandStyles[name] || ["#9ca3af", [4, 4]];
+      datasets.push({ label: `${name} = ${value}`, data: Array(n).fill(value), borderColor: c, borderDash: dash, borderWidth: 1 });
+    });
+    lineChart(`chart-${m.key}`, m.dates, datasets);
+  });
+
+  lineChart("chart-price", payload.price.dates, [
+    { label: "收盘价", data: payload.price.values, borderColor: color("--accent"), borderWidth: 1.5 },
+  ]);
+</script>
+{% endif %}
+{% endblock %}

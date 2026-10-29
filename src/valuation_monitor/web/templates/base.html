@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}股票估值监控{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('index') }}">股票估值监控</a>
+    <form method="post" action="{{ url_for('refresh_view') }}" class="refresh-form">
+      <input type="hidden" name="next" value="{{ request.path }}">
+      <button type="submit" class="btn btn-secondary">更新数据</button>
+    </form>
+  </header>
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="container footer">
+    估值高低按当前值在过去 {{ lookback_years }} 年中的历史分位判断：
+    {% for lv in levels %}<span class="chip" style="--c: {{ level_colors[loop.index0] }}">{{ lv.label }} ≤{{ lv.upper|int }}%</span>{% endfor %}
+  </footer>
+  <script>
+    // 更新数据要联网，可能需要十几秒
+    document.querySelectorAll(".refresh-form").forEach((form) => {
+      form.addEventListener("submit", () => {
+        const btn = form.querySelector("button");
+        btn.disabled = true;
+        btn.textContent = "正在更新…";
+      });
+    });
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
