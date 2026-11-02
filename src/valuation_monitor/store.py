@@ -1,10 +1,11 @@
 """把下载和提取的数据保存在 data/ 目录（随代码提交到仓库），下次运行时直接复用。
 
+  data/filings/<代码>/                  下载的业绩公告原文（或相关页）和 index.json（各数据源的下载程序负责，见 providers/）
   data/prices/<代码>/                   各来源的日线原始数据，以及综合判定后的收盘价（见 PriceStore）
   data/fx/<货币对>.csv、<货币对>.json   汇率
   data/eps/<代码>_announcements.csv     每份业绩公告的解析结果（公告原样数值）
   data/eps/<代码>_periods.csv           逐期（季度或半年）业绩（EPS 已按拆股调整），含交叉核对信息
-  data/eps/<代码>_ttm.csv               每份公告发布后的 TTM EPS
+  data/eps/<代码>_ttm.csv               每份公告发布后计算估值所用的每股数据，含各期数值和算式（见 audit.py）
 
 行情只下载上次保存之后的新交易日。原始成交价和汇率保存后不再改动；Yahoo 的
 除权调整价会随新的除权回溯变化，发现变化时整段重新下载。当天的行情在收盘前还会变，所以不保存。

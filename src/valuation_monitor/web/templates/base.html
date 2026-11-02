@@ -29,6 +29,7 @@
   <footer class="container footer">
     估值高低按当前值在过去 <span data-years-label>{{ default_years }}</span> 年中的历史分位判断（右上角可以切换）：
     {% for lv in levels %}<span class="chip" style="--c: {{ level_colors[loop.index0] }}">{{ lv.label }} ≤{{ lv.upper|int }}%</span>{% endfor %}
+    <div class="muted small">股票估值监控 v{{ version }}</div>
   </footer>
   {% if not static_site %}
   <script>

@@ -52,6 +52,12 @@ def client(monitor):
     return app.test_client()
 
 
+def test_footer_shows_the_version(client):
+    from valuation_monitor import __version__
+
+    assert f"股票估值监控 v{__version__}" in client.get("/").get_data(as_text=True)
+
+
 def test_index_lists_stocks(client):
     html = client.get("/").get_data(as_text=True)
     assert "腾讯控股" in html and "0700.HK" in html
