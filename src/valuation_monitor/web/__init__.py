@@ -18,6 +18,7 @@ from pathlib import Path
 import pandas as pd
 from flask import Flask, abort, redirect, render_template, request, send_file, url_for
 
+from valuation_monitor import __version__
 from valuation_monitor.audit import explain
 from valuation_monitor.config import Config, load_config
 from valuation_monitor.service import PRICE_STATUS_LABELS, MetricResult, Monitor, StockReport
@@ -159,6 +160,7 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
             "year_options": monitor.config.lookback_options,
             "max_lookback_years": monitor.config.max_lookback,
             "static_site": static_site,
+            "version": __version__,
             "download_name": downloads.download_name,
         }
 
