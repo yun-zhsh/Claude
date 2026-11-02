@@ -18,8 +18,8 @@ def test_headline():
 
 
 def test_acceptance_time_is_converted_to_new_york_time():
-    assert to_new_york("2026-08-13T10:05:29.000Z") == pd.Timestamp("2026-08-13 06:05:29")  # 夏令时
-    assert to_new_york("2026-01-13T21:05:29.000Z") == pd.Timestamp("2026-01-13 16:05:29")  # 冬令时
+    assert to_new_york("2026-08-13T10:05:29.000Z") == pd.Timestamp("2026-08-13 06:05:29")  # daylight saving time
+    assert to_new_york("2026-01-13T21:05:29.000Z") == pd.Timestamp("2026-01-13 16:05:29")  # standard time
 
 
 def test_missing_user_agent_is_reported(monkeypatch):
@@ -57,7 +57,7 @@ class FakeHttp:
         if url.endswith("/000119312526000001/index.json"):
             return listing(("a6k.htm", 8000), ("ex991.htm", 300_000))
         if url.endswith("/000119312526000002/index.json"):
-            return listing(("b6k.htm", 8000), ("ex991.htm", 20_000_000))  # 太大的附件不下载
+            return listing(("b6k.htm", 8000), ("ex991.htm", 20_000_000))  # exhibits that are too large are not downloaded
         if url.endswith("/000119312526000001/ex991.htm"):
             return RESULTS_HTML
         raise AssertionError(url)
@@ -70,11 +70,11 @@ def test_provider_keeps_results_and_remembers_what_it_has_seen(tmp_path):
     assert [(f.title, f.published) for f in found] == [("JD.com Announces Second Quarter 2026 Results", pd.Timestamp("2026-08-13 06:05:29"))]
     assert found[0].content == RESULTS_HTML
     index = json.loads((tmp_path / "JD" / "index.json").read_text(encoding="utf-8"))
-    assert [(e["accession"], e["results"]) for e in index] == [("0001193125-26-000001", True), ("0001193125-26-000002", False)]  # 20-F 不是 6-K
+    assert [(e["accession"], e["results"]) for e in index] == [("0001193125-26-000001", True), ("0001193125-26-000002", False)]  # the 20-F is not a 6-K
 
     n = len(http.requests)
     provider.results_announcements("JD", 1549802, datetime(2026, 1, 1))
-    assert len(http.requests) == n + 1  # 只重新取了一次 submissions；看过的 6-K 不再检查、不再下载
+    assert len(http.requests) == n + 1  # submissions fetched only once more; 6-Ks already seen are not checked or downloaded again
 
 
 def test_provider_works_offline_from_the_archive(tmp_path):

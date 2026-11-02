@@ -1,4 +1,4 @@
-"""把各数据源的原始数据整理成指标计算需要的形式。"""
+"""Arrange the raw data of each source into the form the metric calculations need."""
 
 from __future__ import annotations
 
@@ -20,10 +20,10 @@ from valuation_monitor.store import EarningsStore, PriceStore
 @dataclass
 class StockData:
     stock: StockConfig
-    close: pd.Series  # 交易日收盘价，股价币种
+    close: pd.Series  # closing price on trading days, in the price currency
     price_currency: str
-    fx: pd.Series  # 与 close 同索引：1 单位财报币种 = 多少股价币种
-    fundamentals: pd.DataFrame  # report_date, available_date, eps_ttm, non_ifrs_eps_ttm（财报币种）
+    fx: pd.Series  # same index as close: 1 unit of reporting currency = ? units of price currency
+    fundamentals: pd.DataFrame  # report_date, available_date, eps_ttm, non_ifrs_eps_ttm (reporting currency)
     earnings: EarningsHistory | None = None
 
 
@@ -38,7 +38,7 @@ class DataLoader:
         self.earnings = earnings
 
     def load(self, stock: StockConfig) -> StockData:
-        # 行情多取一年；公告多取两年，保证回看窗口起点就能凑齐 4 个季度算 TTM
+        # fetch one extra year of prices and two extra years of filings so the start of the lookback window already has 4 quarters for the TTM
         now = datetime.now()
         market = get_market(stock.market)
         prices = self.prices.prices(stock.symbol, now - pd.DateOffset(years=self.config.max_lookback + 1), market)

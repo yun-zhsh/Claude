@@ -2,15 +2,24 @@
 
 ## Language (important)
 
-- **Discussion with the user may be in Chinese. The software we build must be English-only.**
-  Anyone running it sees English only — no Chinese anywhere at runtime, **including stock names**
-  (use English names in `config.yaml`, e.g. Tencent Holdings, Hikvision).
+- **The working language of this project is English.** Discussion with the maintainer may be in Chinese, but
+  everything that lands in the repository is in English: code, comments, docstrings, tests, README and other docs,
+  commit messages, PR titles and descriptions, config, and generated data. A developer other than the maintainer
+  who opens the project must see English only.
+- **The software is English-only at runtime.** Anyone running it sees English only, with no Chinese anywhere,
+  **including stock names** (use English names in `config.yaml`, e.g. Tencent Holdings, Hikvision).
 - "Runtime-visible" means: web pages (text, buttons, tooltips, charts), CLI output and error messages,
   downloaded files (file names, CSV column names and contents, zip), generated data files under `data/`
   (CSV/JSON, including filing titles and source notes), GitHub Actions step names, and everything in `config.yaml`.
-- The only Python file allowed to contain Chinese is `src/valuation_monitor/cn_patterns.py`: patterns used to
-  *read* Chinese-language A-share filings. They are never displayed.
-- Code comments, docstrings, README and tests may be written in Chinese.
-- `tests/test_english_only.py` enforces this (string literals in `src/`, templates, static files, config, workflow,
-  `data/`, rendered pages and downloads). Keep it green; extend it when adding new output channels.
+- Exceptions, because they are Chinese by nature: `src/valuation_monitor/cn_patterns.py` (patterns used to *read*
+  Chinese-language A-share filings; never displayed), the Chinese string fixtures in `tests/test_cn.py`, and the saved
+  original Chinese PDFs under `data/filings/002415.SZ/`.
+- `tests/test_english_only.py` enforces this (string literals, comments and docstrings in `src/` and `tests/`,
+  templates, static files, config, workflow, README/docs, `data/` text files, rendered pages and downloads).
+  Keep it green; extend it when adding new output channels or file types.
 - Secrets such as `SEC_USER_AGENT` are provided through environment variables only; never commit them.
+
+## Workflow notes
+
+- Run the tests with `.venv/bin/pytest` (offline).
+- Bump the layout's number in `PARSER_VERSIONS` (`filings.py`) whenever parsing rules or output text of a parser change.

@@ -19,7 +19,7 @@ from valuation_monitor.filings import (
 from valuation_monitor.market_calendar import available_date
 from valuation_monitor.providers.hkex import stock_code
 
-# 以下文字摘自腾讯业绩公告第一页（pypdf 提取结果）
+# The text below is taken from page 1 of a Tencent results announcement (pypdf extraction)
 QUARTERLY_2026Q2 = """Profit attributable to equity
  holders of the Company 56,022 55,628 0.7% 58,093 -4%
 EPS (RMB per share)
@@ -91,7 +91,7 @@ def ann(period, available, quarterly, eps, non_ifrs=None):
         values["non_ifrs_eps"] = non_ifrs
     return Announcement(
         period=pd.Period(period, freq="Q"),
-        published=pd.Timestamp(available) - pd.Timedelta(hours=7),  # 前一天 17:00 发布
+        published=pd.Timestamp(available) - pd.Timedelta(hours=7),  # published at 17:00 the day before
         url=f"https://example.com/{period}.pdf",
         currency="CNY",
         is_quarterly_table=quarterly,
@@ -102,10 +102,10 @@ def ann(period, available, quarterly, eps, non_ifrs=None):
 def test_build_history_derives_quarters_from_cumulative_and_computes_ttm():
     history = build_history(
         [
-            ann("2015Q1", "2015-05-14", True, [0.741, 0.700, 0.632]),  # 本季、去年同季、上季
-            ann("2015Q2", "2015-08-13", False, [1.528, 1.332]),  # 上半年累计
-            ann("2015Q3", "2015-11-11", False, [2.328, 1.948]),  # 前三季度累计
-            ann("2015Q4", "2016-03-18", False, [3.097, 2.579]),  # 全年
+            ann("2015Q1", "2015-05-14", True, [0.741, 0.700, 0.632]),  # this quarter, same quarter last year, previous quarter
+            ann("2015Q2", "2015-08-13", False, [1.528, 1.332]),  # first half cumulative
+            ann("2015Q3", "2015-11-11", False, [2.328, 1.948]),  # first three quarters cumulative
+            ann("2015Q4", "2016-03-18", False, [3.097, 2.579]),  # full year
             ann("2016Q1", "2016-05-19", True, [0.981, 0.741, 0.769]),
         ]
     )
@@ -113,11 +113,11 @@ def test_build_history_derives_quarters_from_cumulative_and_computes_ttm():
     assert q[pd.Period("2015Q2")].value == pytest.approx(0.787)
     assert q[pd.Period("2015Q3")].value == pytest.approx(0.800)
     assert q[pd.Period("2015Q4")].value == pytest.approx(0.769)
-    # 去年的季度：2014Q2 = 2014H1 - 2014Q1，2014Q3 = 2014 前三季度 - 2014H1
+    # last year's quarters: 2014Q2 = 2014H1 - 2014Q1, 2014Q3 = 2014 first three quarters - 2014H1
     assert q[pd.Period("2014Q2")].value == pytest.approx(0.632)
     assert q[pd.Period("2014Q3")].value == pytest.approx(0.616)
     assert q[pd.Period("2014Q2")].available == pd.Timestamp("2015-08-13")
-    # 2015Q4 先由全年减前三季度推算，后被 2016Q1 公告的“上季”直接证实
+    # 2015Q4 is first derived as full year minus the first three quarters, and later confirmed directly by the "previous quarter" of the 2016Q1 filing
     assert len(q[pd.Period("2015Q4")].observations) == 2
     assert history.discrepancies() == []
 
@@ -163,13 +163,13 @@ def test_announcements_round_trip_through_frame():
 
 
 def test_adjust_for_splits_uses_publish_time():
-    a = ann("2014Q1", "2014-05-15", True, [3.5, 2.204, 2.125])  # 2014-05-14 17:00 发布，拆股前
+    a = ann("2014Q1", "2014-05-15", True, [3.5, 2.204, 2.125])  # published 2014-05-14 17:00, before the split
     b = ann("2014Q2", "2014-08-14", False, [1.332, 0.843])
     splits = pd.Series([5.0], index=pd.to_datetime(["2014-05-15"]))
     adjusted = adjust_for_splits([a, b], splits)
     assert adjusted[0].values["eps"] == pytest.approx([0.7, 0.4408, 0.425])
     assert adjusted[1].values == b.values
-    assert a.values["eps"] == [3.5, 2.204, 2.125]  # 原对象不变
+    assert a.values["eps"] == [3.5, 2.204, 2.125]  # the original object is unchanged
 
 
 SUMMARY_2026Q2 = """(RMB in millions, unless specified) Revenues 204,785 184,504 11% 196,458 4% Gross profit 118,433
@@ -189,10 +189,10 @@ Retained earnings 1,066,763 1,010,436 1,135,853 1,154,152 Non-controlling intere
 def test_parse_summary_table_amounts():
     _, values = parse_summary_table(SUMMARY_2026Q2)
     assert values["revenue"] == [204785, 184504, 196458]
-    assert values["profit"] == [56022, 55628, 58093]  # 不会取到 Non-IFRS 那一行
+    assert values["profit"] == [56022, 55628, 58093]  # the Non-IFRS row is not taken
     _, values = parse_summary_table(SUMMARY_2015H1)
     assert values["revenue"] == [45828, 38146]
-    assert values["profit"] == [14197, 12293]  # 跳过脚注标记
+    assert values["profit"] == [14197, 12293]  # footnote markers are skipped
 
 
 def test_parse_equity():
@@ -214,12 +214,12 @@ def test_build_history_revenue_shares_and_book_value():
         ]
     )
     row = history.ttm.iloc[-1]
-    assert row["revenue_ttm"] == 180022 + 184504 + 192869 + 194371  # 2025Q1～Q4
+    assert row["revenue_ttm"] == 180022 + 184504 + 192869 + 194371  # 2025Q1-Q4
     assert row["revenue_per_share_ttm"] == pytest.approx(row["revenue_ttm"] / row["shares"], rel=1e-4)
     assert row["shares"] == pytest.approx(58260 / 6.433, abs=0.1)
     assert row["equity"] == 1154152
     assert row["book_value_per_share"] == pytest.approx(1154152 / (58260 / 6.433), rel=1e-4)
-    # 2024 年末净资产在三份公告中都以“上年末”出现，数值一致，不报差异
+    # equity at the end of 2024 appears as "end of last year" in all three filings with the same value: no discrepancy is reported
     assert len(history.quarters["equity"][pd.Period("2024Q4")].observations) == 3
     assert history.discrepancies() == []
 
@@ -232,7 +232,7 @@ def test_adjust_for_splits_leaves_amounts():
     assert adjusted.values["revenue"] == [18400.0, 13550.0, 16970.0]
 
 
-# ---- statements 版式（舜宇光学）和每半年发布的公司 ----
+# ---- statements layout (Sunny Optical) and companies that report half-yearly ----
 
 INCOME_STATEMENT = """Consolidated Statement of Profit or Loss and Other Comprehensive Income FOR THE SIX MONTHS ENDED 30 JUNE 2026
 For the six months ended 30 June NOTES 2026 2025 RMB’000 RMB’000 (Unaudited) (Unaudited) Revenue 3 21,905,704 19,651,919
@@ -246,12 +246,12 @@ Equity attributable to owners of the Company 28,900,560 29,148,588 Non-controlli
 
 
 def test_parse_statements_converts_units_and_picks_the_right_rows():
-    # 资产负债表所在页没有单位表头，沿用前面损益表的单位
+    # the page with the balance sheet has no unit header; the unit of the income statement before it is reused
     currency, v = parse_statements(["cover page", INCOME_STATEMENT, BALANCE_SHEET_STMT])
     assert currency == "CNY"
-    assert v["revenue"] == pytest.approx([21905.704, 19651.919])  # 千元 -> 百万元
-    assert v["profit"] == pytest.approx([1808.364, 1646.133])  # 不是紧随其后的 comprehensive income
-    assert v["eps"] == pytest.approx([1.6803, 1.5156])  # 分 -> 元
+    assert v["revenue"] == pytest.approx([21905.704, 19651.919])  # thousands -> millions
+    assert v["profit"] == pytest.approx([1808.364, 1646.133])  # not the comprehensive income right after it
+    assert v["eps"] == pytest.approx([1.6803, 1.5156])  # cents -> yuan
     assert v["equity"] == pytest.approx([28900.56, 29148.588])
 
 
@@ -280,8 +280,8 @@ def half(period, available, eps, revenue, profit, equity):
 def semiannual_history(fy2024_prior=2.50):
     return build_history(
         [
-            half("2024Q2", "2024-08-21", [1.00, 0.40], [100, 80], [10, 4], [500, 450]),  # 上半年累计、去年同期
-            half("2024Q4", "2025-03-25", [2.50, 1.00], [230, 180], [25, 10], [550, 450]),  # 全年累计、去年全年
+            half("2024Q2", "2024-08-21", [1.00, 0.40], [100, 80], [10, 4], [500, 450]),  # first half cumulative, same period last year
+            half("2024Q4", "2025-03-25", [2.50, 1.00], [230, 180], [25, 10], [550, 450]),  # full year cumulative, last full year
             half("2025Q2", "2025-08-20", [1.60, 1.00], [120, 100], [16, 10], [560, 550]),
             half("2025Q4", "2026-03-31", [4.30, fy2024_prior], [270, 230], [43, 25], [620, 550]),
         ]
@@ -293,14 +293,14 @@ def test_semiannual_history_derives_second_half_and_ttm():
     assert h.periods_per_year == 2 and h.step == 2
     eps = {period_label(p, 2): q.value for p, q in h.quarters["eps"].items()}
     assert eps["2024H1"] == pytest.approx(1.00)
-    assert eps["2024H2"] == pytest.approx(1.50)  # 全年 2.50 - 上半年 1.00
-    assert eps["2023H2"] == pytest.approx(0.60)  # 去年全年 1.00 - 去年上半年 0.40
+    assert eps["2024H2"] == pytest.approx(1.50)  # full year 2.50 - first half 1.00
+    assert eps["2023H2"] == pytest.approx(0.60)  # last full year 1.00 - last first half 0.40
     assert eps["2025H2"] == pytest.approx(2.70)
 
     ttm = h.ttm.set_index("published")
-    assert ttm["eps_ttm"].tolist()[1:] == pytest.approx([2.50, 3.10, 4.30])  # 首份公告发布时下半年数据还不知道
+    assert ttm["eps_ttm"].tolist()[1:] == pytest.approx([2.50, 3.10, 4.30])  # when the first filing was published the second-half data was not yet known
     assert pd.isna(ttm["eps_ttm"].iloc[0])
-    assert ttm["revenue_ttm"].iloc[-1] == pytest.approx(270)  # 2025 全年
+    assert ttm["revenue_ttm"].iloc[-1] == pytest.approx(270)  # full year 2025
     last = h.ttm.iloc[-1]
     assert last["shares"] == pytest.approx(43 / 4.30 * 1.0 if False else (43 - 16) / (4.30 - 1.60), rel=1e-6)
     assert last["equity"] == 620 and last["book_value_per_share"] == pytest.approx(620 / last["shares"], rel=1e-4)
@@ -308,7 +308,7 @@ def test_semiannual_history_derives_second_half_and_ttm():
 
 def test_semiannual_history_cross_checks_cumulative_totals():
     assert semiannual_history().discrepancies() == []
-    # 次年年报把上年全年数重述为 2.60：2024 下半年出现第二个来源，数值不一致
+    # the next year's annual report restates last year's full year to 2.60: 2024 H2 gets a second source whose value disagrees
     issues = semiannual_history(fy2024_prior=2.60).discrepancies()
     assert len(issues) == 1 and "2024H2" in issues[0] and "derived from cumulative figures" in issues[0]
 
@@ -330,15 +330,15 @@ def test_parse_statements_does_not_take_equity_or_comprehensive_income_as_profit
     tci = "Total comprehensive income for the period attributable to: Owners of the Company 1,735,863 1,648,740 "
     profit = "Profit for the period attributable to: Owners of the Company 1,808,364 1,646,133 "
 
-    # 损益表里没有净利润行：不能退而求其次，取到后面的综合收益总额或资产负债表的“归属股东净资产”
+    # no net profit row in the income statement: it must not fall back to the total comprehensive income or the balance sheet's "equity attributable to owners" that follow
     with pytest.raises(ValueError, match="profit"):
         parse_statements([unit + tci + eps, BALANCE_SHEET_STMT])
-    # 净利润在综合收益总额前面（常见排版）：取净利润；资产负债表在 EPS 之后，不会被当成净利润
+    # net profit before total comprehensive income (common layout): net profit is taken; the balance sheet after the EPS is not mistaken for net profit
     _, v = parse_statements([unit + profit + tci + eps, BALANCE_SHEET_STMT])
     assert v["profit"] == pytest.approx([1808.364, 1646.133])
     assert v["equity"] == pytest.approx([28900.56, 29148.588])
-    # 综合收益总额排在前面也一样：靠标签区分，取的仍是净利润
+    # same when total comprehensive income comes first: they are told apart by the label, and net profit is still taken
     _, v = parse_statements([unit + tci + profit + eps, BALANCE_SHEET_STMT])
     assert v["profit"] == pytest.approx([1808.364, 1646.133])
-    # “Profit (loss) for the year”的写法
+    # the spelling "Profit (loss) for the year"
     assert first_profit_match("Profit (loss) for the year attributable to: Owners of the Company 10 20").group("a") == "10"

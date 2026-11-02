@@ -1,12 +1,12 @@
-"""三星电子 IR 网站（samsung.com/global/ir）：英文版合并财务报表和业绩发布会日程。
+"""Samsung Electronics IR website (samsung.com/global/ir): English consolidated financial statements and the earnings call schedule.
 
-每个季度取两份原文 PDF：合并损益表（soi）和合并财务状况表（bs），保存在 data/filings/<股票代码>/。
+For each quarter two original PDFs are taken: the consolidated statement of income (soi) and of financial position (bs), saved in data/filings/<symbol>/.
 
-财报 PDF 本身没有发布时间，而且英文版比首次公开业绩晚三周左右上传，所以发布时间取 IR 网站“Events”页面
-公布的该季度业绩发布会（Earnings Conference Call）的日期和时间（2009 年至今的每个季度都有记录，
-如 “3Q26 Earnings Conference Call, October 29, 2026, 10:00 a.m. KST”）。这是市场第一次看到这些数字的时候。
-2014 年及以前只写了日期，按 10:00 处理。发布会都在韩国交易所收盘（15:30）之前，所以生效交易日就是发布会当天。
-注意：程序读取的是随后发布的、经会计师审阅的英文财务报表，其中的数字与发布会上的未审阅数字如有差异，以财报为准。
+The statement PDFs carry no publication time, and the English version is uploaded about three weeks after the results first became public, so the
+publication time is the date and time of the quarter's Earnings Conference Call announced on the IR "Events" page (recorded for every quarter since 2009,
+e.g. "3Q26 Earnings Conference Call, October 29, 2026, 10:00 a.m. KST"). That is when the market first saw the numbers.
+Up to 2014 only the date is given and 10:00 is assumed. The calls are all before the Korea Exchange close (15:30), so the effective trading day is the day of the call.
+Note: the program reads the English financial statements published later (reviewed by the accountants); where their numbers differ from the unreviewed ones in the call, the statements win.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ DEFAULT_CALL_TIME = "10:00"
 
 
 def parse_calls(html: str) -> dict[tuple[int, int], pd.Timestamp]:
-    """Events 页面里各季度业绩发布会的时间（韩国时间）：{(财年, 季度): 时间}。"""
+    """Time of each quarter's earnings call on the Events page (Korea time): {(fiscal year, quarter): time}."""
     lines = [" ".join(t.split()) for t in BeautifulSoup(html, "lxml").get_text("\n").split("\n") if t.strip()]
     calls: dict[tuple[int, int], pd.Timestamp] = {}
     for line, nxt in zip(lines, lines[1:]):
@@ -49,27 +49,27 @@ def parse_calls(html: str) -> dict[tuple[int, int], pd.Timestamp]:
         quarter = int(c.group("q"))
         when = pd.Timestamp(f"{t.group('date')} {t.group('hour') or DEFAULT_CALL_TIME.split(':')[0]}:{t.group('minute') or DEFAULT_CALL_TIME.split(':')[1]}")
         quarter_end = pd.Timestamp(year=year, month=quarter * 3, day=1) + pd.offsets.MonthEnd(0)
-        if not pd.Timedelta(days=15) <= when - quarter_end <= pd.Timedelta(days=60):  # 页面上个别条目的年份写错
+        if not pd.Timedelta(days=15) <= when - quarter_end <= pd.Timedelta(days=60):  # a few entries on the page have a wrong year
             continue
         calls[(year, quarter)] = when
     return calls
 
 
 def discover(html_pages: list[str]) -> dict[tuple[int, int], dict[str, str]]:
-    """从网页里找出每个季度的财务报表文件链接：{(年, 季度): {"soi": 链接, "bs": 链接}}。"""
+    """Find the financial statement file links of each quarter on the page: {(year, quarter): {"soi": link, "bs": link}}."""
     statements: dict[tuple[int, int], dict[str, str]] = {}
     for html in html_pages:
         for name in sorted(set(re.findall(r"[\w.-]+\.pdf", html))):
             if m := STATEMENT_RE.fullmatch(name):
                 kinds = statements.setdefault((int(m.group("year")), int(m.group("q"))), {})
-                # 同一份报表有多个版本（_new、_1）时用带后缀的，它们是更正后重新上传的
+                # when the same statement has several versions (_new, _1), take the suffixed one: it is a corrected re-upload
                 if m.group("kind") not in kinds or m.group("variant"):
                     kinds[m.group("kind")] = BASE + name
     return statements
 
 
 def discover_decks(html_pages: list[str]) -> dict[tuple[int, int], str]:
-    """业绩发布会材料（presentation）的链接：{(年, 季度): 链接}。"""
+    """Links of the earnings call materials (presentation): {(year, quarter): link}."""
     decks = {}
     for html in html_pages:
         for name in sorted(set(re.findall(r"[\w.-]+\.pdf", html))):
@@ -88,7 +88,7 @@ class SamsungIrProvider:
         self.archive_dir = Path(archive_dir)
 
     def results_announcements(self, symbol: str, since: datetime) -> list[Filing]:
-        """返回发布会在 since 之后的全部季度业绩，按发布时间升序。"""
+        """All quarterly results whose call is after `since`, in ascending order of publication time."""
         folder = self.archive_dir / symbol.upper()
         index_path = folder / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
@@ -129,7 +129,7 @@ class SamsungIrProvider:
             else:
                 attachments = {"bs": (folder / e["files"]["bs"]).read_bytes()}
                 if e["files"].get("note"):
-                    attachments["note"] = (folder / e["files"]["note"]).read_bytes()  # EPS 附注页：加权平均股数
+                    attachments["note"] = (folder / e["files"]["note"]).read_bytes()  # EPS note page: weighted average shares
                 filings.append(
                     Filing(
                         title=title,
@@ -142,7 +142,7 @@ class SamsungIrProvider:
         return filings
 
     def _save_eps_note(self, folder: Path, year: int, quarter: int, kinds: dict[str, str]) -> str | None:
-        """下载附注 PDF，只保存 EPS 附注所在的页；没有这份文件或找不到该附注时返回 None（股数改为反推）。"""
+        """Download the note PDF and save only the page with the EPS note; return None if the file is missing or the note cannot be found (shares are then implied)."""
         if "note" not in kinds:
             return None
         cut = eps_note_pages(self.http.get_bytes(kinds["note"], cache=False))
@@ -161,7 +161,7 @@ class SamsungIrProvider:
 
         def too_old(year, quarter):
             quarter_end = pd.Timestamp(year=year, month=quarter * 3, day=1) + pd.offsets.MonthEnd(0)
-            return quarter_end + pd.Timedelta(days=60) < pd.Timestamp(since)  # 发布会不可能在回看范围内
+            return quarter_end + pd.Timedelta(days=60) < pd.Timestamp(since)  # the call cannot be inside the lookback range
 
         for (year, quarter), kinds in sorted(statements.items()):
             if (year, quarter) in known or {"soi", "bs"} - kinds.keys() or too_old(year, quarter):
@@ -172,7 +172,7 @@ class SamsungIrProvider:
                 continue
             if published < pd.Timestamp(since):
                 continue
-            # 正式财报出来了：取代之前暂用的发布会材料数据
+            # the official report is out: replaces the preliminary call material data used so far
             for old in [e for e in index if (e["year"], e["quarter"]) == (year, quarter) and e.get("provisional")]:
                 (folder / old["files"]["deck"]).unlink(missing_ok=True)
                 index.remove(old)
@@ -187,20 +187,20 @@ class SamsungIrProvider:
             added = True
             print(f"{symbol}: new report {year}Q{quarter}, earnings call {published}", file=sys.stderr)
 
-        # 早先保存的财报还没取过 EPS 附注（公告披露的加权平均股数）：补取
+        # reports saved earlier have no EPS note yet (the weighted average shares disclosed in the filing): fetch it
         for e in index:
             if not e.get("provisional") and "note" not in e["files"] and (e["year"], e["quarter"]) in statements:
                 e["files"]["note"] = self._save_eps_note(folder, e["year"], e["quarter"], statements[(e["year"], e["quarter"])])
                 added = True
 
-        # 还没有英文财报的最新季度：先用业绩发布会材料里的数据（发布会当天就有）
+        # latest quarter without an English report yet: use the data in the earnings call material for now (available on the day of the call)
         have_provisional = {(e["year"], e["quarter"]) for e in index if e.get("provisional")}
         for (year, quarter), deck in sorted(decks.items()):
             published = calls.get((year, quarter))
             if (year, quarter) in known | have_provisional or published is None or published < pd.Timestamp(since) or too_old(year, quarter):
                 continue
             if previous_quarter(year, quarter) not in known:
-                continue  # 净资产估算要用上一季度的财报
+                continue  # the equity estimate needs the previous quarter's report
             name = f"{year}Q{quarter}_{deck.rsplit('/', 1)[-1]}"
             folder.mkdir(parents=True, exist_ok=True)
             (folder / name).write_bytes(self.http.get_bytes(deck, cache=False))

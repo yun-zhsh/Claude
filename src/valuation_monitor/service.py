@@ -1,4 +1,4 @@
-"""对每只股票取数、计算各项估值指标，供命令行和网页共用。"""
+"""Fetch data for each stock and compute every valuation metric; shared by the CLI and the web app."""
 
 from __future__ import annotations
 
@@ -26,23 +26,23 @@ PRICE_STATUS_LABELS = {"agree": "Agree", "mismatch": "Mismatch", "tencent_only":
 
 @dataclass
 class WindowResult:
-    """某个回看年数下的估值。"""
+    """The valuation under one lookback in years."""
 
     valuation: Valuation
-    level_index: int  # 第几档（0 为最低估），用于配色
+    level_index: int  # which level (0 = most undervalued), used for colors
 
 
 @dataclass
 class MetricResult:
     metric: Metric
     series: pd.Series | None = None
-    windows: dict[int, WindowResult] = field(default_factory=dict)  # 回看年数 -> 结果
+    windows: dict[int, WindowResult] = field(default_factory=dict)  # lookback years -> result
     default_years: int = 10
     error: str | None = None
 
     @property
     def valuation(self) -> Valuation | None:
-        """默认回看年数下的估值。"""
+        """The valuation under the default lookback."""
         w = self.windows.get(self.default_years)
         return w.valuation if w else None
 
@@ -59,7 +59,7 @@ class StockReport:
     data: StockData | None = None
     metrics: list[MetricResult] = field(default_factory=list)
     discrepancies: list[str] = field(default_factory=list)
-    price_check: dict[str, int] = field(default_factory=dict)  # 回看区间内各核对状态的天数
+    price_check: dict[str, int] = field(default_factory=dict)  # days per cross-check status within the lookback window
     error: str | None = None
 
     @property
@@ -79,7 +79,7 @@ class Monitor:
         try:
             sec_http = make_http_client(cache_dir, refresh=refresh)
         except SecUserAgentMissing:
-            sec_http = None  # 没有声明使用者时不访问美国证监会，直接使用本地已保存的公告
+            sec_http = None  # without a declared user, SEC is not contacted and the locally saved filings are used
         self.loader = DataLoader(
             config,
             self.prices,
@@ -94,7 +94,7 @@ class Monitor:
         report = StockReport(stock=stock, updated_at=datetime.now())
         try:
             report.data = self.loader.load(stock)
-        except Exception as e:  # 单只股票失败不影响其他股票
+        except Exception as e:  # one failing stock does not affect the others
             report.error = f"Failed to load data: {e}"
             return report
 

@@ -1,14 +1,14 @@
-"""从美股公司的业绩新闻稿（HTML）里提取业绩数据（京东已在 2014 年 8 月至今的 49 份新闻稿上验证）。
+"""Extract earnings data from the earnings press releases (HTML) of US-listed companies (verified on all 49 JD press releases from August 2014 on).
 
-新闻稿里的表格是“表头 + 数据行”的版式：
-  表头第一行是各组的说明（For the three months ended / six months ended / year ended），
-  接着是日期行和币种行（RMB、RMB、US$），每组以一个美元列结束。
-  合并损益表里有季度一组（和年初至今一组），需要的是“三个月”那一组，各列用日期区分：
-  本季度、去年同季度，有的年份还有上一季度。
-  营收取 Total net revenues，净利润取归属于普通股股东的那一行，EPS 取“每份 ADS”的基本 EPS（人民币），
-  Non-GAAP EPS 取“Non-GAAP 每份 ADS”的基本 EPS；资产负债表里取归属公司股东的权益（本期末、上年末）。
-金额单位（千元或百万元）写在表格前面的说明里，统一换算成百万元。
-同一数值在不同表格里重复出现时必须一致，否则报错，不会悄悄取其中一个。
+The tables in the press release are laid out as "header + data rows":
+  the first header row describes each group (For the three months ended / six months ended / year ended),
+  followed by a date row and a currency row (RMB, RMB, US$); each group ends with a US dollar column.
+  The consolidated income statement has a quarter group (and a year-to-date group); the "three months" group is needed, whose columns are told apart by date:
+  this quarter, same quarter last year, and in some years the previous quarter.
+  Revenue is Total net revenues, net profit is the row attributable to ordinary shareholders, EPS is basic EPS "per ADS" (RMB),
+  Non-GAAP EPS is the basic Non-GAAP EPS per ADS; from the balance sheet the equity attributable to the company's shareholders (end of this period, end of last year) is taken.
+Units (thousands or millions) are stated in the note before the table and are all converted to millions.
+When the same value appears in several tables it must agree, otherwise an error is raised; one of them is never silently picked.
 """
 
 from __future__ import annotations
@@ -20,20 +20,20 @@ import pandas as pd
 
 from valuation_monitor.parsed import Parsed
 
-DATE_RE = re.compile(r"^([A-Z][a-z]+) ?(\d{1,2}), (\d{4})$")  # 个别新闻稿里有“September30”这样漏掉空格的写法
+DATE_RE = re.compile(r"^([A-Z][a-z]+) ?(\d{1,2}), (\d{4})$")  # a few press releases write "September30" without the space
 CURRENCY_CELL_RE = re.compile(r"^(RMB|US\$|USD|HK\$)$")
 NUMBER_CELL_RE = re.compile(r"^\(?-?\d[\d,]*(?:\.\d+)?\)?$")
 UNIT_RE = re.compile(r"in (thousands|millions)", re.I)
 GROUP_RE = re.compile(r"(three|six|nine|twelve) months ended|year ended|as of", re.I)
-# 归属普通股股东的净利润合计。有终止经营业务的年份还有“持续经营”“终止经营”的分项，不能取
+# Total net profit attributable to ordinary shareholders. In years with discontinued operations there are also "continuing" and "discontinued" sub-rows, which must not be taken
 PROFIT_LABEL_RE = re.compile(r"^net (?!.*(?:continuing|discontinued|non-controlling|non-gaap)).*attributable to", re.I)
 EQUITY_LABEL_RE = re.compile(r"^total jd\.com,? inc\.? shareholders.? equity", re.I)
 TOTAL_EQUITY_LABEL_RE = re.compile(r"^total shareholders?'?s? equity$", re.I)
 MONTHS = {m: i for i, m in enumerate(
     ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"], 1)}
-AMOUNT_KEYS = ("revenue", "profit", "wa_shares")  # 金额类的行，按表格的单位换算成百万
-ADS_RATIO = 2  # 1 份 ADS = 2 股普通股（京东上市以来没有变过）
-TOLERANCE = 0.001  # 同一数值在不同表格里的允许差异（相对）
+AMOUNT_KEYS = ("revenue", "profit", "wa_shares")  # amount rows, converted to millions by the unit of the table
+ADS_RATIO = 2  # 1 ADS = 2 ordinary shares (unchanged since the JD listing)
+TOLERANCE = 0.001  # allowed (relative) difference of the same value in different tables
 
 
 def clean(text: str) -> str:
@@ -66,10 +66,10 @@ def parse_date(cell: str) -> pd.Timestamp | None:
 class Header(NamedTuple):
     dates: list[pd.Timestamp]
     currencies: list[str]
-    groups: list[list[int]]  # 每一组包含的列号
-    labels: list[str]  # 每一组的说明（可能为空）
+    groups: list[list[int]]  # column numbers of each group
+    labels: list[str]  # description of each group (may be empty)
     first_data_row: int
-    inherited: bool = False  # 沿用前一张表的表头
+    inherited: bool = False  # the header of the previous table is reused
 
 
 def parse_header(rows: list[list[str]]) -> Header | None:
@@ -85,7 +85,7 @@ def parse_header(rows: list[list[str]]) -> Header | None:
     groups, current = [], []
     for j, ccy in enumerate(currencies):
         current.append(j)
-        if ccy != "RMB":  # 每组以美元列结束
+        if ccy != "RMB":  # each group ends with a US dollar column
             groups.append(current)
             current = []
     if current:
@@ -95,9 +95,9 @@ def parse_header(rows: list[list[str]]) -> Header | None:
 
 
 def unit_scale(table, rows: list[list[str]]) -> float:
-    """金额换算成百万元的系数。单位写在表内的行里，或表格前面的说明里。"""
+    """Factor converting amounts to millions. The unit is in a row of the table or in the note before the table."""
     for r in rows[:6]:
-        if len(set(r)) == 1 and (m := UNIT_RE.search(r[0])):  # 有的单位行把同一个说明重复了几格
+        if len(set(r)) == 1 and (m := UNIT_RE.search(r[0])):  # some unit rows repeat the same note over several cells
             return 0.001 if m.group(1).lower() == "thousands" else 1.0
     for s in table.find_all_previous(string=True, limit=40):
         if m := UNIT_RE.search(clean(s)):
@@ -106,8 +106,8 @@ def unit_scale(table, rows: list[list[str]]) -> float:
 
 
 def columns_by_date(header: Header, group: int, values: list[float]) -> dict[pd.Timestamp, float]:
-    """一行数值（只含数字，不含标签）里，人民币列对应的数值，按日期索引。"""
-    extra = 0 if header.inherited else 1  # 有自己表头的表里，多出的一个数是同比百分比
+    """In a row of values (numbers only, no label), the values of the RMB columns, indexed by date."""
+    extra = 0 if header.inherited else 1  # in a table with its own header, the one extra number is the year-over-year percentage
     if not len(header.dates) <= len(values) <= len(header.dates) + extra:
         return {}
     out = {}
@@ -118,7 +118,7 @@ def columns_by_date(header: Header, group: int, values: list[float]) -> dict[pd.
 
 
 def leading_columns(header: Header, group: int, values: list[float]) -> dict[pd.Timestamp, float]:
-    """股数行里的数：只有第一组（三个月）的人民币列按日期对应；这一行的美元列有的年份留空、有的重复，所以只取开头的几个数。"""
+    """Numbers in the share row: only the RMB columns of the first group (three months) are matched by date; the US dollar columns of this row are blank in some years and repeated in others, so only the first few numbers are taken."""
     if group != 0:
         return {}
     rmb = [c for c in header.groups[0] if header.currencies[c] == "RMB"]
@@ -132,7 +132,7 @@ def numbers(row: list[str]) -> list[float]:
 
 
 def quarter_offsets(by_date: dict[pd.Timestamp, float]) -> tuple[pd.Period, list[float]]:
-    """按日期整理成 [本季度, 去年同季度, （上一季度）]。"""
+    """Arrange by date as [this quarter, same quarter last year, (previous quarter)]."""
     periods = {pd.Period(d, freq="Q"): v for d, v in by_date.items()}
     current = max(periods)
     out = [periods.get(current), periods.get(current - 4), periods.get(current - 1)]
@@ -142,22 +142,22 @@ def quarter_offsets(by_date: dict[pd.Timestamp, float]) -> tuple[pd.Period, list
 
 
 def parse_flow_rows(rows, header: Header, scale: float | None) -> dict[str, tuple[pd.Period, list[float]]]:
-    """“三个月”那一组里的营收、净利润、每份 ADS 的基本 EPS 和 Non-GAAP 基本 EPS。
+    """Revenue, net profit, basic EPS per ADS and basic Non-GAAP EPS in the "three months" group.
 
-    合并损益表可能被分页切成几张表，所以每张表只取自己有的行，由调用方合并并核对。
+    The consolidated income statement may be split by page breaks into several tables, so each table only takes the rows it has, and the caller merges them and cross-checks.
     """
     group = next((g for g, label in enumerate(header.labels) if re.search("three months", label, re.I)), None)
     if group is None:
         return {}
     found: dict[str, dict[pd.Timestamp, float]] = {}
-    section = None  # 当前在哪个“每份 ADS”小节：eps 或 non_ifrs_eps
-    basic = False  # 小节里是否在“Basic”分段下（有终止经营业务的年份，Basic 下面再分持续经营、终止经营和合计）
+    section = None  # which "per ADS" section we are in: eps or non_ifrs_eps
+    basic = False  # whether we are under the "Basic" part of the section (in years with discontinued operations, Basic is further split into continuing, discontinued and total)
     for row in rows[header.first_data_row :]:
         label = row[0]
         nums = numbers(row)
         low = label.lower()
         if not nums:
-            if re.match(r"weighted average (?:number of )?shares", low):  # 基本 EPS 所用的加权平均股数（千股或百万股）
+            if re.match(r"weighted average (?:number of )?shares", low):  # the weighted average shares used for basic EPS (thousands or millions)
                 section = "wa_shares"
                 continue
             if "per ads" in low:
@@ -185,14 +185,14 @@ def parse_flow_rows(rows, header: Header, scale: float | None) -> dict[str, tupl
         period, vals = quarter_offsets(by_date)
         if key in AMOUNT_KEYS:
             if scale is None:
-                continue  # 单位不明的表格不用，其他表格里还有同样的数
-            vals = [v * scale / (ADS_RATIO if key == "wa_shares" else 1) for v in vals]  # 股数：千股/百万股 -> 百万份 ADS
+                continue  # tables with an unknown unit are not used; the same numbers are in other tables
+            vals = [v * scale / (ADS_RATIO if key == "wa_shares" else 1) for v in vals]  # shares: thousands/millions of shares -> millions of ADS
         out[key] = (period, vals)
     return out
 
 
 def parse_balance_table(rows, header: Header, scale: float | None) -> tuple[pd.Period, list[float]] | None:
-    """资产负债表：归属公司股东的权益，依次为本期末、上年末。"""
+    """Balance sheet: equity attributable to the company's shareholders, for the end of this period and the end of last year."""
     labels = [r[0] for r in rows]
     if not any(re.match(r"total (liabilities|assets)", label, re.I) for label in labels):
         return None
@@ -220,7 +220,7 @@ def parse_press_release(html: bytes) -> Parsed:
 
     soup = BeautifulSoup(html, "lxml")
     candidates: dict[str, list[tuple[pd.Period, list[float]]]] = {}
-    previous = None  # 紧挨着的前一张表的表头（前一张表没有自己的表头时为 None）
+    previous = None  # header of the immediately preceding table (None when that table has no header of its own)
     for table in soup.find_all("table"):
         rows = table_rows(table)
         header = parse_header(rows)
@@ -234,7 +234,7 @@ def parse_press_release(html: bytes) -> Parsed:
             scale = None
         for key, found in parse_flow_rows(rows, header, scale).items():
             if header.inherited and key not in ("eps", "non_ifrs_eps"):
-                continue  # 损益表被分页切开时，后半张表（每股数据）没有表头，沿用前一张的；金额只认有自己表头的表
+                continue  # when the income statement is split across pages, the second half (per-share data) has no header and reuses the previous one; amounts only count in tables with their own header
             candidates.setdefault(key, []).append(found)
         if not header.inherited and (equity := parse_balance_table(rows, header, scale)) is not None:
             candidates.setdefault("equity", []).append(equity)

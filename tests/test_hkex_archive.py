@@ -42,7 +42,7 @@ def test_archive_saves_once_and_works_offline(tmp_path):
     assert [e["file"] for e in index] == ["2026-08-12_2026081200296.pdf"]
 
     provider.results_announcements("0700.HK", datetime(2026, 1, 1))
-    assert len(http.downloads) == 1  # 已保存的公告不再下载
+    assert len(http.downloads) == 1  # saved filings are not downloaded again
 
     provider.online = False
     offline = provider.results_announcements("0700.HK", datetime(2026, 1, 1))

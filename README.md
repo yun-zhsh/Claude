@@ -1,92 +1,92 @@
-# 股票估值监控
+# Stock Valuation Monitor
 
-当前版本 **v0.1.0**（MVP 版本：中文文档，运行时中文显示）。**之后的版本起，软件运行时的所有显示一律为英文**（见下面的“语言规则”）；本 README 和代码注释仍用中文。
+Current version **v0.1.0** (MVP). Since the next release, the software shows English only at runtime, and all documentation and code comments are in English (see "Language rules").
 
-判断一只股票当前的估值（PE、PS、PB 等）在它自己的历史上处于高位还是低位。
+It tells you whether a stock's current valuation (PE, PS, PB, ...) is high or low compared with its own history.
 
-**当前范围**：监控两只港股、一只美股（中概股 ADR）、一只韩股和一只 A 股，各自配置所需的指标：
+**Current scope**: two Hong Kong stocks, one US stock (a Chinese ADR), one Korean stock and one A-share, each with its own set of metrics:
 
-| 股票 | 指标 | 业绩公告 |
+| Stock | Metrics | Earnings filings |
 | --- | --- | --- |
-| 腾讯控股 0700.HK | PE（IFRS）、PE（Non-IFRS）、PS、PB | 每季度发布，`highlights` 版式 |
-| 舜宇光学科技 2382.HK | PE、PS、PB（只披露 HKFRS 数据，没有 Non-IFRS） | 每半年发布（中期、年度），`statements` 版式 |
-| 京东（ADR）JD | PE、PE（Non-GAAP）、PS、PB；股价是美元一份 ADS，EPS 是人民币每份 ADS | 每季度发布，美国证监会 EDGAR 的 6-K 新闻稿，`press_release` 版式 |
-| 三星电子 005930.KS | PE、PS、PB（股价和财报都是韩元；没有 Non-GAAP 数据） | 每季度发布，三星 IR 网站的英文合并财务报表，`kifrs_statements` 版式 |
-| 海康威视 002415.SZ | PE、PS、PB（A 股，人民币；公司不披露 Non-GAAP 数据） | 每季度发布，巨潮资讯网的中文定期报告和年度业绩快报，`cn_report` 版式 |
+| Tencent Holdings 0700.HK | PE (IFRS), PE (Non-IFRS), PS, PB | Quarterly, `highlights` layout |
+| Sunny Optical Technology 2382.HK | PE, PS, PB (only HKFRS data is disclosed, no Non-IFRS) | Half-yearly (interim, annual), `statements` layout |
+| JD.com (ADR) JD | PE, PE (Non-GAAP), PS, PB; the price is USD per ADS, EPS is RMB per ADS | Quarterly, 6-K press releases on SEC EDGAR, `press_release` layout |
+| Samsung Electronics 005930.KS | PE, PS, PB (price and financials are both in KRW; no Non-GAAP data) | Quarterly, English consolidated financial statements on the Samsung IR website, `kifrs_statements` layout |
+| Hikvision 002415.SZ | PE, PS, PB (A-share, RMB; the company discloses no Non-GAAP data) | Quarterly, Chinese periodic reports and annual express reports on CNINFO, `cn_report` layout |
 
-代码结构按“多只股票 × 多个指标”设计，加股票改配置，加指标写指标类（见“后续扩展”）。
+The code is designed around "many stocks x many metrics": to add a stock, edit the config; to add a metric, write a metric class (see "Extending").
 
-## 语言规则（重要）
+## Language rules (important)
 
-- **讨论可以用中文，但开发出来的软件必须是纯英文版**：任何用户运行软件时只会看到英文，**完全不出现中文**，包括股票名称（`config.yaml` 里用英文名，如 Tencent Holdings、Hikvision）。
-- “运行时可见”包括：网页（页面、按钮、提示框、走势图）、命令行输出和报错、下载的文件（文件名、CSV 列名和内容、zip）、自动生成的数据文件（`data/` 下的 CSV、JSON，含公告标题和来源说明）、GitHub Actions 的步骤名称、`config.yaml` 里的所有名称。
-- 唯一允许出现中文的程序文件是 `src/valuation_monitor/cn_patterns.py`：它只放“读懂中文公告”用的匹配规则（A 股公告是中文原文），内容不会显示给用户。
-- 代码注释、docstring、README 和测试可以用中文。
-- 新增股票、指标或功能时都要遵守；`tests/test_english_only.py` 会检查代码里的字符串、模板、配置、`data/` 和实际生成的页面与下载文件，出现中文就会失败。
+- **The working language of this project is English.** Discussion with the maintainer may happen in Chinese, but everything that lands in the repository (code, comments, docstrings, tests, README and other docs, commit messages, PR text, config, generated data) is in English, so that any developer opening the project sees English only.
+- **The software is English-only at runtime**: anyone running it sees English only, **no Chinese anywhere**, including stock names (use English names in `config.yaml`, e.g. Tencent Holdings, Hikvision).
+- "Runtime-visible" covers: web pages (text, buttons, tooltips, charts), CLI output and errors, downloaded files (file names, CSV column names and contents, zip), generated data files (CSV and JSON under `data/`, including filing titles and source notes), GitHub Actions step names, and everything in `config.yaml`.
+- The only exceptions are things that are Chinese by nature: `src/valuation_monitor/cn_patterns.py` (the patterns used to *read* Chinese-language A-share filings; never displayed), the Chinese strings in `tests/test_cn.py` (fixtures imitating those filings), and the saved original Chinese PDFs under `data/filings/002415.SZ/` (source documents).
+- `tests/test_english_only.py` enforces this for string literals, comments and docstrings in `src/` and `tests/`, templates, static files, config, workflow, README and other docs, `data/` text files, and the rendered pages and downloads. Keep it green.
 
-## 快速开始
+## Quick start
 
-需要 Python 3.10 以上。安装：
+Python 3.10 or later is required. Install:
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 ```
 
-### 访问美国证监会 EDGAR 需要声明使用者
+### Identifying yourself to SEC EDGAR
 
-美股公司的业绩公告取自美国证监会 EDGAR。EDGAR 要求每个请求都说明是谁在访问（User-Agent 里带联系方式），否则会拒绝（HTTP 403），并限制每秒不超过 10 个请求（程序固定为每秒约 5 个）。联系方式不写在代码里，而是用环境变量提供：
+US company filings come from SEC EDGAR. EDGAR requires every request to say who is making it (a contact in the User-Agent), otherwise it refuses (HTTP 403), and it limits requests to 10 per second (the program uses about 5 per second). The contact is not written in the code; it is provided through an environment variable:
 
 ```bash
-export SEC_USER_AGENT="valuation-monitor 你的邮箱"
+export SEC_USER_AGENT="valuation-monitor your-email"
 ```
 
-没有设置这个变量时，程序不会访问 EDGAR，直接使用 `data/filings/` 里已经保存的公告（新发布的公告要设置后才能取到）。在线网页（GitHub Actions）读取仓库的 Secret `SEC_USER_AGENT`：仓库 Settings → Secrets and variables → Actions → New repository secret，名称 `SEC_USER_AGENT`，内容同上。
+Without this variable the program does not contact EDGAR and uses the filings already saved in `data/filings/` (newly published filings can only be fetched once it is set). The online site (GitHub Actions) reads the repository secret `SEC_USER_AGENT`: repository Settings -> Secrets and variables -> Actions -> New repository secret, name `SEC_USER_AGENT`, value as above. Never commit it.
 
-### 网页界面
+### Web interface
 
 ```bash
 .venv/bin/valuation-monitor-web
 ```
 
-启动时会先更新数据（约几秒到十几秒），然后自动在浏览器中打开 http://127.0.0.1:8050/ 。按 Ctrl+C 退出。
+On start it first updates the data (a few seconds to a dozen or so), then opens http://127.0.0.1:8050/ in the browser. Press Ctrl+C to quit.
 
-- **历史比较**：页面右上角的下拉框可以选择历史分位按过去 10、5、3、2、1 年中的哪一段计算（默认 10 年）。首页的分位和档位、股票页面的指标卡片、走势图的时间范围和分位线都会跟着变。选择会被记住，并带到其他页面（网址里会有 `?years=5`，复制这个网址分享给别人，对方打开看到的也是同样的选择）。各个年数下的结果在生成页面时已经算好，所以在线网页（静态网站）也能切换。
-- **首页**：列出所有跟踪的股票，显示最新股价、各项估值的当前值、历史分位和估值档位。
-- **股票页面**：点击股票进入。页面内容包括：
-  - 各指标的当前值、历史分位，以及标出当前位置的分位条；
-  - 各指标的走势图（带 P10～P90 分位线，鼠标悬停可查看每天的数值）和股价走势图；
-  - 数据来源与核对情况；
-  - 下载按钮：历史股价、历史业绩、每股指标（含算式）、每日估值明细、全部原始数据（zip）。下载的 CSV 使用英文列名（文件名如 `0700.HK_historical_prices.csv`），可以直接用 Excel 打开。
-  - **核对计算过程**：走势图上把光标放在某一天，会显示这一天比率的完整算式，如 `PE = close / (per-share value x FX rate) = 232,000 KRW / (32,308 KRW x 1) = 7.18`，下面接着写每股数据怎么来的（`TTM EPS = 2025Q4 2,874* + 2026Q1 7,123 + 2026Q2 10,849 + 2026Q3 11,462 = 32,308`（提示框和下载文件里的文字都是英文）；PS、PB 还会列出营收各期数值、净资产和股数的算法），取自哪一期业绩、哪天发布。
-- **更新数据**：页面右上角的按钮会联网补充最新的行情和公告。
+- **History selector**: the drop-down at the top right chooses which period the historical percentile is computed over: the past 10, 5, 3, 2 or 1 years (default 10). The percentile and level on the home page, the metric cards on a stock page, and the time range and percentile lines of the trend charts all follow it. The choice is remembered and carried to other pages (the URL gets `?years=5`; share that URL and the other person sees the same choice). The results for every number of years are computed when the page is generated, so the online (static) site can switch too.
+- **Home page**: lists all tracked stocks with the latest price, the current value of each metric, its historical percentile and valuation level.
+- **Stock page**: click a stock. It shows:
+  - the current value and historical percentile of each metric, with a bar marking the current position;
+  - a trend chart for each metric (with P10-P90 percentile lines) and a price chart;
+  - data sources and cross-check status;
+  - download buttons: historical prices, historical earnings, per-share metrics (with formulas), daily valuation detail, all raw data (zip). The CSVs have English column names (file names such as `0700.HK_historical_prices.csv`) and open directly in Excel.
+  - **Checking the calculation**: hover over a day on a trend chart to see the full formula of that day's ratio, e.g. `PE = close / (per-share value x FX rate) = 232,000 KRW / (32,308 KRW x 1) = 7.18`, followed by how the per-share value was obtained (`TTM EPS = 2025Q4 2,874* + 2026Q1 7,123 + 2026Q2 10,849 + 2026Q3 11,462 = 32,308`; for PS and PB it also lists the revenue of each period, and how equity and shares were obtained), which period of earnings it came from and when that was published.
+- **Update data**: the button at the top right fetches the latest prices and filings over the network.
 
-参数：`--port` 指定端口（默认 8050），`--no-browser` 启动后不自动打开浏览器；`-c`、`--data-dir`、`--refresh` 与命令行版相同。程序默认只允许本机访问。
+Options: `--port` sets the port (default 8050), `--no-browser` does not open the browser; `-c`, `--data-dir` and `--refresh` are the same as in the CLI. By default only the local machine may connect.
 
-### 在线网页（GitHub Pages）
+### Online site (GitHub Pages)
 
-网址：https://yun-zhsh.github.io/Watchlist-monitor/ （手机、电脑都可以直接打开）
+URL: https://yun-zhsh.github.io/Watchlist-monitor/ (works on phones and computers)
 
-GitHub Actions（`.github/workflows/pages.yml`）每 4 小时运行一次，即香港时间 9:47、13:47、17:47、21:47、1:47、5:47（GitHub 不保证准点，可能晚几分钟到半小时以上）。每次运行会：
+GitHub Actions (`.github/workflows/pages.yml`) runs every 4 hours, i.e. at 9:47, 13:47, 17:47, 21:47, 1:47 and 5:47 Hong Kong time (GitHub does not guarantee punctuality; it may be a few minutes to over half an hour late). Each run:
 
-1. 更新行情和公告数据，有变化就提交回仓库的 `data/` 目录；
-2. 用和本地网页相同的页面导出静态网站（没有“更新数据”按钮），发布到 GitHub Pages。
+1. updates prices and filings, and commits any change back to the `data/` directory of the repository;
+2. exports a static site with the same pages as the local site (without the "Update data" button) and publishes it to GitHub Pages.
 
-另外，代码推送到 `main` 时也会触发一次。需要立即更新时，可以在仓库的 Actions 页面选择“更新数据并发布网页”，点 “Run workflow” 手动运行。
+A push to `main` also triggers a run. To update immediately, open the repository's Actions page, choose "Update data and publish site" and click "Run workflow".
 
-几点说明：
+Notes:
 
-- 首次使用前，需要在仓库 Settings → Pages 中把 Source 设为 “GitHub Actions”。
-- 仓库是公开的，所以网页任何人都能访问。
-- 公开仓库如果连续 60 天没有任何活动，GitHub 会自动停用定时任务，到 Actions 页面重新启用即可。
-- 本地也可以导出静态网站：`.venv/bin/valuation-monitor-export --out site`。
+- Before first use, set Source to "GitHub Actions" in repository Settings -> Pages.
+- The repository is public, so anyone can open the site.
+- If a public repository has no activity for 60 days, GitHub disables scheduled workflows automatically; re-enable them on the Actions page.
+- You can also export the static site locally: `.venv/bin/valuation-monitor-export --out site`.
 
-### 命令行
+### Command line
 
 ```bash
 .venv/bin/valuation-monitor --plot charts
 ```
 
-输出示例（数值为 2026-11-02 当天的，之后会随行情变化；五只股票依次输出，这里只列腾讯）：
+Example output (values of 2026-11-02; they change with prices; the five stocks are printed in turn, only Tencent is shown here):
 
 ```
 Tencent Holdings (0700.HK)  Earnings source: HKEXnews, 48 original earnings filings, currency CNY
@@ -118,241 +118,244 @@ Tencent Holdings (0700.HK)  PB
   ...
 ```
 
-参数：
+Options:
 
-- `-c`：指定配置文件。
-- `--plot DIR`：输出走势图。
-- `--data-dir`：数据保存目录（默认 `data`）。
-- `--refresh`：忽略 12 小时的网络请求缓存（`.cache/` 目录）。
+- `-c`: path of the config file.
+- `--plot DIR`: write the trend charts.
+- `--data-dir`: directory where data is saved (default `data`).
+- `--refresh`: ignore the 12-hour network request cache (the `.cache/` directory).
 
-## 保存的数据
+## Saved data
 
-下载和提取的数据都保存在 `data/` 目录，并随代码提交到仓库。之后运行时只补充新增的部分；网络不通时直接使用已保存的数据。
+Downloaded and extracted data is saved in the `data/` directory and committed to the repository with the code. Later runs only add what is new; when the network is down the saved data is used.
 
-| 文件 | 内容 | 更新方式 |
+| File | Content | Updated by |
 | --- | --- | --- |
-| `data/filings/0700.HK/*.pdf`、`index.json` | 业绩公告 PDF 原文（2014 年以来 49 份，约 20MB）；索引记录标题、发布时间、原文链接 | 只下载新发布的公告 |
-| `data/filings/JD/*.htm`、`index.json` | 京东业绩新闻稿 HTML 原文（2014 年以来 49 份，约 23MB）；索引记录检查过的全部 6-K（含不是业绩公告的），下次不再重复检查 | 只检查、下载新提交的 6-K |
-| `data/filings/2382.HK/*.pdf`、`index.json` | 舜宇光学业绩公告 PDF 原文（2014 年以来 24 份）；索引同上 | 只下载新发布的公告 |
-| `data/filings/005930.KS/*.pdf`、`index.json` | 三星英文财务报表节选：合并损益表（`soi`）、合并财务状况表（`bs`）、EPS 附注页（`*_eps.pdf`）；最新季度财报还没出时暂存业绩发布会材料；索引记录发布会时间 | 只下载新发布的季度 |
-| `data/filings/002415.SZ/*.pdf`、`index.json` | 海康威视中文定期报告和业绩快报的相关页（2014 年以来约 59 份，约 29MB）；索引记录发布时间、判断依据、原文链接 | 只下载新发布的公告 |
-| `data/prices/0700.HK/tencent.csv` | 腾讯证券日线：开盘、最高、最低、收盘、成交量，**未复权的实际成交价** | 只下载最近保存日之后的交易日 |
-| `data/prices/0700.HK/yahoo.csv` | Yahoo 日线：开盘、最高、最低、收盘（除权调整价）、adjclose（再按分红调整）、成交量 | 同上；Yahoo 回溯调整历史时整段重新下载 |
-| `data/prices/0700.HK/yahoo.json` | 拆股记录等 | 随 Yahoo 数据更新 |
-| `data/prices/0700.HK/final.csv` | **综合判定后最终采用的收盘价**，以及来源、核对状态、各来源的价格、Yahoo 调整系数 | 每次重新判定 |
-| `data/prices/JD/`、`005930.KS/`、`002415.SZ/`（`yahoo.csv`、`yahoo.json`、`final.csv`） | 美股、韩股、A 股只有 Yahoo 一个来源，没有 `tencent.csv`；Yahoo 的收盘价已按拆股调整 | 同上 |
-| `data/fx/CNYHKD.csv`、`CNYUSD.csv` | 人民币兑港币、美元的每日汇率（美元用于京东） | 只下载新的交易日 |
-| `data/eps/0700.HK_announcements.csv` | 每份公告中解析出的原样数值：营收、归母净利润、基本 EPS、Non-IFRS/Non-GAAP 基本 EPS、期末归母净资产、公告披露的股数，以及是否暂用初步数据、股数口径、发布时间说明 | 只解析新公告 |
-| `data/eps/0700.HK_periods.csv` | 逐期（季度；每半年发布业绩的公司按半年）营收、归母净利润、EPS、期末归母净资产、公告披露的加权平均股数（`wa_shares`）、反推股数（对照用），含首次公布时间、生效交易日、被几份公告证实、最大偏差、原文链接 | 每次根据上表重新计算 |
-| `data/eps/0700.HK_ttm.csv` | 每份公告发布后计算估值所用的每股数据，**带完整计算过程**：TTM 覆盖的各期（第 1～4 期）的 EPS、营收，TTM 合计，最新期净利润和基本 EPS，股数，每股营收，期末净资产，每股净资产，以及每一步的算式文字；还有公告发布时间、可用日期、生效交易日、是否暂用初步数据、拆股调整说明 | 同上 |
+| `data/filings/0700.HK/*.pdf`, `index.json` | Original earnings announcement PDFs (49 since 2014, about 20MB); the index records title, publication time and source link | Only newly published announcements are downloaded |
+| `data/filings/JD/*.htm`, `index.json` | Original JD earnings press release HTML (49 since 2014, about 23MB); the index records every 6-K that was checked (including non-earnings ones) so they are not checked again | Only newly filed 6-Ks are checked and downloaded |
+| `data/filings/2382.HK/*.pdf`, `index.json` | Original Sunny Optical earnings announcement PDFs (24 since 2014); same index | Only newly published announcements are downloaded |
+| `data/filings/005930.KS/*.pdf`, `index.json` | Excerpts of Samsung's English financial statements: consolidated statement of income (`soi`), of financial position (`bs`), and the EPS note page (`*_eps.pdf`); while the latest quarter's statements are not out, the earnings call material is kept temporarily; the index records the earnings call time | Only newly published quarters are downloaded |
+| `data/filings/002415.SZ/*.pdf`, `index.json` | Relevant pages of Hikvision's original Chinese periodic and express reports (about 59 since 2014, about 29MB); the index records publication time, the basis for it and the source link (titles in the index are English) | Only newly published filings are downloaded |
+| `data/prices/0700.HK/tencent.csv` | Tencent daily bars: open, high, low, close, volume, **unadjusted actual traded prices** | Only trading days after the last saved day are downloaded |
+| `data/prices/0700.HK/yahoo.csv` | Yahoo daily bars: open, high, low, close (ex-rights adjusted), adjclose (further adjusted for dividends), volume | Same; when Yahoo adjusts history retroactively the whole history is downloaded again |
+| `data/prices/0700.HK/yahoo.json` | Split records etc. | Updated with the Yahoo data |
+| `data/prices/0700.HK/final.csv` | **The final closing price decided from all sources**, plus source, cross-check status, the price of each source and the Yahoo adjustment factor | Decided again on every run |
+| `data/prices/JD/`, `005930.KS/`, `002415.SZ/` (`yahoo.csv`, `yahoo.json`, `final.csv`) | US, Korean and A-share stocks have only Yahoo as a source, so no `tencent.csv`; Yahoo's close is already split-adjusted | Same |
+| `data/fx/CNYHKD.csv`, `CNYUSD.csv` | Daily FX rates of RMB to HKD and USD (USD is for JD) | Only new trading days are downloaded |
+| `data/eps/0700.HK_announcements.csv` | Values parsed from each filing as stated: revenue, net profit attributable to owners, basic EPS, Non-IFRS/Non-GAAP basic EPS, equity attributable to owners at period end, shares disclosed in the filing, plus whether the data is preliminary, the basis of the share count and a publication time note | Only new filings are parsed |
+| `data/eps/0700.HK_periods.csv` | Per-period (quarter; half year for half-yearly reporters) revenue, net profit attributable to owners, EPS, equity at period end, weighted average shares disclosed in the filing (`wa_shares`), implied shares (for cross-checking), with first publication time, effective trading day, number of confirming filings, largest deviation and source link | Recomputed from the table above on every run |
+| `data/eps/0700.HK_ttm.csv` | The per-share data used for valuation after each filing, **with the full calculation**: EPS and revenue of each period the TTM covers (periods 1-4), the TTM total, latest net profit and basic EPS, shares, revenue per share, equity at period end, book value per share, and the formula text of every step; also publication time, available date, effective trading day, whether the data is preliminary and the split adjustment note | Same |
 
-几点说明：
+Notes:
 
-- 原始成交价和汇率保存后不再改动。每次增量下载时，程序会和已保存的最近 7 天比对，如果数据源改动了历史数据，会给出提示。
-- Yahoo 的调整价本来就会因为新的除权事件回溯变化，发现变化时会整段重新下载（git 历史里仍能看到旧版本）。
-- 当天的行情在收盘前还会变化，所以只参与计算，不会保存。判断“是否已收盘”时按各数据源自己的时区：港股用香港时间，Yahoo 外汇用伦敦时间。
-- 解析规则改进后（代码中 `filings.py` 的 `PARSER_VERSIONS` 里对应版式的数字加 1），已保存的解析结果会自动作废，并重新解析。
-- 以后开发其他功能时，可以直接读取这些文件。表里以 `0700.HK` 为例，其他股票的文件名把代码换掉即可。
+- Raw traded prices and FX rates are never changed once saved. On every incremental download the program compares the last 7 saved days with the source and gives a notice if the source changed its history.
+- Yahoo's adjusted prices change retroactively with new ex-rights events by nature; when a change is found the whole history is downloaded again (the old version is still visible in git history).
+- Today's prices can still change before the close, so they take part in the calculation but are not saved. Whether a day has "closed" is decided in each source's own timezone: Hong Kong time for HK stocks, London time for Yahoo FX.
+- After the parsing rules are improved (add 1 to the number of the layout in `PARSER_VERSIONS` in `filings.py`) the saved parse results are invalidated automatically and parsed again.
+- Other features can read these files directly. The table uses `0700.HK` as the example; for other stocks replace the symbol in the file name.
 
-## 如何核对计算过程
+## How to check the calculation
 
-每个数字都能从原始数据一步步算回去，页面和下载文件用的是同一套算式文字（`audit.py`）：
+Every number can be traced back to the raw data step by step; the pages and the download files use the same formula text (`audit.py`):
 
-1. **走势图提示框**（光标放在某一天）：比率 = 收盘价 ÷（每股数据 × 汇率），代入当天的收盘价、汇率和每股数据；每股数据再展开成 TTM 各期之和（或 营收 TTM ÷ 股数、净资产 ÷ 股数；股数优先用公告披露的数字，没有才用净利润 ÷ 基本 EPS 反推，见“股数”）。
-2. **每日估值明细**（`valuation.csv`）：每个交易日、每项指标一行里的收盘价、价格来源、汇率、当天采用的是哪一期业绩（报告期和发布时间）、每股数据（财报币种和换算后）、比率。比率列 = 收盘价 ÷ 换算后每股数据，可以在 Excel 里直接验证。
-3. **每股指标**（`ttm.csv`）：每份公告一行，同一报告期在“每日估值明细”里查到后，这里列出 TTM 覆盖的各期数值（第 1～4 期）和合计、算式。例如三星 2026Q3：`TTM EPS = 2025Q4 2,874* + 2026Q1 7,123 + 2026Q2 10,849 + 2026Q3 11,462 = 32,308`，`*` 表示该期由累计数相减得到（第四季度 = 全年 − 前三季度）。
-4. **历史业绩**（`eps.csv`）：每期的数值、首次公布时间、被几份公告证实，以及原文链接；公告里的原始数值在 `data/eps/<代码>_announcements.csv`，拆股调整前后的数值在 `ttm.csv` 的“拆股调整说明”里对照。
+1. **Chart tooltip** (cursor on a day): ratio = close / (per-share value x FX rate), with that day's close, FX rate and per-share value substituted; the per-share value is expanded into the sum of the TTM periods (or TTM revenue / shares, equity / shares; shares are taken from the figure disclosed in the filing first and only implied from net profit / basic EPS if none is disclosed, see "Shares").
+2. **Daily valuation detail** (`valuation.csv`): for each trading day and each metric, one row with the close, price source, FX rate, which period of earnings was used that day (reporting period and publication time), the per-share value (reporting currency and converted) and the ratio. The ratio column = close / converted per-share value, which can be checked directly in Excel.
+3. **Per-share metrics** (`ttm.csv`): one row per filing; after finding the period in the daily valuation detail, this lists the value of each period the TTM covers (periods 1-4), the total and the formula. For example Samsung 2026Q3: `TTM EPS = 2025Q4 2,874* + 2026Q1 7,123 + 2026Q2 10,849 + 2026Q3 11,462 = 32,308`, where `*` means the period was obtained by subtracting cumulative figures (Q4 = full year - first three quarters).
+4. **Historical earnings** (`eps.csv`): the value of each period, first publication time, number of confirming filings and the source link; the values as stated in the filings are in `data/eps/<symbol>_announcements.csv`, and the values before and after split adjustment are compared in the "split adjustment note" column of `ttm.csv`.
 
-## 判断方法
+## Method
 
-1. 每个交易日算一次 PE = 收盘价 ÷（TTM 每股收益 × 汇率）。TTM 每股收益 = 最近 4 个季度的单季基本 EPS 之和。
-2. 取最近若干年（网页上可选 10、5、3、2、1 年，默认 10 年）的 PE 序列，计算当前值的**历史分位数**（这段时间里有多少比例的交易日 PE ≤ 当前值）。窗口越短，反映的越是近期的估值水平；窗口越长，越是长期的。同一个当前值在不同窗口里的分位可能差别很大，比如 2026-10-29 舜宇的 PB，在过去 10 年里是 6.7%（Deeply undervalued），在过去 1 年里是 34.1%（Fair）。可选的年数在 `config.yaml` 的 `lookback_options` 里设置，`lookback_years` 是默认选中的一项。
-3. 按 `config.yaml` 中的 `levels` 映射为档位：≤10% Deeply undervalued、≤30% Undervalued、≤70% Fair、≤90% Overvalued、其余 Deeply overvalued（档位名称是英文，在 `config.yaml` 里设置）。
+1. For each trading day, PE = close / (TTM EPS x FX rate). TTM EPS = the sum of the single-quarter basic EPS of the last 4 quarters.
+2. Take the PE series of the last N years (10, 5, 3, 2 or 1 on the web page, default 10) and compute the **historical percentile** of the current value (the share of trading days in that period whose PE is <= the current value). A shorter window reflects the recent valuation level, a longer one the long-term level. The same current value can have very different percentiles in different windows, e.g. Sunny's PB on 2026-10-29 is at 6.7% over the past 10 years (Deeply undervalued) and 34.1% over the past year (Fair). The selectable years are set by `lookback_options` in `config.yaml`; `lookback_years` is the one selected by default.
+3. The percentile is mapped to a level by `levels` in `config.yaml`: <=10% Deeply undervalued, <=30% Undervalued, <=70% Fair, <=90% Overvalued, otherwise Deeply overvalued (level names are English and set in `config.yaml`).
 
-提供五个指标：
+Five metrics are provided:
 
-| 指标 | 计算方法 |
+| Metric | Calculation |
 | --- | --- |
-| `pe`：PE (TTM) | 股价 ÷ 最近 4 个季度的基本 EPS 之和（IFRS 口径）。会受一次性损益影响，例如腾讯 2021、2022 年第四季度分别有派发京东、美团股份带来的大额收益，导致 TTM EPS 大幅波动。 |
-| `pe_non_ifrs`：PE Non-IFRS (TTM) | 同上，改用腾讯自己披露的 Non-IFRS 基本 EPS，剔除了投资收益、股权激励等项目，更能反映主营业务的盈利能力。 |
-| `pe_non_gaap`：PE Non-GAAP (TTM) | 美股公司（京东）的同类指标：改用公司披露的 Non-GAAP 基本 EPS（每份 ADS），剔除股权激励、投资损益等项目。 |
-| `ps`：PS (TTM) | 股价 ÷ 每股营收。每股营收 = 最近 4 个季度营收之和 ÷ 股数。 |
-| `pb`：PB | 股价 ÷ 每股净资产。每股净资产 = 最新一期末归属股东净资产 ÷ 股数。净资产为负时不计算。 |
+| `pe`: PE (TTM) | Price / sum of the basic EPS of the last 4 quarters (IFRS basis). It is affected by one-off items, e.g. Tencent's Q4 2021 and Q4 2022 had large gains from distributing JD and Meituan shares, which made TTM EPS swing widely. |
+| `pe_non_ifrs`: PE Non-IFRS (TTM) | Same, using the Non-IFRS basic EPS Tencent discloses, which excludes investment gains, share-based compensation etc. and reflects the earning power of the core business better. |
+| `pe_non_gaap`: PE Non-GAAP (TTM) | The equivalent for US-listed companies (JD): uses the basic Non-GAAP EPS (per ADS) the company discloses, excluding share-based compensation, investment gains or losses etc. |
+| `ps`: PS (TTM) | Price / revenue per share. Revenue per share = sum of revenue of the last 4 quarters / shares. |
+| `pb`: PB | Price / book value per share. Book value per share = equity attributable to owners at the end of the latest period / shares. Not computed when equity is negative. |
 
-**股数**：公告里直接披露了的就用披露的数字，没有披露才反推。港股、美股、韩股用最新一期**基本 EPS 所用的加权平均股数**（和 EPS 同一口径），A 股的季报不披露加权平均股数，用**期末总股本**（见下表最后一行）：
+**Shares**: if the filing discloses a number it is used; only if it does not is it implied. For HK, US and Korean stocks the **weighted average shares used for basic EPS** of the latest period is used (the same basis as EPS); the quarterly reports of A-shares do not disclose weighted average shares, so **period-end total shares** are used (last row of the table):
 
-| 股票 | 股数来源 | 单位和说明 |
+| Stock | Source of shares | Unit and notes |
 | --- | --- | --- |
-| 腾讯 | 公告 EPS 附注里的 “Weighted average number of ordinary shares in issue”（已扣除股权奖励计划和库存股） | 百万股，取三个月那一列；第四季度的公告只列全年数，本期股数由全年数推算（见下） |
-| 舜宇 | 公告 EPS 附注里的 “Weighted average number of ordinary shares for the purpose of basic earnings per share” | 千股换算成百万股；中期报告是上半年，年报是全年数（算式里会注明） |
-| 京东 | 新闻稿损益表里的 “Weighted average number of shares: Basic” | 千股或百万股（按表格单位）÷ 2（1 份 ADS = 2 股），得到百万份 ADS |
-| 三星 | 英文财务报表附注 “Earnings per Share” 里的普通股和优先股加权平均股数之和 | 附注里的单位有千股、股两种，按“净利润 ÷ EPS”的量级判断；原文只保存这一页（`data/filings/005930.KS/*_eps.pdf`）；第四季度只有全年数，同样推算（见下） |
-| 海康威视 | 资产负债表的“股本”（期末总股本，面值 1 元，股数 = 股本金额，含库存股） | 元换算成百万股；季报、半年报、年报、业绩快报里都有，不需要推算第四季度 |
+| Tencent | "Weighted average number of ordinary shares in issue" in the EPS note of the filing (excluding share award scheme and treasury shares) | Millions of shares, the three-month column; the Q4 filing lists only the full-year figure, so the period's shares are derived from it (see below) |
+| Sunny | "Weighted average number of ordinary shares for the purpose of basic earnings per share" in the EPS note | Thousands converted to millions; the interim report is the first half, the annual report the full year (stated in the formula) |
+| JD | "Weighted average number of shares: Basic" in the press release income statement | Thousands or millions (by the table unit) / 2 (1 ADS = 2 shares), giving millions of ADS |
+| Samsung | Sum of the ordinary and preferred share weighted average shares in the "Earnings per Share" note of the English financial statements | The note unit is thousands of shares or single shares, decided by the magnitude of net profit / EPS; only this page of the original is saved (`data/filings/005930.KS/*_eps.pdf`); Q4 has only the full-year figure, derived the same way (see below) |
+| Hikvision | "Share capital" on the balance sheet (period-end total shares, par value RMB 1, so shares = the share capital amount, including treasury shares) | Yuan converted to millions of shares; present in quarterly, half-year, annual and express reports, so Q4 does not need to be derived |
 
-只有这几种情况才反推（股数 = 最新期归母净利润 ÷ 基本 EPS）：三星尚未发布英文财报的最新季度（用的是发布会材料，没有附注）；某年第四季度推算所需的前三季度股数缺失；以后新增的公司公告里找不到股数的。**第四季度**：腾讯、舜宇（下半年）、三星的年报只披露全年加权平均股数，没有单独的第四季度（下半年）数。全年数是各季度按天数加权的平均，所以第四季度股数 = （全年数 × 全年天数 − 前三季度各自的股数 × 各自天数）÷ 第四季度天数。例如腾讯 2025Q4：（9,085 × 365 − 9,106 × 90 − 9,097 × 91 − 9,081 × 92）÷ 92 = 9,056.6。直接用全年数当第四季度的股数误差更大（公司持续回购时全年均值高于第四季度，腾讯这一季差 0.3%），所以不这样做。前三季度的股数缺失时才改为反推。
+Shares are implied (shares = net profit attributable to owners of the latest period / basic EPS) only in these cases: the latest Samsung quarter whose English statements are not out yet (the call material is used and has no note); the first three quarters' shares needed to derive a Q4 are missing; a future company whose filings have no share count. **Q4**: the annual reports of Tencent, Sunny (second half) and Samsung disclose only the full-year weighted average shares, not a separate Q4 (second half) figure. The full-year figure is the day-weighted average of the quarters, so Q4 shares = (full-year figure x days in the year - each of the first three quarters' shares x its days) / days in Q4. For example Tencent 2025Q4: (9,085 x 365 - 9,106 x 90 - 9,097 x 91 - 9,081 x 92) / 92 = 9,056.6. Using the full-year figure as the Q4 share count would be less accurate (when a company keeps buying back shares the full-year average is higher than Q4's; for Tencent that quarter the gap is 0.3%), so it is not done. Only when the first three quarters' shares are missing does it fall back to implied.
 
-披露的（或由全年数推算的）股数和反推的对照值，通常相差不到 0.1%，最大不到 0.3%（京东早年亏损期 EPS 很小，反推的误差本身就大，可达 1%）。
+The disclosed (or derived from the full year) shares and the implied cross-check value usually differ by less than 0.1%, at most 0.3% (JD's early loss-making years have a tiny EPS, so the implied value itself is imprecise, up to 1%).
 
-严格来说，PS、PB 应该用期末股数；公司持续回购时，期末股数与当期加权平均股数会有差异（腾讯通常不到 0.3%）。
+Strictly speaking PS and PB should use period-end shares; when a company keeps buying back shares, period-end shares differ from the period's weighted average (Tencent usually by less than 0.3%).
 
-每股数据按财报币种计算，再按当天汇率换算成股价币种：腾讯、舜宇是人民币换算成港元；京东是人民币换算成美元（每份 ADS）；三星（韩元）、海康威视（人民币）的财报币种和股价币种相同，汇率为 1。
+Per-share data is computed in the reporting currency and then converted to the price currency at that day's FX rate: Tencent and Sunny from RMB to HKD; JD from RMB to USD (per ADS); Samsung (KRW) and Hikvision (RMB) have the same reporting and price currency, so the rate is 1.
 
-## 数据来源
+## Data sources
 
-| 数据 | 来源 |
+| Data | Source |
 | --- | --- |
-| 每股收益（IFRS/GAAP、Non-IFRS/Non-GAAP） | 港股：**港交所披露易（HKEXnews）上的业绩公告 PDF 原文**；美股：**美国证监会 EDGAR 上 6-K 附件的业绩新闻稿 HTML 原文**；韩股（三星电子）：**公司 IR 网站上的英文合并财务报表 PDF 原文**；A 股（海康威视）：**巨潮资讯网（证监会指定的信息披露平台）上的中文定期报告和业绩快报 PDF 原文**。程序自己解析，不经过任何第三方数据商 |
-| 公告发布时间 | 披露易记录的发布时间（精确到分钟）；EDGAR 的接收时间（`acceptanceDateTime`，UTC，程序换算成纽约时间）；三星：IR 网站 Events 页面公布的业绩发布会（Earnings Conference Call）日期和时间（韩国时间）；海康威视：2020 年 10 月起用 PDF 文件的上传时间，更早的只有公告日期（见“`cn_report` 版式”） |
-| 日线行情 | 港股：腾讯证券行情接口（未复权）、Yahoo Finance（除权调整），两者都保存并互相核对；美股、韩股、A 股：只有 Yahoo Finance（腾讯证券没有可用的接口），没有第二个来源核对 |
-| 拆股记录、汇率 | Yahoo Finance |
+| Earnings per share (IFRS/GAAP, Non-IFRS/Non-GAAP) | HK: **the original earnings announcement PDFs on HKEXnews**; US: **the original earnings press release HTML in the 6-K exhibits on SEC EDGAR**; Korea (Samsung Electronics): **the original English consolidated financial statement PDFs on the company IR website**; A-share (Hikvision): **the original Chinese periodic report and express report PDFs on CNINFO (the information disclosure platform designated by the CSRC)**. The program parses them itself; no third-party data vendor is involved |
+| Filing publication time | HKEXnews records it to the minute; EDGAR's acceptance time (`acceptanceDateTime`, UTC, converted to New York time); Samsung: the date and time (Korea time) of the Earnings Conference Call on the IR "Events" page; Hikvision: the PDF upload time since October 2020, only the listing date before that (see "`cn_report` layout") |
+| Daily prices | HK: Tencent quote API (unadjusted) and Yahoo Finance (ex-rights adjusted), both saved and cross-checked; US, Korea, A-share: Yahoo Finance only (Tencent has no usable API for them), so there is no second source to cross-check |
+| Split records, FX rates | Yahoo Finance |
 
-### 如何确定最终采用的股价（港股）
+### How the final price is decided (HK)
 
-港股有两个来源（腾讯证券、Yahoo），要判定最终采用哪个；美股、韩股、A 股只有 Yahoo 一个来源，直接采用它的收盘价（Yahoo 的收盘价已按拆股调整，成交量为 0 的日子视为无效）。算历史 PE 需要当时的**实际成交价**。两个来源的数据特点不同：
+HK stocks have two sources (Tencent, Yahoo) and one must be chosen; US, Korean and A-share stocks have only Yahoo, whose close is used directly (it is already split-adjusted; zero-volume days are invalid). A historical PE needs the **actual traded price** of the time. The two sources behave differently:
 
-- 腾讯证券给的是未复权的实际成交价。
-- Yahoo 的收盘价会把实物分派当作除权，回溯调低历史价格。腾讯以实物分派京东（除权日 2022-01-20）和美团（2023-01-05）股份后，Yahoo 把 2022-01-20 以前的价格乘以了 0.9219，把 2022-01-20 至 2023-01-04 的价格乘以了 0.9498。此外，Yahoo 在台风停市日、半日市会生成成交量为 0 的数据，收盘价也不对。
+- Tencent gives the unadjusted actual traded price.
+- Yahoo's close treats distributions in kind as ex-rights events and lowers historical prices retroactively. After Tencent distributed JD shares (ex-date 2022-01-20) and Meituan shares (2023-01-05), Yahoo multiplied the prices before 2022-01-20 by 0.9219 and those from 2022-01-20 to 2023-01-04 by 0.9498. Yahoo also generates zero-volume rows with a wrong close on typhoon closure days and half days.
 
-综合判定的规则：
+The combination rules:
 
-1. 成交量为 0 的数据视为无效。
-2. 用两个来源的价格比值估计 Yahoo 每天的调整系数。某天的比值只要和前一个或后一个交易日一致，就采用这个比值。这样除权日当天也能得到正确的系数，个别异常日也不会影响结果。
-3. 把 Yahoo 的价格还原成未调整价格，再和腾讯的价格比较，相差不超过 0.2% 视为一致。
-4. 最终采用腾讯的价格；腾讯缺失的日子才用还原后的 Yahoo 价格。两者不一致时仍用腾讯的价格，并在 `final.csv` 中标为 `mismatch`，方便人工核对。
+1. Zero-volume rows are invalid.
+2. Estimate Yahoo's daily adjustment factor from the ratio of the two sources. A day's ratio is accepted as soon as it equals that of the previous or next trading day. This also gives the correct factor on the ex-rights date itself, and a few outlier days do not affect the result.
+3. Undo Yahoo's adjustment and compare with Tencent's price; a difference of at most 0.2% counts as agreement.
+4. The final price is Tencent's; the unadjusted Yahoo price is used only on days Tencent is missing. On disagreement Tencent's price is still used and marked `mismatch` in `final.csv` for manual review.
 
-目前的核对结果（腾讯）：2015-10 以来共 2709 个交易日，2699 天两个来源一致，另外 10 天是半日市（Yahoo 数据无效），没有不一致的日子。
+Current cross-check result (Tencent): since 2015-10 there are 2709 trading days; the two sources agree on 2699, and the other 10 are half days (invalid Yahoo data); there are no disagreeing days.
 
-Yahoo 的 `adjclose`（按分红再调整）以后可以用来计算含分红的总回报。
+Yahoo's `adjclose` (further adjusted for dividends) can be used later to compute total returns including dividends.
 
-### 如何从公告中提取业绩数据
+### How earnings data is extracted from filings
 
-各公司公告的版式不一样，程序为每种版式写了一个解析函数，在 `config.yaml` 里用 `filing_format` 指定。提取的都是：营收、归属股东净利润、基本 EPS、期末归属股东净资产、公告披露的股数（有 Non-IFRS/Non-GAAP 的公司还有对应的基本 EPS）。目前有五种版式：`highlights`（腾讯）、`statements`（舜宇）、`press_release`（京东）、`kifrs_statements`（三星）、`cn_report`（海康威视），见下面各节。
+The layout of the filings differs by company, so the program has one parse function per layout, selected by `filing_format` in `config.yaml`. What is extracted is always: revenue, net profit attributable to owners, basic EPS, equity attributable to owners at period end, the shares disclosed in the filing (and the corresponding basic EPS for companies with Non-IFRS/Non-GAAP figures). There are five layouts: `highlights` (Tencent), `statements` (Sunny), `press_release` (JD), `kifrs_statements` (Samsung), `cn_report` (Hikvision); see the sections below.
 
-**`highlights` 版式（腾讯）**：从第一页的财务摘要表读取“Revenues”“Profit attributable to equity holders of the Company”“EPS (RMB per share) – basic”“Non-IFRS EPS (RMB per share) – basic”四行：
+**`highlights` layout (Tencent)**: reads four rows of the financial highlights table on page 1: "Revenues", "Profit attributable to equity holders of the Company", "EPS (RMB per share) - basic" and "Non-IFRS EPS (RMB per share) - basic":
 
-- **季度格式**（2016 年第三季度以后）：一行三个数，分别是本季度、去年同季度、上一季度。
-- **累计格式**（更早的中期、三季度、年度公告）：一行两个数，分别是本年累计、去年同期累计。单季数由累计数减去本年此前各季得到。
+- **Quarterly format** (from Q3 2016): one row has three numbers: this quarter, same quarter last year, previous quarter.
+- **Cumulative format** (earlier interim, Q3 and annual announcements): one row has two numbers: this year to date, same period last year to date. Single quarters are obtained by subtracting the earlier quarters of the year from the cumulative figure.
 
-**`statements` 版式（舜宇光学）**：公告里没有摘要表，从合并损益表读取“Revenue”“Profit for the period/year attributable to: Owners of the Company”“Earnings per share – Basic (RMB cents)”，每行两个数，分别是本期累计、去年同期累计。金额单位是千元、EPS 单位是人民币分，读取时统一换算成百万元和元。损益表的附注编号列有多种写法（`3`、`3A`、`3,4`），也都能识别。归属股东净利润的旁边有写法完全相同的“综合收益总额”，所以净利润要同时满足：在损益表区域内，并且前面的标签是“Profit for the period/year”，认不出就报错，不会取成别的行。
+**`statements` layout (Sunny Optical)**: the announcement has no highlights table; the program reads "Revenue", "Profit for the period/year attributable to: Owners of the Company" and "Earnings per share - Basic (RMB cents)" from the consolidated income statement, each row with two numbers: this period to date, same period last year to date. Amounts are in thousands and EPS in RMB cents; they are converted to millions and yuan. The note number column of the income statement has several spellings (`3`, `3A`, `3,4`), all recognised. Next to the net profit attributable to owners there is a "total comprehensive income" row written the same way, so net profit must be inside the income statement area and preceded by the label "Profit for the period/year"; if it is not recognised an error is raised, and another row is never taken.
 
-两种版式都从资产负债表读取“Equity attributable to … of the Company”的小计，两个数分别是本期末和上年末。
+Both layouts read the "Equity attributable to ... of the Company" subtotal from the balance sheet; the two numbers are the end of this period and the end of last year.
 
-**每季度还是每半年发布**由已有的公告自动判断：有一季度或三季度公告的就是每季度发布，只有中期（二季度）和年度公告的就是每半年发布。每半年发布的公司，上半年的数据直接取自中期公告，下半年的数据 = 全年 − 上半年，TTM 是最近两个半年之和。例如舜宇 2026 年 6 月末的 TTM EPS = 2025 年下半年（4.2655 − 1.5156）+ 2026 年上半年 1.6803 = 4.4302。
+**Quarterly or half-yearly reporting** is decided automatically from the existing filings: a company with Q1 or Q3 filings reports quarterly; one with only interim (Q2) and annual filings reports half-yearly. For half-yearly reporters the first-half data is taken directly from the interim announcement, the second half = full year - first half, and the TTM is the sum of the last two half years. For example Sunny's TTM EPS at the end of June 2026 = second half of 2025 (4.2655 - 1.5156) + first half of 2026 1.6803 = 4.4302.
 
-### 如何保证准确
+### How accuracy is ensured
 
-- **交叉核对**：同一期的营收、净利润、EPS 会出现在多份公告中（本期公告，以及之后公告里的“上期”“去年同期”列）；每个年末的净资产会出现在当年年报和次年每份公告的“上年末”列中。累计数推算出来的数值也一样：次年公告里的去年同期累计数，同样能推出这一期的数值，作为另一个来源。程序会逐一比对，不一致时提示，并采用最早公布的数值（即当时市场看到的数）。
-  - 目前的不一致都是腾讯 2014～2015 年的 Non-IFRS（当时叫 Non-GAAP）EPS：2015 年腾讯调整了口径，并重述了 2014 年的对比数，比如 2014 全年 Non-GAAP EPS 从 2.624 重述为 2.680。重述后的累计数减去未重述的前几期，得到的推算值（标注“累计数推算”）会按重述幅度偏离，这只是提示有重述，推算值本身不是某一口径下的真实季度数。
-  - 腾讯的营收、净利润、净资产，舜宇的全部数据，在各公告之间都一致，没有提示。
-  - 程序还会检查相邻两期的股数，变化超过 5% 时提示，以发现提取错误；公告披露的股数与反推的股数互相对照（见“股数”）。
-- **独立验证**：舜宇 24 份公告的解析结果，用公告第一页叙述文字里的营收和净利润（如“profit … attributable to owners of the Company was approximately RMB1,808.4 million”）核对过，12 处全部一致；反推的加权平均股数与公告附注披露的一致（如 2026 年上半年 1,076.2 百万股，附注为 1,076,196 千股）。
-- **年度校验**：每季度发布的公司，四个单季 EPS 之和与年报披露的全年 EPS 一致（如腾讯 2015 年：0.741 + 0.787 + 0.800 + 0.769 = 3.097）。每半年发布的公司，下半年 = 全年 − 上半年，这一关由构造保证，靠的是上面的交叉核对。
-- **可人工核对**：`data/eps/<代码>_periods.csv` 中，每一期都列出数值、首次公布时间、生效交易日、被几份公告证实、最大偏差和原文链接。
-- **不偷看未来数据**：每个 EPS 数值只在公告发布之后才被使用，具体规则见下一节。
-- **币种和拆股**：币种直接从公告文字（“RMB per share”）读取。如果发生过拆股，会按拆股记录把拆股前的 EPS 和股价都换算到当前股本口径（保存的股价仍是实际成交价）；营收、净利润、净资产是总额，不受拆股影响；股数（公告披露的和反推的）乘以拆股倍数，与 EPS 同一口径。
+- **Cross-checks**: the revenue, net profit and EPS of a period appear in several filings (the filing itself, and the "previous period" and "same period last year" columns of later filings); the equity at each year end appears in that year's annual report and in the "end of last year" column of every filing of the next year. The same holds for values derived from cumulative figures: the same-period-last-year cumulative figure in a next-year filing also yields the value of that period, as another source. The program compares them all, gives a notice on disagreement, and uses the first published value (what the market saw at the time).
+  - The current disagreements are all Tencent's Non-IFRS (then called Non-GAAP) EPS of 2014-2015: in 2015 Tencent changed the basis and restated the 2014 comparatives, e.g. the 2014 full-year Non-GAAP EPS from 2.624 to 2.680. A restated cumulative figure minus the unrestated earlier periods gives a derived value (marked "derived from cumulative figures") that deviates by the size of the restatement; this only signals a restatement, and the derived value is not a true quarterly figure on either basis.
+  - Tencent's revenue, net profit and equity, and all of Sunny's data, agree across filings and raise no notices.
+  - The program also checks the shares of adjacent periods and gives a notice when they change by more than 5%, to catch extraction errors; the disclosed shares and the implied shares are compared with each other (see "Shares").
+- **Independent verification**: the parse results of Sunny's 24 filings were checked against the revenue and net profit in the narrative text on page 1 of each filing (e.g. "profit ... attributable to owners of the Company was approximately RMB1,808.4 million"); all 12 agree. The implied weighted average shares agree with those disclosed in the note (e.g. 1,076.2 million for the first half of 2026, the note says 1,076,196 thousand).
+- **Annual check**: for quarterly reporters the four single-quarter EPS add up to the full-year EPS disclosed in the annual report (e.g. Tencent 2015: 0.741 + 0.787 + 0.800 + 0.769 = 3.097). For half-yearly reporters the second half = full year - first half, which holds by construction and relies on the cross-checks above.
+- **Manual checking**: in `data/eps/<symbol>_periods.csv` every period lists the value, first publication time, effective trading day, number of confirming filings, largest deviation and source link.
+- **No peeking at future data**: each EPS value is only used after its filing is published; the exact rules are in the next section.
+- **Currency and splits**: the currency is read from the filing text ("RMB per share"). If a split happened, both the pre-split EPS and the price are converted to the current share basis using the split records (the saved prices remain actual traded prices); revenue, net profit and equity are totals and unaffected by splits; shares (disclosed and implied) are multiplied by the split ratio, on the same basis as EPS.
 
-**`press_release` 版式（京东，美股）**：新闻稿里的表格是“表头 + 数据行”的版式，表头是组说明（For the three months ended…）、日期行、币种行（RMB、RMB、US$），每组以一个美元列结束。程序取“三个月”那一组里按日期区分的人民币列（本季度、去年同季度，有的年份还有上一季度；列的顺序在各年不同，所以按日期而不是按位置取），读取：
+**`press_release` layout (JD, US)**: the tables in the press release are laid out as "header + data rows": the header has group descriptions (For the three months ended...), a date row and a currency row (RMB, RMB, US$), and each group ends with a US dollar column. The program takes the RMB columns of the "three months" group, told apart by date (this quarter, same quarter last year, and in some years the previous quarter; the column order differs between years, so it goes by date rather than position), and reads:
 
-- 营收 `Total net revenues`；
-- 归属普通股股东的净利润。有终止经营业务的年份（2017～2018，京东金融剥离）损益表还分“持续经营”“终止经营”，只取合计；
-- 每份 ADS 的基本 EPS（人民币；1 份 ADS = 2 股普通股）。京东 2014 年的净亏损还要扣除优先股增值，口径也是公告里的“归属永久权益持有人”；
-- “Non-GAAP 每份 ADS”的基本 EPS（2014 年写作 Adjusted）；
-- 资产负债表里的 `Total JD.com, Inc. shareholders' equity`（本期末、上年末；有非控股权益行时不取总计）。
+- revenue `Total net revenues`;
+- net profit attributable to ordinary shareholders. In years with discontinued operations (2017-2018, the JD Finance spin-off) the income statement splits into "continuing" and "discontinued" operations, and only the total is taken;
+- basic EPS per ADS (RMB; 1 ADS = 2 ordinary shares). JD's 2014 net loss is further reduced by the preferred share accretion, and the basis is the "attributable to permanent equity holders" figure in the filing;
+- basic "Non-GAAP per ADS" EPS (written as Adjusted in 2014);
+- `Total JD.com, Inc. shareholders' equity` from the balance sheet (end of this period, end of last year; the total is not taken when there is a non-controlling interest row).
 
-金额单位（千元或百万元）写在表格前面的说明里，统一换算成百万元。损益表被分页切成两张表时，没有表头的后半张（每股数据）沿用前一张的表头，且只用于 EPS 行。同一数值在多张表里出现时必须一致，不一致就报错，不会悄悄取其中之一。股数取新闻稿里披露的加权平均股数（千股或百万股，按表格单位）除以 2，得到份数（ADS，百万份），稳定在 12～16 亿份，与“净利润 ÷ 基本 EPS”反推的结果相差通常不到 0.1%。
+Units (thousands or millions) are in the note before the table and are converted to millions. When the income statement is split by a page break into two tables, the second half without a header (per-share data) reuses the previous table's header and is only used for the EPS rows. When the same value appears in several tables it must agree; otherwise an error is raised and one of them is never silently picked. Shares are the weighted average shares disclosed in the press release (thousands or millions, by the table unit) divided by 2, giving millions of ADS, stable at 1.2-1.6 billion, usually within 0.1% of the "net profit / basic EPS" implied value.
 
-京东的验证：49 份新闻稿全部解析成功；2017～2025 年每年四个季度的营收、净利润之和与 20-F 年报（XBRL）的全年数完全一致，各年末净资产也与 20-F 一致。2015～2016 年有不一致，是京东金融剥离后的重述，程序按“最早公布的数值”处理并给出提示（见页面上的提示）。
+JD verification: all 49 press releases were parsed successfully; for 2017-2025 the quarterly revenue and net profit of each year add up exactly to the full-year figures of the 20-F annual reports (XBRL), and the year-end equity also matches the 20-F. 2015-2016 show disagreements, which are restatements after the JD Finance spin-off; the program applies the "first published value" rule and gives a notice (visible on the page).
 
-**`kifrs_statements` 版式（三星电子，韩股）**：三星 IR 网站的 Financial Information 页面按季度提供英文版合并财务报表（K-IFRS，经会计师审阅或审计，2010 年至今）。每个季度读两份文件，都是财报原文的节选：合并损益表（`soi`）和合并财务状况表（`bs`），保存在 `data/filings/005930.KS/`。
+**`kifrs_statements` layout (Samsung Electronics, Korea)**: the Financial Information page of the Samsung IR website offers English consolidated financial statements (K-IFRS, reviewed or audited by the accountants, 2010 to date) by quarter. Two files are read each quarter, both excerpts of the original statements: the consolidated statement of income (`soi`) and of financial position (`bs`), saved in `data/filings/005930.KS/`.
 
-- 一至三季度取损益表“三个月”的前两列（本季度、去年同季度）；第四季度只有全年报表，取全年（本年、上年），单季数由程序用全年减前三季度得到，所以第四季度的 TTM EPS 正好等于年报的全年 EPS（如 2025 年 6,605 韩元、2024 年 4,950 韩元）。
-- 营收取 Revenue，净利润取 Profit attributable to owners of the parent，EPS 取普通股基本 EPS（韩元）；净资产 = Total equity − Non-controlling interests。金额单位是百万韩元，股价币种也是韩元，不需要汇率。
-- PDF 文字提取会在千位分隔符后插入空格（如“44, 260,956”）、夹进控制字符，程序先修复这些问题；三星有普通股和优先股，净利润包含归属优先股的部分，所以股数取附注里普通股和优先股的加权平均股数之和（约 65～75 亿股；PS、PB 按这个总股数计算，与普通股股价口径略有差异，优先股股价通常更低）。附注页的数字有的文件是千股、有的是股，并且 PDF 有时把数字拆开（如“5,969,78 3”），程序先修复，再用“净利润 ÷ EPS”核对量级，对不上就不用、改为反推。
-- 三星在 2018 年 5 月 4 日 1 拆 50，之前公告里的 EPS（如 2018 年一季度的 85,435 韩元）按 Yahoo 的拆股记录除以 50；Yahoo 的收盘价本来就已经按拆股调整。
-- **最新季度先用发布会材料**：英文财报比发布会晚约三周（第四季度约六周），所以财报没出来之前，程序先用发布会当天发布的英文业绩演示材料（presentation，IR 网站 Earnings Release 页面）里的数字：营收、归母净利润（只精确到 0.1 万亿韩元）、普通股 EPS（精确的韩元数）和净资产（材料里的是含非控股权益的合计，按上一季度财报里“归母 ÷ 合计”的比例折算，估算值）。财报发布后，程序自动换成财报数字，发布时间仍是发布会当天。页面“数据来源与核对”里会提示哪个季度还在用暂用数据。材料版式会变，目前支持 2026 年起的一至三季度版式（三列：去年同季度、上一季度、本季度）和 2024 年起的第四季度版式（多出上年、本年全年两列），解析不了时跳过并提示，等财报，不会给出错误数字；材料里的去年同季度、上一季度 EPS 还会与财报里的数字交叉核对（如 3Q26 材料里的 1,802、10,849 韩元与财报一致）。第四季度的材料读的是全年数（全年营收、净利润、EPS，与年报一样当作全年累计数处理，单季数由全年减前三季度得到），所以第四季度的 TTM EPS 与年报的全年 EPS 完全一致，财报发布后数字不会跳变（用 2024、2025 年的第四季度材料核对过：全年 EPS 4,950、6,605 韩元与年报一致，营收、净利润在 0.1 万亿韩元以内，净资产估算与年报相差不到 0.03%）。
-- 发布时间：英文财报 PDF 本身没有发布时间，而且英文版比首次公开业绩晚约三周才上传，所以取 IR 网站 Events 页面公布的业绩发布会时间（如 “3Q26 Earnings Conference Call, October 29, 2026, 10:00 a.m. KST”，2009 年至今每个季度都有），那才是市场第一次看到这些数字的时候；2014 年及以前只写了日期，按 10:00 处理。韩国交易所 15:30 收盘，发布会都在上午，所以生效交易日就是发布会当天。发布会上的数字是审阅前的，程序读取的是随后发布的经审阅财报，二者如有差异以财报为准；用 2026 年二季度核对过，发布会材料里的 EPS（10,849、7,123、737 韩元）与财报一致。
-- 验证：48 份财报（2014 年三季度至 2026 年二季度）全部解析成功，各年第四季度的 TTM EPS 等于年报全年 EPS；相邻公告对同一数值的重复披露一致（拆股调整后的取整误差在容差内）。
+- For Q1-Q3 the first two columns of "three months" of the income statement are used (this quarter, same quarter last year); for Q4 only full-year statements exist, so the full year (this year, last year) is used and the single quarter is obtained by the program as full year minus the first three quarters, so the Q4 TTM EPS equals the annual report's full-year EPS exactly (e.g. KRW 6,605 for 2025, KRW 4,950 for 2024).
+- Revenue is Revenue, net profit is Profit attributable to owners of the parent, EPS is basic EPS of ordinary shares (KRW); equity = Total equity - Non-controlling interests. Amounts are in millions of KRW and the price currency is also KRW, so no FX rate is needed.
+- PDF text extraction inserts spaces after thousands separators (e.g. "44, 260,956") and control characters; the program repairs these first. Samsung has ordinary and preferred shares and net profit includes the part attributable to preferred shares, so the shares are the sum of the ordinary and preferred weighted average shares in the note (about 6.5-7.5 billion; PS and PB use this total, which differs slightly from the ordinary-share price basis, as the preferred share price is usually lower). In some files the note is in thousands of shares and in others in shares, and the PDF sometimes splits numbers (e.g. "5,969,78 3"); the program repairs them, then checks the magnitude against "net profit / EPS", and if it does not match the note is not used and the shares are implied instead.
+- Samsung split 50-for-1 on 4 May 2018; the EPS in earlier filings (e.g. KRW 85,435 for Q1 2018) is divided by 50 using Yahoo's split record; Yahoo's close is already split-adjusted.
+- **The latest quarter uses the earnings call material first**: the English statements come about three weeks after the call (about six weeks for Q4), so until they are out the program uses the numbers in the English earnings presentation published on the day of the call (IR website, Earnings Release page): revenue, net profit attributable to owners (precise only to 0.1 trillion KRW), ordinary-share EPS (exact KRW) and equity (the material shows total equity including non-controlling interests, scaled by the previous quarter's "attributable / total" ratio, so it is an estimate). Once the statements are out, the program switches to the statement numbers automatically; the publication time stays the day of the call. The "Data sources and checks" section of the page notes which quarter still uses preliminary data. The material layout changes; currently supported are the layout since 2026 for Q1-Q3 (three columns: same quarter last year, previous quarter, this quarter) and the layout since 2024 for Q4 (two extra columns: last year and this year full year); if it cannot be parsed it is skipped with a notice and the program waits for the statements, never producing wrong numbers. The same-quarter-last-year and previous-quarter EPS in the material are also cross-checked against the statements (e.g. KRW 1,802 and 10,849 in the 3Q26 material match the statements). The Q4 material is read as full-year figures (full-year revenue, net profit and EPS, handled like the annual report as full-year cumulative figures, with the single quarter obtained as full year minus the first three quarters), so the Q4 TTM EPS equals the annual report's full-year EPS exactly and does not jump once the statements are out (checked with the Q4 materials of 2024 and 2025: full-year EPS of KRW 4,950 and 6,605 match the annual reports; revenue and net profit are within 0.1 trillion KRW; the equity estimate is within 0.03% of the annual report).
+- Publication time: the English statement PDFs carry no publication time, and the English version is uploaded about three weeks after the results first became public, so the time of the earnings call on the IR Events page is used (e.g. "3Q26 Earnings Conference Call, October 29, 2026, 10:00 a.m. KST", recorded for every quarter since 2009), when the market first saw the numbers; up to 2014 only the date is given and 10:00 is assumed. The Korea Exchange closes at 15:30 and the calls are all in the morning, so the effective trading day is the day of the call. The numbers in the call are unreviewed, while the program reads the reviewed statements published later; where they differ the statements win. Checked with Q2 2026: the EPS in the call material (KRW 10,849, 7,123, 737) matches the statements.
+- Verification: all 48 statements (Q3 2014 to Q2 2026) were parsed successfully, the Q4 TTM EPS of each year equals the annual report's full-year EPS, and repeated disclosures of the same value in adjacent filings agree (the rounding error after split adjustment is within the tolerance).
 
-**`cn_report` 版式（海康威视，A 股）**：巨潮资讯网上有海康威视 2014 年以来的全部中文定期报告（一季报、半年报、三季报、年报）和年度业绩快报，程序下载 PDF 原文，只保存要用的页（主要财务数据表、合并利润表、合并资产负债表，页面原样保留）。
+**`cn_report` layout (Hikvision, A-share)**: CNINFO has all of Hikvision's Chinese periodic reports since 2014 (Q1 report, half-year report, Q3 report, annual report) and annual express reports. The program downloads the original PDFs and keeps only the pages it uses (the key accounting data table, the consolidated income statement, the consolidated balance sheet, pages unchanged). The Chinese-language patterns used to recognise titles and text are in `cn_patterns.py`; everything the program shows is English (titles such as "2026 Q3 report", "2025 annual express report").
 
-- 第一季度：合并利润表的本期、上期（单季数）；第二季度（半年报）和第四季度（年报）：合并利润表的本期、上期，是累计数，单季数由程序用累计数相减得到；第三季度：合并利润表是年初至今，所以单季数取“主要会计数据和财务指标”表的第一列（本报告期）。验证：2021 年起的三季报，“年初至今 − 半年报”的差正好等于这一列（营收、净利润都是 0 差异）。
-- 营收取营业总收入，净利润取归属于母公司股东的净利润，EPS 取基本每股收益（元/股），净资产取归属于母公司所有者权益合计；金额单位是元，统一换算成百万元。每份报告里的主要数据表和合并利润表的同一项必须一致，否则报错。
-- 股数取资产负债表的“股本”（期末总股本，面值 1 元，股数 = 股本金额）。A 股的季报不披露加权平均股数，所以和港股、美股不同，这里用期末总股本；它包含库存股，所以比 EPS 对应的流通股数大 1%～2%（每股指标文件里列出了反推值作对照）。用总股本算 PS、PB，等价于“总市值 ÷ 营收”和“总市值 ÷ 净资产”，是通常的定义。
-- 海康威视的 EPS 在 2016、2017 年按 Yahoo 记录的两次送转股（各 1 拆 1.5）调整，股数同理乘以拆股倍数。
-- **业绩快报**：年度业绩快报在年报之前（1～2 月）发布，是第一次公布全年业绩；年报要到 4 月。快报发布后，程序先用快报里的全年数据（营收、净利润、EPS、净资产、股本），年报发布后换成年报的精确数字，但发布时间仍取快报那天（市场是在快报那天第一次看到全年业绩的）。快报和年报的数字有小差异（2014～2025 年：营收 ±0.3% 以内，净利润 ±0.5% 以内，EPS 相差不超过 0.01 元，净资产多数在 0.15% 以内），以年报为准；快报未经会计师审计，用的是内部审计的初步数。快报发布后到年报发布前，页面“数据来源与核对”会提示该年度用的是快报数据。
-- **发布时间**：巨潮资讯的公告列表只有日期，且把盘后发布的公告记在次日 00:00（海康威视一般在周五收盘后发布，列表里显示周六 00:00），所以按“当天开盘前”处理，生效交易日就是该日或之后的第一个交易日。2020 年 10 月起，PDF 文件的上传时间就是实际发布时间（周五 16:00～22:00），直接采用；更早的文件在 2020 年 9 月迁移过，上传时间已失真，不能用。
-- **中英文版本**：巨潮资讯上 2016 年起有英文版报告（“英文版”），但 2014～2015 年和部分季度没有，所以用完整的中文原文；英文版可以作为今后的核对来源（见“待办事项”）。海康威视自己的 IR 网站有访问限制（要经过 JavaScript 验证），没有使用。
+- Q1: the current and prior period of the consolidated income statement (single quarter). Q2 (half-year report) and Q4 (annual report): the current and prior period of the consolidated income statement, which are cumulative, and the single quarter is obtained by subtraction. Q3: the consolidated income statement is year to date, so the single quarter is taken from the first column (the reporting period) of the key accounting data table. Verification: for Q3 reports since 2021, "year to date - half-year report" equals this column exactly (zero difference for both revenue and net profit).
+- Revenue is total operating revenue, net profit is net profit attributable to shareholders of the parent, EPS is basic EPS (yuan per share), equity is total equity attributable to owners of the parent; amounts are in yuan and converted to millions. In every report the key data table and the consolidated income statement must agree on the same item, otherwise an error is raised.
+- Shares are the "share capital" of the balance sheet (period-end total shares, par value RMB 1, so shares = the share capital amount). A-share quarterly reports do not disclose weighted average shares, so unlike the HK and US stocks, period-end total shares are used here; they include treasury shares and are therefore 1%-2% higher than the share count behind EPS (the implied value is listed in the per-share metrics file for comparison). Computing PS and PB with total shares is equivalent to "total market cap / revenue" and "total market cap / equity", the usual definitions.
+- Hikvision's EPS is adjusted for the two bonus-share distributions of 2016 and 2017 that Yahoo records (1.5-for-1 each), and the shares are multiplied by the split ratio in the same way.
+- **Express reports**: the annual express report is published before the annual report (January-February) and is the first time the full-year results are public; the annual report comes in April. After an express report is out, the program first uses its full-year data (revenue, net profit, EPS, equity, share capital); once the annual report is out, it is replaced by the annual report's exact numbers, but the publication time stays that of the express report (the market first saw the full-year results that day). The express and annual numbers differ slightly (2014-2025: revenue within 0.3%, net profit within 0.5%, EPS by no more than 0.01 yuan, equity mostly within 0.15%); the annual report wins; the express report is not audited by the accounting firm and uses preliminary internally audited numbers. Between the express report and the annual report the "Data sources and checks" section of the page notes that the year uses express report data.
+- **Publication time**: the CNINFO announcement list has only dates, and records filings made after the close at 00:00 of the next day (Hikvision usually publishes after the close on Friday, shown as Saturday 00:00 in the list), so it is treated as "before the open that day", and the effective trading day is that day or the first trading day after it. Since October 2020 the upload time of the PDF is the actual publication time (Friday 16:00-22:00) and is used directly; earlier files were migrated in September 2020, so their upload time is meaningless and is not used.
+- **Chinese and English versions**: CNINFO has English versions of the reports since 2016, but not for 2014-2015 and some quarters, so the complete Chinese originals are used; the English versions can be a cross-check source later (see "To do"). Hikvision's own IR website has access restrictions (JavaScript verification) and is not used.
 
-### EPS 从哪一天开始使用
+### From which day an EPS is used
 
-1. **发布时间**：采用披露易记录的发布时间，精确到分钟（香港时间）。
-2. **可用日期**：指最早哪一天的收盘价可能已经反映了这份公告。
-   - 当天收盘前发布（盘前、盘中、午休）：可用日期是当天；
-   - 收盘后发布：可用日期是下一天。
-   - 收盘时间按各市场规则判断（见 `market_calendar.py`）：A 股 15:00（北京时间）收盘，没有半日市；港股全日市 16:00 收盘，平安夜、除夕、农历除夕如果开市，只开上午市，12:00 收盘；美股 16:00（纽约时间）收盘，感恩节次日、7 月 3 日和平安夜（周一至周四）13:00 提前收盘；韩股 15:30（首尔时间）收盘，没有半日市。美股的发布时间也是纽约当地时间，夏令时、冬令时自动处理。
-3. **生效交易日**：可用日期当天或之后的第一个交易日，从这天起计算 PE 时使用新的 EPS。交易日以实际有成交的行情数据为准，所以周末、公众假期、台风或暴雨停市都会自动顺延。例如腾讯 2024 年一季报在 05-14（周二）16:30 发布，05-15 是佛诞假期，因此从 05-16 开始使用。
-4. 生效交易日为空，有两种情况：公告早于行情数据的起点；或者下一个交易日还没到（比如当天收盘后刚发布的公告）。
+1. **Publication time**: the publication time recorded by the source is used (to the minute for HKEXnews, in the exchange's local time).
+2. **Available date**: the earliest day whose closing price may already reflect the filing.
+   - Published before the close (pre-market, intraday, lunch break): the available date is that day;
+   - Published after the close: the available date is the next day.
+   - The closing time follows each market's rules (see `market_calendar.py`): A-shares close at 15:00 (Beijing time), no half days; HK full days close at 16:00, and on Christmas Eve, New Year's Eve and Lunar New Year's Eve, if the market is open, only the morning session is held and it closes at 12:00; US stocks close at 16:00 (New York time), with an early 13:00 close on the day after Thanksgiving, 3 July and Christmas Eve (Monday-Thursday); Korean stocks close at 15:30 (Seoul time), no half days. US publication times are also New York local time, with daylight saving handled automatically.
+3. **Effective trading day**: the first trading day on or after the available date; from that day the new EPS is used in the PE. Trading days are decided by the price data that actually traded, so weekends, public holidays and typhoon or rainstorm closures roll over automatically. For example Tencent's Q1 2024 results were published on 05-14 (Tuesday) at 16:30 and 05-15 was a holiday (Buddha's Birthday), so they are used from 05-16.
+4. The effective trading day is empty in two cases: the filing is earlier than the start of the price data, or the next trading day has not come yet (e.g. a filing published just after today's close).
 
-京东 49 份业绩公告里，6 份在纽约时间 16:00 刚过发布（收盘后，从下一个交易日起生效；如 2019-05-10 周五 16:10 发布，下周一 05-13 起生效），其余 43 份在盘前（约 6:00～9:30）发布，当天生效。
+Of JD's 49 earnings filings, 6 were published just after 16:00 New York time (after the close, effective from the next trading day; e.g. published Friday 2019-05-10 16:10, effective from Monday 05-13), and the other 43 were published before the open (about 6:00-9:30) and are effective the same day.
 
-腾讯 2014 年以来的业绩公告都在 16:00～18:40 之间发布，也就是都在收盘后。用行情数据核对过半日市的规则：Yahoo 成交量为 0 的日子里，除了 3 天台风全日停市，其余 10 天都与按规则推算出的半日市一致。
+All of Tencent's earnings announcements since 2014 were published between 16:00 and 18:40, i.e. after the close. The half-day rule was checked against the price data: of the days with zero Yahoo volume, 3 were full-day typhoon closures and the other 10 all match the half days derived from the rules.
 
-## 已知局限
+## Known limitations
 
-- 业绩数据的解析规则是按腾讯（`highlights`）、舜宇光学（`statements`）、京东（`press_release`）、三星（`kifrs_statements`）和海康威视（`cn_report`）的公告版式写的，并分别在它们 2014 年以来的全部公告上验证过。其他公司的版式可能不同，需要新增解析函数，或者先确认现有版式是否适用（见“后续扩展”）。
-- 加总 4 个单季 EPS 得到的 TTM，与“TTM 利润 ÷ 当前股本”会略有差异（腾讯持续回购，两者相差约 1%）。
-- 只用“自身历史分位”来判断，没有考虑利率环境、增长预期的变化，也没有和同行比较。
-- 股价、汇率和拆股记录来自腾讯证券和 Yahoo Finance，都不是交易所官方数据。港股的股价有两个来源互相核对；美股（京东）、韩股（三星）、A 股（海康威视）的股价只有 Yahoo 一个来源，汇率和拆股记录也只有 Yahoo 一个来源。
-- 京东的 PE 在 2014～2017 年亏损期间没有意义（空缺），历史分位的有效区间因此较短（PE 从 2018 年起、Non-GAAP PE 从 2017 年起）；盈利很少的时期 PE 会高达几百倍，拉高历史分布的上端，分位数需要结合这一点看。
-- 三星的英文财务报表比业绩发布会晚三周左右才上传（如 2026 年二季度：7 月 30 日发布会，8 月 19 日英文报表；第四季度要晚六周左右，如 2025 年四季度：1 月 29 日发布会，3 月 12 日年度报告，这段时间同样用发布会材料），这期间用发布会材料里的初步数据（见上），营收、净利润精度较低、净资产是估算值。三星 IR 网站的韩文版页面（samsung.com/sec/ir）也提供韩文季度报告，但与英文财务报表同一天上传（如 2026 年二季度都是 8 月 19 日），并不更早，所以不能缩短这段滞后；DART 的接入见“待办事项”。
-- 海康威视的季报没有披露加权平均股数，股数用期末总股本（见“`cn_report` 版式”）；2014～2015 年的公告只有日期，没有发布时间，按“当天开盘前”处理，如果实际是盘中发布，生效日期可能比实际晚一个交易日，不会提前。
-- 其他美股公司的新闻稿版式如果和京东不同（表格标签、摘要位置），`press_release` 解析可能需要补充规则；解析不了会直接报错，不会给出错误数字。
+- The parsing rules were written for the filing layouts of Tencent (`highlights`), Sunny Optical (`statements`), JD (`press_release`), Samsung (`kifrs_statements`) and Hikvision (`cn_report`), and verified on all of their filings since 2014. Other companies' layouts may differ and need a new parse function, or a check of whether an existing layout applies (see "Extending").
+- The TTM from adding 4 single-quarter EPS differs slightly from "TTM profit / current shares" (Tencent keeps buying back shares, and the two differ by about 1%).
+- Only the "own historical percentile" is used; changes in the interest rate environment and growth expectations are not considered, and there is no comparison with peers.
+- Prices, FX rates and split records come from Tencent and Yahoo Finance, neither of which is official exchange data. HK prices are cross-checked between two sources; the prices of the US (JD), Korean (Samsung) and A-share (Hikvision) stocks have Yahoo as the only source, and FX rates and split records also have Yahoo as the only source.
+- JD's PE is meaningless (blank) during the loss-making years 2014-2017, so the valid range of its historical percentile is shorter (PE from 2018, Non-GAAP PE from 2017); in periods of very small profit the PE reaches several hundred times and stretches the upper end of the historical distribution, which should be kept in mind when reading the percentile.
+- Samsung's English financial statements are uploaded about three weeks after the earnings call (e.g. Q2 2026: call on 30 July, English statements on 19 August; Q4 is about six weeks later, e.g. Q4 2025: call on 29 January, annual report on 12 March, and the call material is likewise used in between). In this gap the preliminary data of the call material is used (see above), with revenue and net profit at lower precision and equity estimated. The Korean-language pages of the Samsung IR website (samsung.com/sec/ir) also provide Korean quarterly reports, but they are uploaded on the same day as the English statements (e.g. both on 19 August for Q2 2026), not earlier, so they cannot shorten this lag; for connecting DART see "To do".
+- Hikvision's quarterly reports do not disclose weighted average shares, so period-end total shares are used (see "`cn_report` layout"); the 2014-2015 filings have only a date and no publication time and are treated as "before the open that day"; if the real publication was intraday the effective date may be one trading day later than the real one, never earlier.
+- If the press release layout of another US company differs from JD's (table labels, location of the summary), the `press_release` parser may need extra rules; if it cannot parse, it raises an error directly and never produces wrong numbers.
 
-## 项目结构
+## Project structure
 
 ```
-config.yaml                        监控列表、回看年数（默认和可选）、估值档位
+config.yaml                        watch list, lookback years (default and selectable), valuation levels
+CLAUDE.md                          working rules for Claude Code sessions (language rules)
 src/valuation_monitor/
-  cli.py                           命令行入口
-  config.py                        配置解析
-  data.py                          汇总各数据源，生成指标计算所需数据
-  store.py                         data/ 目录的读写与增量更新
-  prices.py                        综合多个来源判定最终股价
-  filings.py                       从业绩公告中提取营收、净利润、EPS、净资产（各版式的解析函数），交叉核对，计算 TTM 和每股数据
-  market_calendar.py               收盘时间、半日市、公告生效交易日（港股、美股、韩股、A 股）
-  parsed.py                        各版式解析结果的统一结构
-  audit.py                         把指标的计算过程写成文字（提示框和下载文件共用）
-  press_release.py                 从美股业绩新闻稿（HTML）中提取业绩数据
-  kifrs.py                         从三星英文合并财务报表（K-IFRS）中提取业绩数据
-  cn_report.py                     从 A 股中文定期报告和业绩快报中提取业绩数据
-  providers/                       数据源（hkex.py 披露易、sec.py 美国证监会 EDGAR、samsung.py 三星 IR 网站、cninfo.py 巨潮资讯网、tencent.py 股价、yahoo.py 股价/拆股/汇率、http.py 缓存/重试/限速）
-  metrics/                         指标（base.py 定义接口和每日计算过程，multiples.py 实现 PE、Non-IFRS/Non-GAAP PE、PS、PB）
-  analysis.py                      历史分位和档位判断
-  report.py                        文字报告与走势图（命令行版）
-  service.py                       取数并计算各项指标（命令行和网页共用）
-  web/                             网页界面（Flask）：页面模板、样式、Chart.js、走势图提示框、下载文件生成（含每日估值明细）、静态网站导出
-data/                              保存的公告原文、行情、汇率、EPS（见“保存的数据”）
-.github/workflows/pages.yml        定时更新数据并发布 GitHub Pages
-tests/                             单元测试（离线，不访问网络）
+  cli.py                           command line entry point
+  config.py                        config parsing
+  data.py                          gathers the data sources into what the metric calculations need
+  store.py                         reading, writing and incremental updates of the data/ directory
+  prices.py                        decides the final price from several sources
+  filings.py                       extracts revenue, net profit, EPS and equity from filings (parse functions per layout), cross-checks, computes TTM and per-share data
+  market_calendar.py               closing times, half days, effective trading day of filings (HK, US, Korea, A-share)
+  parsed.py                        common structure of the parse results of all layouts
+  audit.py                         writes the calculation of a metric as text (shared by tooltips and downloads)
+  press_release.py                 extracts earnings data from US earnings press releases (HTML)
+  kifrs.py                         extracts earnings data from Samsung's English consolidated financial statements (K-IFRS)
+  cn_report.py                     extracts earnings data from A-share Chinese periodic and express reports
+  cn_patterns.py                   the Chinese patterns used to read A-share filings (the only module with Chinese text)
+  providers/                       data sources (hkex.py HKEXnews, sec.py SEC EDGAR, samsung.py Samsung IR website, cninfo.py CNINFO, tencent.py prices, yahoo.py prices/splits/FX, http.py cache/retry/rate limit)
+  metrics/                         metrics (base.py defines the interface and the daily calculation detail, multiples.py implements PE, Non-IFRS/Non-GAAP PE, PS, PB)
+  analysis.py                      historical percentile and level
+  report.py                        text report and trend charts (CLI)
+  service.py                       fetches data and computes the metrics (shared by CLI and web)
+  web/                             web interface (Flask): page templates, styles, Chart.js, chart tooltips, download file generation (including daily valuation detail), static site export
+data/                              saved original filings, prices, FX rates, EPS (see "Saved data")
+.github/workflows/pages.yml        scheduled data update and GitHub Pages publication
+tests/                             unit tests (offline, no network access)
 ```
 
-## 后续扩展
+## Extending
 
-- **新增一只港股**：在 `config.yaml` 的 `stocks` 下添加条目（代码、名称、`filing_format`、`metrics`），运行一次，程序会自动从披露易下载全部业绩公告。**第一次一定要核对数据**：看有没有解析报错；看 `data/eps/<代码>_periods.csv` 里营收、净利润、股数是否合理（应该稳定，公告披露的股数与反推的对照值应该接近）；对照公告第一页的叙述文字核对几个数字。公司的公告版式如果和现有两种港股版式都不同，需要在 `filings.py` 的 `FORMATS` 里新增解析函数。
-- **新指标**：在 `filings.py` 中从公告里多提取需要的数据，在 `metrics/` 下实现指标类（股价 ÷ 每股数据类的指标可以直接继承 `PriceMultiple`），然后在 `metrics/__init__.py` 注册。
-- **新增一只美股**（外国私人发行人，业绩以 6-K 提交）：在 `config.yaml` 添加条目（代码、名称、`market: US`、`cik`、`metrics`），`cik` 在 EDGAR 公司页面可以查到。其余同上，第一次要核对解析结果，并与该公司 20-F 年报的全年数对比。
-- **新增一只 A 股**：在 `config.yaml` 添加条目（代码如 `600036.SS`、名称、`market: CN`、`metrics`），程序自动从巨潮资讯网下载定期报告和业绩快报；中文报告的版式各公司基本一致（证监会统一格式），第一次要核对解析结果。
-- **新增一只韩股**：目前只有三星有专用的下载程序（`providers/samsung.py`），其他韩国公司需要写各自 IR 网站的下载程序，或者接入 DART（见“待办事项”）。
+- **Add a Hong Kong stock**: add an entry under `stocks` in `config.yaml` (symbol, English name, `filing_format`, `metrics`) and run once; the program downloads all earnings announcements from HKEXnews automatically. **Always check the data the first time**: look for parse errors; check in `data/eps/<symbol>_periods.csv` that revenue, net profit and shares look reasonable (they should be stable, and the disclosed shares should be close to the implied cross-check value); check a few numbers against the narrative text on page 1 of the announcement. If the company's announcement layout differs from both existing HK layouts, add a parse function to `FORMATS` in `filings.py`.
+- **New metric**: extract the extra data from the filings in `filings.py`, implement the metric class under `metrics/` (metrics of the "price / per-share figure" kind can inherit `PriceMultiple` directly), then register it in `metrics/__init__.py`.
+- **Add a US stock** (foreign private issuer whose results are filed on 6-K): add an entry to `config.yaml` (symbol, English name, `market: US`, `cik`, `metrics`); the `cik` can be found on the company's EDGAR page. The rest is as above: check the parse results the first time, and compare with the full-year figures of the company's 20-F annual report.
+- **Add an A-share**: add an entry to `config.yaml` (symbol such as `600036.SS`, English name, `market: CN`, `metrics`); the program downloads periodic and express reports from CNINFO automatically; the Chinese report layout is basically the same across companies (uniform CSRC format); check the parse results the first time.
+- **Add a Korean stock**: only Samsung has a dedicated downloader (`providers/samsung.py`) at present; other Korean companies need a downloader for their own IR websites, or a connection to DART (see "To do").
+- **Always keep the software English-only** (see "Language rules"): English stock names, English labels, and no Chinese in anything displayed or generated.
 
-## 待办事项
+## To do
 
-低优先级，今后有需要再做：
+Low priority, to be done when needed:
 
-- **申请 DART（韩国金融监督院电子公示系统）的 OpenDART API Key**，作为韩股数据的对照补充来源：DART 是韩国公司法定披露的第一手来源（但多为韩文，英文版不全，所以目前以公司 IR 网站的英文报表为主）。接入后可以：① 用 DART 的季报、半年报、年报数字核对 IR 网站英文报表；② 在英文报表上传之前，用韩文正式报告里的精确数字取代发布会材料里的初步数据，（DART 的季度报告在季度结束后 45 天内提交，与 IR 网站上的韩文、英文报告基本同一天）；③ 以后跟踪其他韩国公司时统一用它。申请需要用邮箱在 opendart.fss.or.kr 注册（免费）；拿到后以仓库 Secret `DART_API_KEY` 和本地环境变量提供，不写进代码。
+- **Apply for an OpenDART API key from DART (the electronic disclosure system of the Korean Financial Supervisory Service)** as a supplementary cross-check source for Korean stocks: DART is the first-hand source of the statutory disclosures of Korean companies (but mostly in Korean, with the English versions incomplete, which is why the company IR websites' English statements are the main source for now). Once connected it could: (1) cross-check the English statements on the IR website with the numbers of the DART quarterly, half-year and annual reports; (2) before the English statements are uploaded, replace the preliminary data of the call material with the exact numbers of the official Korean report (DART quarterly reports are filed within 45 days after the quarter end, basically on the same day as the Korean and English reports on the IR website); (3) be the common way to track other Korean companies later. Applying requires registering with an email address at opendart.fss.or.kr (free); once obtained, provide it as the repository secret `DART_API_KEY` and a local environment variable, never in the code.
 
-- **用英文版核对海康威视的中文报告**：巨潮资讯上 2016 年起有英文版定期报告，可以作为数字核对的第二个来源。
+- **Cross-check Hikvision's Chinese reports with the English versions**: CNINFO has English periodic reports since 2016, which can be a second source for checking the numbers.
 
-## 测试
+## Tests
 
 ```bash
 .venv/bin/pytest

@@ -1,4 +1,4 @@
-"""A 股（海康威视）：巨潮资讯网的公告列表、发布时间判断，以及用保存的中文报告原文验证解析。"""
+"""A-shares (Hikvision): the CNINFO announcement list, publication time rules, and parsing verified with the saved original Chinese reports. The Chinese strings in this file are fixtures: titles and text of the Chinese-language source filings."""
 
 import json
 from datetime import datetime
@@ -30,19 +30,19 @@ def test_classify_titles():
 
 
 def test_published_time_prefers_the_upload_time_but_only_after_the_2020_migration():
-    listed = pd.Timestamp("2026-10-17 00:00")  # 周五 16:00 盘后发布，巨潮记在次日 00:00
+    listed = pd.Timestamp("2026-10-17 00:00")  # filed Friday 16:00 after the close; CNINFO lists it at 00:00 of the next day
     assert published_time(listed, "Fri, 16 Oct 2026 08:00:19 GMT")[0] == pd.Timestamp("2026-10-16 16:00:19")
-    # 2020 年 9 月迁移后的文件，上传时间是迁移时间，不能用：只用公告日期
+    # files migrated in September 2020 have the migration time as upload time, which cannot be used: only the listing date is used
     old = pd.Timestamp("2018-10-20 00:00")
     assert published_time(old, "Sat, 26 Sep 2020 08:25:00 GMT")[0] == old
     assert published_time(old, None)[0] == old
-    # 上传时间与公告日期对不上（相差超过一天）时也不用
+    # an upload time that does not match the listing date (more than one day apart) is not used either
     assert published_time(listed, "Mon, 05 Oct 2026 08:00:00 GMT")[0] == listed
 
 
 def test_a_share_market_closes_at_1500():
-    assert CN.available_date(pd.Timestamp("2026-10-16 16:00")) == pd.Timestamp("2026-10-17")  # 周五盘后：下个交易日（行情里的周一）
-    assert CN.available_date(pd.Timestamp("2026-10-17 00:00")) == pd.Timestamp("2026-10-17")  # 只有日期的按开盘前
+    assert CN.available_date(pd.Timestamp("2026-10-16 16:00")) == pd.Timestamp("2026-10-17")  # Friday after the close: the next trading day (Monday in the price data)
+    assert CN.available_date(pd.Timestamp("2026-10-17 00:00")) == pd.Timestamp("2026-10-17")  # date only: treated as before the open
     assert CN.available_date(pd.Timestamp("2026-10-16 14:59")) == pd.Timestamp("2026-10-16")
 
 
@@ -60,7 +60,7 @@ def test_pdf_digit_artifacts_are_repaired():
 
 
 class FakeHttp:
-    """假的巨潮资讯：一份第三季度报告（盘后发布），一份年度业绩快报，之后又发布了年报。"""
+    """A fake CNINFO: a Q3 report (published after the close), an annual express report, and later the annual report."""
 
     def __init__(self):
         self.lists = {}
@@ -100,20 +100,20 @@ def test_provider_classifies_dates_and_replaces_the_express_report(tmp_path, mon
     provider = CninfoProvider(http, tmp_path)
     found = provider.results_announcements("002415.SZ", datetime(2025, 12, 1))
     assert [(f.title, f.provisional) for f in found] == [("2025 annual express report", True), ("2026 Q3 report", False)]
-    assert found[1].published == pd.Timestamp("2026-10-16 16:00:19")  # 用 PDF 上传时间，不是列表里的次日 00:00
+    assert found[1].published == pd.Timestamp("2026-10-16 16:00:19")  # uses the PDF upload time, not the next-day 00:00 of the list
     index = json.loads((tmp_path / "002415.SZ" / "index.json").read_text(encoding="utf-8"))
-    assert {e["id"] for e in index} == {"1", "4"}  # 英文版、摘要不下载
+    assert {e["id"] for e in index} == {"1", "4"}  # English versions and summaries are not downloaded
 
     n = len(http.downloads)
     provider.results_announcements("002415.SZ", datetime(2025, 12, 1))
-    assert len(http.downloads) == n  # 已保存的不再下载
+    assert len(http.downloads) == n  # saved ones are not downloaded again
 
-    # 年报发布后：快报被取代，年报的发布时间沿用快报那天
+    # after the annual report is out: the express report is replaced, and the annual report keeps the express report's publication day
     http.lists[""].append(row("5", "2025年年度报告", ms("2026-04-18"), "2026-04-18"))
     found = provider.results_announcements("002415.SZ", datetime(2025, 12, 1))
     annual = next(f for f in found if f.title == "2025 annual report")
-    assert not annual.provisional and annual.published == pd.Timestamp("2026-01-21 00:00")  # 年报的数字第一次公开是在快报那天
-    assert "publication time kept from the express report" in annual.note and "2026-04-18" in annual.note  # 说明数字是年报的、发布时间是快报的
+    assert not annual.provisional and annual.published == pd.Timestamp("2026-01-21 00:00")  # the annual report numbers first became public on the express report day
+    assert "publication time kept from the express report" in annual.note and "2026-04-18" in annual.note  # the note says the numbers are the annual report's and the publication time is the express report's
     assert [f.title for f in found] == ["2025 annual report", "2026 Q3 report"]
 
 
@@ -139,8 +139,8 @@ def test_third_quarter_uses_the_single_quarter_column():
     p = parsed("2026 Q3 report")
     assert p.quarterly and p.period == pd.Period("2026Q3")
     assert p.values["revenue"] == pytest.approx([27221.79484181]) and p.values["profit"] == pytest.approx([5015.68079576])
-    assert p.values["eps"] == [0.547]  # 单季，不是前三季度累计的 1.409
-    assert p.values["wa_shares"] == pytest.approx([9164.87155])  # 期末总股本，百万股
+    assert p.values["eps"] == [0.547]  # single quarter, not the 1.409 cumulative for the first three quarters
+    assert p.values["wa_shares"] == pytest.approx([9164.87155])  # period-end total shares, millions
     assert p.values["equity"] == pytest.approx([84274.81359135, 83348.18588562])
 
 

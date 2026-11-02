@@ -1,4 +1,4 @@
-"""加载并校验 config.yaml。"""
+"""Load and validate config.yaml."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from valuation_monitor.market_calendar import MARKETS
 
 @dataclass(frozen=True)
 class Level:
-    upper: float  # 分位数上限（含），0-100
+    upper: float  # upper percentile bound (inclusive), 0-100
     label: str
 
 
@@ -26,12 +26,12 @@ FILING_SOURCES = {
 
 @dataclass(frozen=True)
 class StockConfig:
-    symbol: str  # Yahoo Finance 代码，如 0700.HK、JD
+    symbol: str  # Yahoo Finance symbol, e.g. 0700.HK, JD
     name: str
     metrics: list[str] = field(default_factory=lambda: ["pe"])
-    filing_format: str = "highlights"  # 业绩公告的版式，见 filings.FILING_FORMATS
-    market: str = "HK"  # 上市地：HK（港交所披露易）、US（美国证监会 EDGAR）、KR（韩国公司的 IR 网站）或 CN（A 股，巨潮资讯网）
-    cik: int | None = None  # 美股公司在美国证监会的编号（Central Index Key）
+    filing_format: str = "highlights"  # layout of the earnings filings, see filings.FILING_FORMATS
+    market: str = "HK"  # listing market: HK (HKEXnews), US (SEC EDGAR), KR (company IR website) or CN (A-shares, CNINFO)
+    cik: int | None = None  # SEC Central Index Key of a US-listed company
 
     @property
     def filing_source(self) -> str:
@@ -39,7 +39,7 @@ class StockConfig:
 
     @property
     def cross_checks_prices(self) -> bool:
-        """是否有两个以上来源的股价可以互相核对（港股有腾讯证券和 Yahoo，美股只有 Yahoo）。"""
+        """Whether prices from two or more sources can be cross-checked (HK: Tencent and Yahoo; US: Yahoo only)."""
         return MARKETS[self.market].cross_checks_prices
 
 
@@ -49,13 +49,13 @@ DEFAULT_LOOKBACK_OPTIONS = [10, 5, 3, 2, 1]
 @dataclass(frozen=True)
 class Config:
     stocks: list[StockConfig]
-    lookback_years: int = 10  # 默认选中的回看年数
+    lookback_years: int = 10  # default selected lookback in years
     levels: list[Level] = field(default_factory=list)
-    lookback_options: list[int] = field(default_factory=lambda: list(DEFAULT_LOOKBACK_OPTIONS))  # 网页上可选的回看年数
+    lookback_options: list[int] = field(default_factory=lambda: list(DEFAULT_LOOKBACK_OPTIONS))  # lookback years selectable on the web page
 
     @property
     def max_lookback(self) -> int:
-        """最长的回看年数，决定需要准备多少年的行情和业绩数据。"""
+        """The longest lookback in years; it decides how many years of prices and earnings are prepared."""
         return max(self.lookback_options)
 
 
@@ -89,12 +89,12 @@ def parse_config(raw: dict) -> Config:
         market = str(s.get("market", default_market)).upper()
         if market not in MARKETS:
             raise ValueError(f"{symbol}: unknown market {market}; available markets: {sorted(MARKETS)}")
-        # 港股的业绩来自港交所公告（PDF），美股的来自美国证监会 EDGAR 的新闻稿（HTML），韩股的来自公司 IR 网站的财务报表
+        # HK earnings come from HKEXnews filings (PDF), US from SEC EDGAR press releases (HTML), KR from the company IR website financial statements
         default_format = {"HK": "highlights", "US": "press_release", "KR": "kifrs_statements", "CN": "cn_report"}[market]
         filing_format = str(s.get("filing_format", default_format))
         if filing_format not in FILING_FORMATS:
             raise ValueError(f"{symbol}: unknown filing format {filing_format}; available formats: {sorted(FILING_FORMATS)}")
-        foreign_formats = {"press_release": "US", "kifrs_statements": "KR", "cn_report": "CN"}  # 非港股版式只适用于对应市场
+        foreign_formats = {"press_release": "US", "kifrs_statements": "KR", "cn_report": "CN"}  # non-HK formats only apply to their own market
         if foreign_formats.get(filing_format, "HK" if market == "HK" else None) != market:
             raise ValueError(f"{symbol}: filing format {filing_format} does not match market {market}")
         cik = int(s["cik"]) if s.get("cik") is not None else None

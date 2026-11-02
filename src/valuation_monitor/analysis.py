@@ -1,4 +1,4 @@
-"""根据历史分位数判断估值高低。"""
+"""Judge whether a valuation is high or low from its historical percentile."""
 
 from __future__ import annotations
 
@@ -15,18 +15,18 @@ BAND_PERCENTILES = (10, 30, 50, 70, 90)
 class Valuation:
     current: float
     as_of: pd.Timestamp
-    percentile: float  # 当前值在回看窗口中的分位数，0-100
+    percentile: float  # percentile of the current value within the lookback window, 0-100
     level: str
     window_start: pd.Timestamp
     observations: int
     mean: float
     min: float
     max: float
-    bands: dict[int, float]  # 分位数 -> 对应指标值
+    bands: dict[int, float]  # percentile -> metric value at that percentile
 
 
 def level_index(percentile: float, levels: list[Level]) -> int:
-    """估值档位的序号（0 为最低估）。"""
+    """Index of the valuation level (0 = most undervalued)."""
     return next((i for i, lv in enumerate(levels) if percentile <= lv.upper), len(levels) - 1)
 
 

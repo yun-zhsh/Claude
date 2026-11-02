@@ -1,7 +1,7 @@
-"""Yahoo Finance：日线行情、拆股记录；汇率用 XXXYYY=X 代码获取。
+"""Yahoo Finance: daily prices and split records; FX rates come from XXXYYY=X symbols.
 
-注意 Yahoo 的 close 不是原始成交价：除拆股外，它还会把实物分派等当作除权回溯调整；
-adjclose 在此基础上再按现金分红调整。两者在发生新的除权事件后都会整体改变。
+Note that Yahoo's close is not the raw traded price: besides splits it also adjusts retroactively for distributions in kind etc.;
+adjclose further adjusts for cash dividends. Both change as a whole after a new ex-rights event.
 """
 
 from __future__ import annotations
@@ -18,10 +18,10 @@ CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}"
 
 @dataclass
 class PriceHistory:
-    close: pd.Series  # 索引为交易日（无时区的日期），值为收盘价
-    splits: pd.Series  # 索引为拆股生效日，值为拆股比例（如 5:1 记为 5.0）
+    close: pd.Series  # indexed by trading day (timezone-naive dates), values are closing prices
+    splits: pd.Series  # indexed by split effective date, values are split ratios (5:1 is 5.0)
     currency: str
-    timezone: str = "UTC"  # 交易所时区
+    timezone: str = "UTC"  # exchange timezone
     bars: pd.DataFrame | None = None  # open, high, low, close, adjclose, volume
 
 

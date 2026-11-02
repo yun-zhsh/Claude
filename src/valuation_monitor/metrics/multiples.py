@@ -10,7 +10,7 @@ class PE(PriceMultiple):
 
 
 class NonIfrsPE(PriceMultiple):
-    """用公司披露的 Non-IFRS 利润计算，剔除投资收益、股权激励等非经营项目。"""
+    """Computed from the Non-IFRS profit the company discloses, excluding non-operating items such as investment gains and share-based compensation."""
 
     key = "pe_non_ifrs"
     label = "PE Non-IFRS (TTM)"
@@ -18,7 +18,7 @@ class NonIfrsPE(PriceMultiple):
 
 
 class NonGaapPE(PriceMultiple):
-    """用公司披露的 Non-GAAP 利润计算（美股公司的口径），剔除股权激励、投资损益等项目。"""
+    """Computed from the Non-GAAP profit the company discloses (the US convention), excluding items such as share-based compensation and investment gains or losses."""
 
     key = "pe_non_gaap"
     label = "PE Non-GAAP (TTM)"
@@ -26,7 +26,7 @@ class NonGaapPE(PriceMultiple):
 
 
 class PS(PriceMultiple):
-    """市销率：股价 ÷ 每股营收（最近 4 个季度营收之和 ÷ 最新一季的加权平均股数）。"""
+    """Price-to-sales: price / revenue per share (sum of the last 4 quarters of revenue / weighted average shares of the latest quarter)."""
 
     key = "ps"
     label = "PS (TTM)"
@@ -34,7 +34,7 @@ class PS(PriceMultiple):
 
 
 class PB(PriceMultiple):
-    """市净率：股价 ÷ 每股净资产（最新一期末归属股东净资产 ÷ 最新一季的加权平均股数）。"""
+    """Price-to-book: price / book value per share (equity attributable to owners at the end of the latest period / weighted average shares of the latest quarter)."""
 
     key = "pb"
     label = "PB"

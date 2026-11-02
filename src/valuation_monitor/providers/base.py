@@ -1,4 +1,4 @@
-"""各披露渠道共用的公告数据结构。"""
+"""Filing data structure shared by all disclosure channels."""
 
 from __future__ import annotations
 
@@ -10,9 +10,9 @@ import pandas as pd
 @dataclass
 class Filing:
     title: str
-    published: pd.Timestamp  # 交易所所在地的当地时间（不带时区）
+    published: pd.Timestamp  # local time of the exchange (no timezone)
     url: str
-    content: bytes  # 公告原文：港交所是 PDF，美国证监会是 HTML
-    attachments: dict[str, bytes] = field(default_factory=dict)  # 同一份公告的其他文件（如三星的资产负债表）
-    provisional: bool = False  # 暂用的初步数据（如三星业绩发布会材料），正式财报发布后会被取代
-    note: str = ""  # 发布时间等需要说明的情况（如年报沿用了业绩快报的发布时间）
+    content: bytes  # the filing itself: PDF for HKEX, HTML for the SEC
+    attachments: dict[str, bytes] = field(default_factory=dict)  # other files of the same filing (e.g. Samsung's balance sheet)
+    provisional: bool = False  # preliminary data (e.g. Samsung earnings call presentation), replaced when the official report is out
+    note: str = ""  # explanation of the publication time etc. (e.g. the annual report keeps the express report's publication time)

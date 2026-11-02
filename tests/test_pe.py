@@ -29,7 +29,7 @@ def test_pe_uses_only_published_eps_and_converts_currency():
         ttm_rows=[("2024-03-21", 10.0, 12.0), ("2024-05-15", 20.0, 25.0)],
     )
     pe = METRICS["pe"].compute(data)
-    assert pd.isna(pe.iloc[0])  # 公告尚未发布
+    assert pd.isna(pe.iloc[0])  # filing not yet published
     assert pe.iloc[1] == pytest.approx(100 / (10 * 1.1))
     assert pe.iloc[2] == pytest.approx(100 / (20 * 1.1))
     assert METRICS["pe_non_ifrs"].compute(data).iloc[2] == pytest.approx(100 / (25 * 1.1))
@@ -42,9 +42,9 @@ def test_pe_is_nan_when_eps_not_positive():
 
 def test_evaluate_percentile_and_window():
     idx = pd.date_range("2010-01-01", periods=21, freq="YS")
-    series = pd.Series(range(21), index=idx, dtype=float)  # 2010..2030，值 0..20
+    series = pd.Series(range(21), index=idx, dtype=float)  # 2010..2030, values 0..20
     v = evaluate(series, lookback_years=9, levels=DEFAULT_LEVELS)
-    # 窗口 2021..2030 共 10 个值 11..20，当前值 20 是最高
+    # window 2021..2030 has 10 values 11..20; the current value 20 is the highest
     assert v.observations == 10
     assert v.current == 20
     assert v.percentile == 100
@@ -75,7 +75,7 @@ def test_ps_and_pb_use_per_share_values_in_price_currency():
     assert ps.tolist() == pytest.approx([110 / (50 * 1.1), 110 / (60 * 1.1)])
     pb = METRICS["pb"].compute(data)
     assert pb.iloc[0] == pytest.approx(110 / (100 * 1.1))
-    assert pd.isna(pb.iloc[1])  # 净资产为负时 PB 无意义
+    assert pd.isna(pb.iloc[1])  # PB is meaningless when equity is negative
 
 
 def test_parse_config_filing_format():
@@ -93,7 +93,7 @@ def test_parse_config_lookback_options():
     c = parse_config({**raw, "lookback_options": [1, 3, 3], "lookback_years": 3})
     assert c.lookback_options == [3, 1] and c.lookback_years == 3 and c.max_lookback == 3
     with pytest.raises(ValueError, match="lookback_years"):
-        parse_config({**raw, "lookback_options": [5, 1], "lookback_years": 10})  # 默认值必须是可选年数之一
+        parse_config({**raw, "lookback_options": [5, 1], "lookback_years": 10})  # the default must be one of the selectable years
     with pytest.raises(ValueError, match="positive integers"):
         parse_config({**raw, "lookback_options": [0, 3], "lookback_years": 3})
 

@@ -155,10 +155,10 @@ def test_index_has_years_dropdown_and_all_windows(client):
     view = view_json(html)
     assert view["default"] == 10 and view["options"] == [10, 5, 3, 2, 1]
     windows = view["fields"]["0700.HK|pe"]
-    assert set(windows) == {"10", "5", "3", "2", "1"}  # 键的顺序不重要，页面按键查找
+    assert set(windows) == {"10", "5", "3", "2", "1"}  # the order of keys does not matter; the page looks them up by key
     f = windows["1"]
     assert set(f) == {"current", "percentile", "level", "color", "range", "stats", "bands", "start", "band_values"}
-    assert f["start"] > windows["10"]["start"]  # 一年窗口比十年窗口的起点晚
+    assert f["start"] > windows["10"]["start"]  # the one-year window starts later than the ten-year window
     assert set(f["band_values"]) == {"P10", "P30", "P50", "P70", "P90"}
 
 
@@ -169,7 +169,7 @@ def test_stock_page_has_chart_data_for_every_window(client):
     charts = view["charts"]
     assert {m["key"] for m in charts["metrics"]} == {"pe", "pe_non_ifrs"}
     assert set(charts["price"]["starts"]) == {"10", "5", "3", "2", "1"}
-    # 走势图数据覆盖最长的回看年数，页面上再按所选年数截取
+    # the chart data covers the longest lookback; the page cuts it to the selected years
     assert charts["metrics"][0]["dates"][0] >= view["fields"]["0700.HK|pe"]["10"]["start"]
     assert 'data-f="percentile"' in html and "ValuationView.onChange" in html
     assert 'href="/"' in html and "data-keep-years" in html
@@ -217,6 +217,6 @@ def test_chart_payload_carries_the_calculation_for_the_tooltip(client):
     assert charts["fx"] and len(charts["fx"]) == n and charts["price_ccy"] == "HKD" and charts["report_ccy"] == "CNY"
     rec = charts["records"][str(charts["rec"][-1])]
     assert "TTM EPS" in rec["lines"][0] and "2024Q2" in rec["title"]
-    # 提示框里重算的比率与走势图上的值一致
+    # the ratio recomputed in the tooltip matches the value on the trend chart
     k = n - 1
     assert charts["price"][k] / (rec["per_share"] * charts["fx"][k]) == pytest.approx(charts["values"][k], abs=0.006)

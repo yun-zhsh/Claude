@@ -1,4 +1,4 @@
-"""文字报告和走势图。"""
+"""Text report and trend charts."""
 
 from __future__ import annotations
 

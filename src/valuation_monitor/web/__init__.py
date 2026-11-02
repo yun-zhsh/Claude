@@ -1,9 +1,9 @@
-"""网页界面：首页列出跟踪的股票，每只股票有自己的页面显示走势图、数据和下载按钮。
+"""Web interface: the home page lists the tracked stocks; each stock has its own page with trend charts, data and download buttons.
 
-两种用法：
-  - valuation-monitor-web：本地运行的动态网页，可以随时点“更新数据”；
-  - valuation-monitor-export：用同一套页面导出静态网站（如发布到 GitHub Pages），
-    没有“更新数据”按钮，由定时任务重新导出。
+Two ways to use it:
+  - valuation-monitor-web: a dynamic page run locally, with an "Update data" button;
+  - valuation-monitor-export: exports the same pages as a static site (e.g. published to GitHub Pages),
+    without the "Update data" button; a scheduled job exports it again.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from valuation_monitor.config import Config, load_config
 from valuation_monitor.service import PRICE_STATUS_LABELS, MetricResult, Monitor, StockReport
 from valuation_monitor.web import downloads
 
-# 从低估到高估的配色：深绿、绿、灰、橙、红
+# Colors from undervalued to overvalued: dark green, green, grey, orange, red
 LEVEL_COLORS = ["#15803d", "#4ade80", "#9ca3af", "#fb923c", "#dc2626"]
 
 
@@ -36,9 +36,9 @@ def level_color(index: int | None, count: int) -> str:
 
 
 def window_fields(result: MetricResult, years: int, level_count: int) -> dict:
-    """某个回看年数下，页面上要显示的各项数值（已格式化成文字）。
+    """The values shown on the page under one lookback in years (already formatted as text).
 
-    页面初始渲染（Jinja）和在浏览器里切换回看年数（app.js）用的是同一份，格式不会不一致。
+    The initial render (Jinja) and switching the lookback in the browser (app.js) use the same data, so the formats cannot differ.
     """
     w = result.windows[years]
     v = w.valuation
@@ -50,13 +50,13 @@ def window_fields(result: MetricResult, years: int, level_count: int) -> dict:
         "range": f"{v.window_start:%Y-%m-%d} ~ {v.as_of:%Y-%m-%d} ({v.observations} trading days)",
         "stats": f"{v.min:.1f} / {v.mean:.1f} / {v.max:.1f}",
         "bands": " · ".join(f"P{p} {val:.1f}" for p, val in v.bands.items()),
-        "start": f"{v.window_start:%Y-%m-%d}",  # 走势图从这天开始画
+        "start": f"{v.window_start:%Y-%m-%d}",  # the trend chart starts drawing from this day
         "band_values": {f"P{p}": round(val, 2) for p, val in v.bands.items()},
     }
 
 
 def metric_views(report: StockReport, config: Config) -> list[dict]:
-    """每个指标在各个回看年数下的显示内容。"""
+    """What is displayed for each metric under each lookback in years."""
     return [
         {
             "key": r.metric.key,
@@ -69,7 +69,7 @@ def metric_views(report: StockReport, config: Config) -> list[dict]:
 
 
 def view_data(reports: list[StockReport], config: Config, **extra) -> dict:
-    """嵌入页面的数据：app.js 据此在切换回看年数时更新页面。"""
+    """Data embedded in the page: app.js uses it to update the page when the lookback is switched."""
     fields = {
         f"{r.stock.symbol}|{m['key']}": m["windows"] for r in reports for m in metric_views(r, config)
     }
@@ -77,9 +77,9 @@ def view_data(reports: list[StockReport], config: Config, **extra) -> dict:
 
 
 def audit_payload(report: StockReport, result: MetricResult, window: pd.Series) -> dict:
-    """走势图提示框要显示的计算过程：每天的收盘价、汇率、采用的业绩记录，以及各条业绩记录的算式。
+    """The calculation shown in the chart tooltip: close and FX rate of every day, the earnings record used, and the formula of each earnings record.
 
-    提示框里的 比率 = 收盘价 ÷ （每股数据 × 汇率），其中每股数据又是怎么算出来的，都能在这里找到。
+    In the tooltip, ratio = close / (per-share value x FX rate); how the per-share value is calculated can also be found here.
     """
     data = report.data
     detail = result.metric.detail(data).loc[window.index]
@@ -105,7 +105,7 @@ def audit_payload(report: StockReport, result: MetricResult, window: pd.Series) 
 
 
 def chart_payload(report: StockReport, config: Config) -> dict:
-    """走势图的数据：取最长回看年数内的全部数据，页面上按所选年数截取。"""
+    """Data of the trend charts: all data within the longest lookback; the page cuts it to the selected years."""
     charts = []
     for r in report.metrics:
         if not r.windows:
@@ -172,7 +172,7 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
         views = {r.stock.symbol: metric_views(r, monitor.config) for r in reports}
         return render_template("index.html", reports=reports, views=views, data=view_data(reports, monitor.config))
 
-    # 页面网址以 / 结尾、下载文件网址带扩展名，这样导出成静态网站后网址保持不变
+    # page URLs end with / and download URLs carry an extension, so the URLs stay the same after exporting a static site
     @app.get("/stock/<symbol>/")
     def stock(symbol: str):
         if not state:
@@ -186,7 +186,7 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
     def refresh_view():
         refresh()
         target = request.form.get("next", "")
-        # 只允许跳回本站页面（"//host" 会被浏览器当成外部网址）
+        # only allow redirecting back to pages of this site ("//host" would be taken by the browser as an external URL)
         return redirect(target if target.startswith("/") and not target.startswith("//") else url_for("index"))
 
     @app.get("/stock/<symbol>/download/<name>")
@@ -224,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def export_site(monitor: Monitor, out: str | Path, base_path: str = "") -> list[Path]:
-    """把所有页面和下载文件导出为静态网站。base_path 是网站所在的子路径（如 GitHub Pages 的 /仓库名）。"""
+    """Export all pages and downloads as a static site. base_path is the sub-path the site lives under (e.g. /repo-name on GitHub Pages)."""
     out = Path(out)
     app = create_app(monitor, static_site=True)
     app.config["refresh"]()
@@ -249,7 +249,7 @@ def export_site(monitor: Monitor, out: str | Path, base_path: str = "") -> list[
         target.write_bytes(resp.data)
         written.append(target)
     shutil.copytree(app.static_folder, out / "static")
-    (out / ".nojekyll").touch()  # 让 GitHub Pages 原样发布，不经过 Jekyll 处理
+    (out / ".nojekyll").touch()  # make GitHub Pages publish as is, without Jekyll processing
     return written
 
 

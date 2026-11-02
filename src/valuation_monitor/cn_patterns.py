@@ -20,7 +20,7 @@ BODY_TEXT_WORD = "正文"  # a report is published twice, as "full text" and as 
 
 # --- text of the reports ---------------------------------------------------------------------------------
 CJK_GAP_RE = r"(?<=[一-鿿（）]) (?=[一-鿿（）])"  # PDF text extraction inserts spaces where lines wrap inside Chinese text
-# Annual and half-year statements have a note column after the item name, e.g. "(五)45" or "七、61".
+# Annual and half-year statements have a note column after the item name: a Chinese numeral in brackets or followed by a separator, then the note number.
 NOTE = r"(?:(?:[（(][一二三四五六七八九十]+[)）]|[一二三四五六七八九十]+、)\s?\d+(?:、\d+)*\s+)?"
 FOOTNOTE = r"(?:\[\s*注\s*\d*\s*\])?"  # footnote marker in the key-data table, e.g. "[note 2]"
 

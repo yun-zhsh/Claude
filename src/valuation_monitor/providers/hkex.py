@@ -1,8 +1,8 @@
-"""港交所披露易（HKEXnews）：检索并下载上市公司的业绩公告原文 PDF。
+"""HKEXnews: search for and download the original PDFs of listed companies' earnings announcements.
 
-下载过的公告保存在 data/filings/<股票代码>/ 目录（随代码一起提交到仓库），
-目录中的 index.json 记录每份公告的标题、发布时间和原文链接。
-已经存在的 PDF 不会重复下载；无法访问披露易时，直接使用本地已保存的公告。
+Downloaded filings are saved in data/filings/<symbol>/ (committed to the repository with the code);
+index.json in that folder records the title, publication time and source link of every filing.
+Existing PDFs are not downloaded again; when HKEXnews cannot be reached, the locally saved filings are used.
 """
 
 from __future__ import annotations
@@ -19,14 +19,14 @@ from valuation_monitor.providers.base import Filing
 from valuation_monitor.providers.http import HttpClient
 
 BASE_URL = "https://www1.hkexnews.hk"
-# 业绩公告的标题各公司写法不同，如“ANNOUNCEMENT OF THE RESULTS FOR THE THREE MONTHS ENDED 31 MARCH 2026”、
-# “INTERIM RESULTS ANNOUNCEMENT FOR THE SIX MONTHS ENDED 30 JUNE 2026”，共同点是先有 RESULTS、后有“ENDED 日期”。
-# 股东大会的表决结果（POLL RESULTS OF ...）没有“ENDED 日期”，也一并排除。
+# Titles of earnings announcements differ by company, e.g. "ANNOUNCEMENT OF THE RESULTS FOR THE THREE MONTHS ENDED 31 MARCH 2026",
+# "INTERIM RESULTS ANNOUNCEMENT FOR THE SIX MONTHS ENDED 30 JUNE 2026"; what they share is RESULTS followed by "ENDED <date>".
+# Poll results of shareholder meetings (POLL RESULTS OF ...) have no "ENDED <date>" and are excluded as well.
 RESULTS_TITLE_RE = re.compile(r"\bRESULTS\b.*\bENDED \d{1,2} [A-Z]+ \d{4}", re.I)
 
 
 def stock_code(symbol: str) -> str:
-    """0700.HK -> 00700。"""
+    """0700.HK -> 00700."""
     code, _, market = symbol.upper().partition(".")
     if market != "HK":
         raise ValueError(f"Only Hong Kong stocks are supported, got {symbol}")
@@ -51,7 +51,7 @@ class HkexProvider:
         raise RuntimeError(f"HKEXnews does not know the stock code {code}")
 
     def results_announcements(self, symbol: str, since: datetime) -> list[Filing]:
-        """返回 since 之后发布的全部业绩公告（英文版），按发布时间升序。"""
+        """All earnings announcements (English version) published after `since`, in ascending order of publication time."""
         folder = self.archive_dir / symbol.upper()
         index_path = folder / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []

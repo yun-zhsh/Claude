@@ -1,4 +1,4 @@
-"""估值指标注册表。新增指标（PS、PB……）时实现 Metric 并在此注册。"""
+"""Registry of valuation metrics. To add a metric (PS, PB, ...), implement Metric and register it here."""
 
 from valuation_monitor.metrics.base import Metric
 from valuation_monitor.metrics.multiples import PB, PE, PS, NonGaapPE, NonIfrsPE
