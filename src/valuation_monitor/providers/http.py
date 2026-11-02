@@ -28,6 +28,7 @@ class HttpClient:
         self.refresh = refresh
         self.min_interval = min_interval
         self._last_request = 0.0
+        self.offline = False  # when True no network request is made: only cached content is returned, otherwise ConnectionError is raised
         self.session = requests.Session()
         self.session.headers["User-Agent"] = user_agent
 
@@ -42,6 +43,8 @@ class HttpClient:
         ):
             return path.read_bytes()
 
+        if self.offline:
+            raise requests.ConnectionError(f"Offline mode: not fetching {url}")
         for attempt in range(retries):
             wait = self._last_request + self.min_interval - time.monotonic()
             if wait > 0:
@@ -78,6 +81,8 @@ class HttpClient:
         return self._send("get", url, retries)
 
     def _send(self, method: str, url: str, retries: int, **kwargs) -> requests.Response:
+        if self.offline:
+            raise requests.ConnectionError(f"Offline mode: not fetching {url}")
         for attempt in range(retries):
             wait = self._last_request + self.min_interval - time.monotonic()
             if wait > 0:

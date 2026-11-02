@@ -12,6 +12,7 @@ import argparse
 import io
 import shutil
 import threading
+import time
 import webbrowser
 from pathlib import Path
 
@@ -135,16 +136,30 @@ def chart_payload(report: StockReport, config: Config) -> dict:
     }
 
 
-def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
+def create_app(monitor: Monitor, static_site: bool = False, reload_seconds: float = 0, cached_load_offline: bool = False) -> Flask:
+    """reload_seconds: when > 0, pages older than this are rebuilt from the saved data on the next request (a server whose data
+    is updated by another process, e.g. a scheduled job). cached_load_offline: such automatic loads do not use the network;
+    only the "Update data" button (and `refresh()`) fetch."""
     app = Flask(__name__)
     state: dict[str, StockReport] = {}
+    loaded_at = [0.0]
     lock = threading.Lock()
 
-    def refresh() -> None:
+    def refresh(offline: bool = False) -> None:
         with lock:
-            reports = monitor.analyze_all()
+            previous = monitor.offline
+            monitor.offline = offline
+            try:
+                reports = monitor.analyze_all()
+            finally:
+                monitor.offline = previous
             state.clear()
             state.update({r.stock.symbol: r for r in reports})
+            loaded_at[0] = time.monotonic()
+
+    def ensure_state() -> None:
+        if not state or (reload_seconds > 0 and time.monotonic() - loaded_at[0] > reload_seconds):
+            refresh(offline=cached_load_offline)
 
     app.config["refresh"] = refresh
 
@@ -166,8 +181,7 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
 
     @app.get("/")
     def index():
-        if not state:
-            refresh()
+        ensure_state()
         reports = list(state.values())
         views = {r.stock.symbol: metric_views(r, monitor.config) for r in reports}
         return render_template("index.html", reports=reports, views=views, data=view_data(reports, monitor.config))
@@ -175,8 +189,7 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
     # page URLs end with / and download URLs carry an extension, so the URLs stay the same after exporting a static site
     @app.get("/stock/<symbol>/")
     def stock(symbol: str):
-        if not state:
-            refresh()
+        ensure_state()
         report = state.get(symbol) or abort(404)
         payload = chart_payload(report, monitor.config) if report.data is not None else None
         data = view_data([report], monitor.config, symbol=symbol, charts=payload)
@@ -193,8 +206,7 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
     def download(symbol: str, name: str):
         if symbol not in {s.symbol for s in monitor.config.stocks} or name not in downloads.FILES:
             abort(404)
-        if not state:
-            refresh()
+        ensure_state()
         content = downloads.build(monitor, symbol, name, state.get(symbol))
         return send_file(io.BytesIO(content), as_attachment=True, download_name=downloads.download_name(symbol, name))
 

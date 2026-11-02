@@ -80,6 +80,14 @@ Notes:
 - If a public repository has no activity for 60 days, GitHub disables scheduled workflows automatically; re-enable them on the Actions page.
 - You can also export the static site locally: `.venv/bin/valuation-monitor-export --out site`.
 
+### Running on Google Cloud (dynamic page, only you can open it)
+
+The page can also run on Google Cloud Run: a scheduled Cloud Run job (`valuation-monitor-update`) fetches the data every
+4 hours into a Cloud Storage bucket, the page (served with gunicorn, `valuation_monitor.web.wsgi:app`) shows what is in the
+bucket and has the "Update data" button, and Identity-Aware Proxy lets only your Google account in. The
+`Dockerfile` builds one image used for both. Step-by-step instructions are in
+[docs/deploy-google-cloud.md](docs/deploy-google-cloud.md). It runs side by side with the GitHub Pages site.
+
 ### Command line
 
 ```bash
@@ -314,7 +322,7 @@ All of Tencent's earnings announcements since 2014 were published between 16:00 
 config.yaml                        watch list, lookback years (default and selectable), valuation levels
 CLAUDE.md                          working rules for Claude Code sessions (language rules)
 src/valuation_monitor/
-  cli.py                           command line entry point
+  cli.py                           command line entry points (valuation-monitor, valuation-monitor-update)
   config.py                        config parsing
   data.py                          gathers the data sources into what the metric calculations need
   store.py                         reading, writing and incremental updates of the data/ directory
@@ -332,9 +340,10 @@ src/valuation_monitor/
   analysis.py                      historical percentile and level
   report.py                        text report and trend charts (CLI)
   service.py                       fetches data and computes the metrics (shared by CLI and web)
-  web/                             web interface (Flask): page templates, styles, Chart.js, chart tooltips, download file generation (including daily valuation detail), static site export
+  web/                             web interface (Flask; wsgi.py is the server entry point for Cloud Run): page templates, styles, Chart.js, chart tooltips, download file generation (including daily valuation detail), static site export
 data/                              saved original filings, prices, FX rates, EPS (see "Saved data")
 .github/workflows/pages.yml        scheduled data update and GitHub Pages publication
+Dockerfile, docs/                  container image and the Google Cloud deployment guide
 tests/                             unit tests (offline, no network access)
 ```
 

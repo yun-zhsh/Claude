@@ -57,8 +57,8 @@ def test_python_comments_and_docstrings_have_no_cjk():
 
 
 def test_documentation_has_no_cjk():
-    docs = [ROOT / "README.md", ROOT / "CLAUDE.md", ROOT / "pyproject.toml"]
-    offenders = [f"{p.name}:{n}" for p in docs if p.exists() for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1) if CJK.search(line)]
+    docs = [ROOT / "README.md", ROOT / "CLAUDE.md", ROOT / "pyproject.toml", ROOT / "Dockerfile", ROOT / ".dockerignore", *sorted((ROOT / "docs").glob("*.md"))]
+    offenders = [f"{p.relative_to(ROOT)}:{n}" for p in docs if p.exists() for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1) if CJK.search(line)]
     assert not offenders, offenders
 
 
