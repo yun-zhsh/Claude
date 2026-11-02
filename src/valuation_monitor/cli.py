@@ -9,16 +9,16 @@ from valuation_monitor.service import PRICE_STATUS_LABELS, Monitor
 
 
 def add_common_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("-c", "--config", default="config.yaml", help="配置文件路径（默认 config.yaml）")
-    parser.add_argument("--data-dir", default="data", help="行情、公告、EPS 的保存目录（默认 data）")
-    parser.add_argument("--refresh", action="store_true", help="忽略 12 小时的网络请求缓存")
-    parser.add_argument("--cache-dir", default=".cache", help="数据缓存目录（默认 .cache）")
+    parser.add_argument("-c", "--config", default="config.yaml", help="Path to the config file (default: config.yaml)")
+    parser.add_argument("--data-dir", default="data", help="Directory where prices, filings and EPS data are saved (default: data)")
+    parser.add_argument("--refresh", action="store_true", help="Ignore the 12-hour network request cache")
+    parser.add_argument("--cache-dir", default=".cache", help="Directory for the request cache (default: .cache)")
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="valuation-monitor", description="监控股票估值处于历史高位还是低位")
+    parser = argparse.ArgumentParser(prog="valuation-monitor", description="Monitor whether a stock's valuation is high or low relative to its own history")
     add_common_args(parser)
-    parser.add_argument("--plot", metavar="DIR", help="把指标走势图保存到该目录")
+    parser.add_argument("--plot", metavar="DIR", help="Save the metric trend charts into this directory")
     args = parser.parse_args(argv)
 
     monitor = Monitor(load_config(args.config), args.data_dir, args.cache_dir, args.refresh)
@@ -32,17 +32,17 @@ def main(argv: list[str] | None = None) -> int:
 
         earnings = report.data.earnings
         print(
-            f"{stock.name} ({stock.symbol})  业绩数据来源：{stock.filing_source} {len(earnings.announcements)} 份业绩公告原文，"
-            f"币种 {earnings.currency}"
+            f"{stock.name} ({stock.symbol})  Earnings source: {stock.filing_source}, {len(earnings.announcements)} original filings, "
+            f"currency {earnings.currency}"
         )
         for issue in report.discrepancies:
             print(f"  ⚠ {issue}")
-        print(f"  业绩明细  {monitor.earnings.paths(stock.symbol)['periods']}")
+        print(f"  Earnings detail  {monitor.earnings.paths(stock.symbol)['periods']}")
         if stock.cross_checks_prices:
-            checks = "，".join(f"{PRICE_STATUS_LABELS[k]} {n} 天" for k, n in report.price_check.items())
-            print(f"  股价核对  腾讯证券 vs Yahoo（还原除权调整后）：{checks}（明细见 {monitor.prices.final_path(stock.symbol)}）")
+            checks = ", ".join(f"{PRICE_STATUS_LABELS[k]} {n} days" for k, n in report.price_check.items())
+            print(f"  Price check  Tencent vs Yahoo (after undoing Yahoo's adjustments): {checks} (details in {monitor.prices.final_path(stock.symbol)})")
         else:
-            print(f"  股价来源  仅 Yahoo Finance 一个来源，没有第二个来源核对（明细见 {monitor.prices.final_path(stock.symbol)}）")
+            print(f"  Price source  Yahoo Finance only, no second source to cross-check (details in {monitor.prices.final_path(stock.symbol)})")
         print()
 
         for result in report.metrics:
@@ -52,6 +52,6 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             print(format_text(stock, result.metric, result.valuation))
             if args.plot:
-                print(f"  走势图    {plot(stock, result.metric, result.series, result.valuation, args.plot)}")
+                print(f"  Chart  {plot(stock, result.metric, result.series, result.valuation, args.plot)}")
             print()
     return 1 if failed else 0

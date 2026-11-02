@@ -47,7 +47,7 @@ def window_fields(result: MetricResult, years: int, level_count: int) -> dict:
         "percentile": f"{v.percentile:.1f}",
         "level": v.level,
         "color": level_color(w.level_index, level_count),
-        "range": f"{v.window_start:%Y-%m-%d} ~ {v.as_of:%Y-%m-%d}（{v.observations} 个交易日）",
+        "range": f"{v.window_start:%Y-%m-%d} ~ {v.as_of:%Y-%m-%d} ({v.observations} trading days)",
         "stats": f"{v.min:.1f} / {v.mean:.1f} / {v.max:.1f}",
         "bands": " · ".join(f"P{p} {val:.1f}" for p, val in v.bands.items()),
         "start": f"{v.window_start:%Y-%m-%d}",  # 走势图从这天开始画
@@ -88,7 +88,7 @@ def audit_payload(report: StockReport, result: MetricResult, window: pd.Series) 
     for i in sorted({int(r) for r in detail["record"].dropna()}):
         row = data.fundamentals.iloc[i]
         rec = {
-            "title": f"{earnings.ttm_detail[i]['period_label']} 业绩（{row['published']} 发布）" if earnings and earnings.ttm_detail else str(row["published"]),
+            "title": f"{earnings.ttm_detail[i]['period_label']} results (published {row['published']})" if earnings and earnings.ttm_detail else str(row["published"]),
             "per_share": float(row[result.metric.column]),
             "lines": explain(result.metric.column, earnings.ttm_detail[i]) if earnings and earnings.ttm_detail else [],
         }
@@ -204,19 +204,19 @@ def create_app(monitor: Monitor, static_site: bool = False) -> Flask:
 def main(argv: list[str] | None = None) -> int:
     from valuation_monitor.cli import add_common_args
 
-    parser = argparse.ArgumentParser(prog="valuation-monitor-web", description="以网页形式查看股票估值")
+    parser = argparse.ArgumentParser(prog="valuation-monitor-web", description="View stock valuations as a web page")
     add_common_args(parser)
-    parser.add_argument("--port", type=int, default=8050, help="网页端口（默认 8050）")
-    parser.add_argument("--host", default="127.0.0.1", help="监听地址（默认只允许本机访问）")
-    parser.add_argument("--no-browser", action="store_true", help="启动后不自动打开浏览器")
+    parser.add_argument("--port", type=int, default=8050, help="Port of the web page (default: 8050)")
+    parser.add_argument("--host", default="127.0.0.1", help="Address to listen on (default: this machine only)")
+    parser.add_argument("--no-browser", action="store_true", help="Do not open the browser automatically")
     args = parser.parse_args(argv)
 
     monitor = Monitor(load_config(args.config), args.data_dir, args.cache_dir, args.refresh)
     app = create_app(monitor)
-    print("正在更新数据……")
+    print("Updating data...")
     app.config["refresh"]()
     url = f"http://{'127.0.0.1' if args.host in ('0.0.0.0', '::') else args.host}:{args.port}/"
-    print(f"已启动：{url}（按 Ctrl+C 退出）")
+    print(f"Started: {url} (press Ctrl+C to quit)")
     if not args.no_browser:
         threading.Timer(1.0, webbrowser.open, args=[url]).start()
     app.run(host=args.host, port=args.port, debug=False)
@@ -243,7 +243,7 @@ def export_site(monitor: Monitor, out: str | Path, base_path: str = "") -> list[
     for url, rel in pages.items():
         resp = client.get(url, base_url=base_url)
         if resp.status_code != 200:
-            raise RuntimeError(f"导出 {url} 失败：HTTP {resp.status_code}")
+            raise RuntimeError(f"Failed to export {url}: HTTP {resp.status_code}")
         target = out / rel
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(resp.data)
@@ -256,13 +256,13 @@ def export_site(monitor: Monitor, out: str | Path, base_path: str = "") -> list[
 def export_main(argv: list[str] | None = None) -> int:
     from valuation_monitor.cli import add_common_args
 
-    parser = argparse.ArgumentParser(prog="valuation-monitor-export", description="更新数据并导出静态网站")
+    parser = argparse.ArgumentParser(prog="valuation-monitor-export", description="Update the data and export a static website")
     add_common_args(parser)
-    parser.add_argument("--out", default="site", help="输出目录（默认 site，会先清空）")
-    parser.add_argument("--base-path", default="", help="网站所在的子路径，如 GitHub Pages 项目网站为 /仓库名")
+    parser.add_argument("--out", default="site", help="Output directory (default: site; it is emptied first)")
+    parser.add_argument("--base-path", default="", help="Sub-path the site is served from, e.g. /repository-name for a GitHub Pages project site")
     args = parser.parse_args(argv)
 
     monitor = Monitor(load_config(args.config), args.data_dir, args.cache_dir, args.refresh)
     written = export_site(monitor, args.out, args.base_path)
-    print(f"已导出 {len(written)} 个文件到 {args.out}/")
+    print(f"Exported {len(written)} files to {args.out}/")
     return 0

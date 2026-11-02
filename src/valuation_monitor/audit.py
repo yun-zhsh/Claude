@@ -1,11 +1,12 @@
-"""把估值指标的计算过程写成文字，供下载文件和走势图上的提示框使用，方便用户逐项核对。
+"""Write out how each valuation metric is calculated, for the download files and the chart tooltips, so users can check it step by step.
 
-一份“业绩记录”（detail）对应一份公告发布后可用的全部数据，由 filings._ttm_row 生成：
-  periods          TTM 覆盖的各期，从早到晚，如 ["2025Q3", "2025Q4", "2026Q1", "2026Q2"]
-  eps / non_ifrs_eps / revenue   各期的数值（Component），某期缺失时整项为 None
-  profit, eps_latest, shares     最新一期的归母净利润、基本 EPS，以及反推的股数
-  equity                         最新一期末的归母净资产
-所有公式都由这里统一生成，下载的 CSV 和网页提示框看到的是同一套文字。
+A "record" (detail) holds everything that became available when one filing was published; it is produced by
+filings._ttm_row:
+  periods          the periods covered by the TTM, oldest to newest, e.g. ["2025Q3", "2025Q4", "2026Q1", "2026Q2"]
+  eps / non_ifrs_eps / revenue   the value of each period (Component); None as a whole when a period is missing
+  profit, eps_latest, shares     the latest period's net profit attributable to owners, its basic EPS, and the share count
+  equity                         equity attributable to owners at the end of the latest period
+All formulas are produced here, so the CSV downloads and the web tooltips show exactly the same text.
 """
 
 from __future__ import annotations
@@ -17,14 +18,14 @@ from dataclasses import dataclass
 class Component:
     period: str
     value: float
-    derived: bool = False  # 是否由累计数相减得到（如第四季度 = 全年 − 前三季度）
-    raw: float | None = None  # 拆股调整前公告里的原始数值（没有调整过为 None）
+    derived: bool = False  # obtained by subtracting cumulative figures (e.g. Q4 = full year - first three quarters)
+    raw: float | None = None  # the original figure in the filing before the split adjustment (None if not adjusted)
 
 
 def num(value: float | None) -> str:
-    """千位分隔，最多 4 位小数，去掉多余的 0；负数加括号，方便放进加法算式。"""
+    """Thousands separators, at most 4 decimals with trailing zeros removed; negatives in parentheses so they fit inside a sum."""
     if value is None:
-        return "—"
+        return "-"
     text = f"{abs(value):,.4f}".rstrip("0").rstrip(".")
     return f"({'-' + text})" if value < 0 else text
 
@@ -39,38 +40,43 @@ def sum_formula(components: list[Component] | None, total: float | None) -> str:
     return f"{sum_terms(components)} = {num(total)}"
 
 
+SHARES_UNIT = "millions of shares; millions of ADS for ADRs"
+
+
 def shares_formula(rec: dict) -> str:
-    """股数的来源：公告披露的加权平均股数优先，公告没有披露才用净利润 ÷ 基本 EPS 反推。"""
+    """Where the share count comes from: the number disclosed in the filing first; implied (profit / basic EPS) only if none is disclosed."""
     if rec.get("shares") is None:
         return ""
-    unit = "百万股；ADR 为百万份 ADS"
     implied = rec.get("shares_implied")
+    check = f"; cross-check: net profit {num(rec['profit'])} / basic EPS {num(rec['eps_latest'])} implies {num(implied)}" if implied else ""
     parts = rec.get("shares_parts")
     if rec.get("shares_source") == "derived" and parts:
-        earlier = " + ".join(f"{x['period']} {num(x['shares'])} × {x['days']} 天" for x in parts["parts"])
-        check = f"；对照：归母净利润 {num(rec['profit'])} ÷ 基本 EPS {num(rec['eps_latest'])} 反推 {num(implied)}" if implied else ""
+        earlier = " + ".join(f"{x['period']} {num(x['shares'])} x {x['days']} days" for x in parts["parts"])
         return (
-            f"公告只披露了全年加权平均股数 {num(parts['full_year'])}，{rec['period_label']}由全年数推算："
-            f"（{num(parts['full_year'])} × {parts['year_days']} 天 − （{earlier}））÷ {parts['days']} 天 = {num(rec['shares'])}"
-            f"（百万股；ADR 为百万份 ADS）{check}"
+            f"The filing only discloses the full-year weighted average shares {num(parts['full_year'])}, so {rec['period_label']} is derived: "
+            f"({num(parts['full_year'])} x {parts['year_days']} days - ({earlier})) / {parts['days']} days = {num(rec['shares'])} "
+            f"({SHARES_UNIT}){check}"
         )
     if rec.get("shares_source") == "reported":
-        basis = "，公告披露的是全年数" if rec.get("shares_basis") else ""
-        check = f"；对照：归母净利润 {num(rec['profit'])} ÷ 基本 EPS {num(rec['eps_latest'])} 反推 {num(implied)}" if implied else ""
-        return f"公告披露的{rec['period_label']}{rec.get('shares_label', '基本 EPS 加权平均股数')} {num(rec['shares'])}（{unit}{basis}）{check}"
+        basis = "; the filing discloses the full-year figure" if rec.get("shares_basis") else ""
+        label = rec.get("shares_label", "basic EPS weighted average shares")
+        return f"{rec['period_label']} {label} disclosed in the filing: {num(rec['shares'])} ({SHARES_UNIT}{basis}){check}"
     if implied is None:
         return ""
-    return f"公告没有披露股数，用归母净利润 {num(rec['profit'])} ÷ 基本 EPS {num(rec['eps_latest'])} 反推 = {num(rec['shares'])}（{rec['period_label']}，{unit}）"
+    return (
+        f"The filing does not disclose the share count; implied from net profit {num(rec['profit'])} / basic EPS {num(rec['eps_latest'])} "
+        f"= {num(rec['shares'])} ({rec['period_label']}, {SHARES_UNIT})"
+    )
 
 
 def ratio_formula(numerator_name: str, numerator: float | None, denominator_name: str, denominator: float | None, result: float | None) -> str:
     if numerator is None or denominator is None or result is None:
         return ""
-    return f"{numerator_name} {num(numerator)} ÷ {denominator_name} {num(denominator)} = {num(result)}"
+    return f"{numerator_name} {num(numerator)} / {denominator_name} {num(denominator)} = {num(result)}"
 
 
 def split_notes(components: list[Component] | None) -> list[str]:
-    return [f"{c.period} 公告原文是 {num(c.raw)}，按拆股记录调整为 {num(c.value)}" for c in components or [] if c.raw is not None]
+    return [f"{c.period}: the filing says {num(c.raw)}, adjusted to {num(c.value)} for the stock split" for c in components or [] if c.raw is not None]
 
 
 def eps_lines(rec: dict, series: str, name: str) -> list[str]:
@@ -81,35 +87,35 @@ def eps_lines(rec: dict, series: str, name: str) -> list[str]:
 
 def ps_lines(rec: dict) -> list[str]:
     return [
-        f"每股营收 TTM = {ratio_formula('营收 TTM', rec.get('revenue_ttm'), '股数', rec.get('shares'), rec.get('revenue_per_share_ttm'))}",
-        f"营收 TTM = {sum_formula(rec.get('revenue'), rec.get('revenue_ttm'))}（百万）",
-        f"股数 = {shares_formula(rec)}",
+        f"Revenue per share (TTM) = {ratio_formula('TTM revenue', rec.get('revenue_ttm'), 'shares', rec.get('shares'), rec.get('revenue_per_share_ttm'))}",
+        f"TTM revenue = {sum_formula(rec.get('revenue'), rec.get('revenue_ttm'))} (millions)",
+        f"Shares = {shares_formula(rec)}",
     ]
 
 
 def pb_lines(rec: dict) -> list[str]:
     return [
-        f"每股净资产 = {ratio_formula('期末归母净资产', rec.get('equity'), '股数', rec.get('shares'), rec.get('book_value_per_share'))}",
-        f"期末归母净资产（{rec['period_label']}末，百万）= {num(rec.get('equity'))}",
-        f"股数 = {shares_formula(rec)}",
+        f"Book value per share = {ratio_formula('equity at period end', rec.get('equity'), 'shares', rec.get('shares'), rec.get('book_value_per_share'))}",
+        f"Equity attributable to owners at the end of {rec['period_label']} (millions) = {num(rec.get('equity'))}",
+        f"Shares = {shares_formula(rec)}",
     ]
 
 
 EXPLAINERS = {
-    "eps_ttm": lambda rec: eps_lines(rec, "eps", "TTM EPS（基本 EPS 各期之和）"),
-    "non_ifrs_eps_ttm": lambda rec: eps_lines(rec, "non_ifrs_eps", "TTM Non-IFRS/Non-GAAP EPS（各期之和）"),
+    "eps_ttm": lambda rec: eps_lines(rec, "eps", "TTM EPS (sum of the basic EPS of each period)"),
+    "non_ifrs_eps_ttm": lambda rec: eps_lines(rec, "non_ifrs_eps", "TTM Non-IFRS/Non-GAAP EPS (sum of each period)"),
     "revenue_per_share_ttm": ps_lines,
     "book_value_per_share": pb_lines,
 }
 
 
 def explain(column: str, rec: dict) -> list[str]:
-    """某项每股数据（TTM EPS、每股营收、每股净资产……）是怎么算出来的，逐行说明。"""
+    """How a per-share item (TTM EPS, revenue per share, book value per share, ...) is calculated, line by line."""
     lines = [line for line in EXPLAINERS[column](rec) if line]
     if any(c.derived for key in ("eps", "non_ifrs_eps", "revenue") for c in rec.get(key) or []):
-        lines.append("* 由累计数相减得到（如第四季度 = 全年 − 前三季度）")
+        lines.append("* obtained by subtracting cumulative figures (e.g. Q4 = full year - first three quarters)")
     if rec.get("note"):
         lines.append(rec["note"])
     if rec.get("provisional"):
-        lines.append("本期数据暂用初步数据（业绩发布会材料或业绩快报，审阅/审计前），正式报告发布后自动替换")
+        lines.append("This period uses preliminary data (earnings call presentation or express report, before the external review/audit); it is replaced automatically when the official report is out")
     return lines

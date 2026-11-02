@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>跟踪的股票</h1>
-<p class="muted">点击股票查看估值走势、数据核对情况，并下载历史数据。历史分位按右上角选择的年数计算。</p>
+<h1>Tracked stocks</h1>
+<p class="muted">Click a stock to see its valuation trends and data checks, and to download the historical data. The percentile is based on the number of years selected at the top right.</p>
 
 <div class="stock-list">
   {% for r in reports %}
@@ -28,7 +28,7 @@
         {% if m.windows %}
         {% set f = m.windows[default_years] %}
         <span class="metric-value" data-f="current">{{ f.current }}</span>
-        <span class="muted">分位 <span data-f="percentile">{{ f.percentile }}</span>%</span>
+        <span class="muted">Percentile <span data-f="percentile">{{ f.percentile }}</span>%</span>
         <span class="badge" data-f="level" data-f-color style="--c: {{ f.color }}">{{ f.level }}</span>
         {% else %}
         <span class="error">{{ m.error }}</span>
@@ -39,7 +39,7 @@
     {% endif %}
   </a>
   {% else %}
-  <p>配置文件中还没有股票。</p>
+  <p>There are no stocks in the config file yet.</p>
   {% endfor %}
 </div>
 {% endblock %}

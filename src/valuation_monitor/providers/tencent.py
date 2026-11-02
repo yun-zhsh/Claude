@@ -35,7 +35,7 @@ class TencentQuoteProvider:
                 KLINE_URL, params={"param": f"{code},day,{begin:%Y-%m-%d},{year}-12-31,{MAX_ROWS},"}
             )
             if data.get("code") != 0 or not isinstance(data.get("data"), dict):
-                raise RuntimeError(f"腾讯行情接口返回错误: {data.get('msg')}")
+                raise RuntimeError(f"The Tencent quote API returned an error: {data.get('msg')}")
             rows = data["data"][code].get("day", [])
             # 每行依次为：日期、开盘、收盘、最高、最低、成交量（之后可能还有除权信息等）
             parts.append(

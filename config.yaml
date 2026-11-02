@@ -1,55 +1,57 @@
-# 估值监控配置
+# Valuation monitor configuration
 #
-# 判断方法：把当前指标值放到过去若干年（lookback_years，网页上可以切换）的历史分布里，算出历史分位数，
-# 再按 levels 划分成估值档位。
+# Method: the current value of a metric is placed in its own distribution over the past N years (lookback_years;
+# switchable on the web page) to get a historical percentile, which is then mapped to a valuation level by `levels`.
 
-lookback_years: 10   # 默认选中的回看年数
-lookback_options: [10, 5, 3, 2, 1]   # 网页首页下拉框里可以选的回看年数
+lookback_years: 10   # the number of years selected by default
+lookback_options: [10, 5, 3, 2, 1]   # the number of years that can be chosen in the drop-down on the web page
 
-# 估值档位：分位数 <= upper 时归入该档（按 upper 从小到大排列，最后一档 upper 应为 100）
+# Valuation levels: a percentile <= upper falls into that level (sorted by upper ascending; the last upper must be 100)
 levels:
-  - { upper: 10, label: 极度低估 }
-  - { upper: 30, label: 低估 }
-  - { upper: 70, label: 合理 }
-  - { upper: 90, label: 高估 }
-  - { upper: 100, label: 极度高估 }
+  - { upper: 10, label: Deeply undervalued }
+  - { upper: 30, label: Undervalued }
+  - { upper: 70, label: Fair }
+  - { upper: 90, label: Overvalued }
+  - { upper: 100, label: Deeply overvalued }
 
-# 可用指标：
-#   pe           PE (TTM)，按 IFRS 口径的归母净利润
-#   pe_non_ifrs  PE Non-IFRS (TTM)，按公司披露的 Non-IFRS 利润，剔除投资收益等一次性项目
-#   pe_non_gaap  PE Non-GAAP (TTM)，美股公司披露的 Non-GAAP 利润（剔除股权激励等），口径同 pe_non_ifrs
-#   ps           PS (TTM)，市销率，按最近 4 个季度营收
-#   pb           PB，市净率，按最新一期末归属股东净资产
-# filing_format：业绩公告的版式，决定怎样从公告里提取数据
-#   highlights  第一页有财务摘要表，每季度发布业绩（腾讯）
-#   statements  只有合并损益表和资产负债表，通常每半年发布业绩（舜宇光学）
-#   press_release  美股公司在美国证监会 EDGAR 提交的业绩新闻稿（6-K），每季度发布；需要配置 cik
-#   kifrs_statements  三星电子 IR 网站的英文合并财务报表（K-IFRS），每季度发布，market 为 KR
-#   cn_report  A 股公司在巨潮资讯网披露的定期报告（一季报、半年报、三季报、年报）和年度业绩快报（中文原文），market 为 CN
-# market：HK（港交所披露易，symbol 以 .HK 结尾时默认）、US（美国证监会 EDGAR）、KR（韩国公司的 IR 网站，symbol 以 .KS 结尾时默认）或 CN（A 股，巨潮资讯网，symbol 以 .SZ、.SS 结尾时默认）。
-# 访问 EDGAR 要求声明使用者：运行前设置环境变量 SEC_USER_AGENT="valuation-monitor 你的邮箱"（见 README）。
+# Available metrics:
+#   pe           PE (TTM), based on net profit attributable to owners under IFRS/GAAP
+#   pe_non_ifrs  PE Non-IFRS (TTM), based on the company's Non-IFRS profit, which excludes one-off items such as investment gains
+#   pe_non_gaap  PE Non-GAAP (TTM), based on the Non-GAAP profit disclosed by US-listed companies (excludes share-based compensation etc.); same idea as pe_non_ifrs
+#   ps           PS (TTM), price to sales, based on revenue of the last 4 quarters
+#   pb           PB, price to book, based on equity attributable to owners at the end of the latest period
+# filing_format: the layout of the earnings filings, which decides how the data is extracted
+#   highlights        a financial highlights table on the first page, results every quarter (Tencent)
+#   statements        only consolidated statements, usually results every half year (Sunny Optical)
+#   press_release     earnings press release (Form 6-K) filed with the SEC on EDGAR by US-listed companies, every quarter; needs a cik
+#   kifrs_statements  English consolidated financial statements (K-IFRS) on the Samsung Electronics IR website, every quarter; market KR
+#   cn_report         periodic reports (Q1, half-year, Q3, annual) and annual express reports of A-share companies on CNINFO (Chinese originals); market CN
+# market: HK (HKEXnews; default for symbols ending in .HK), US (SEC EDGAR), KR (the IR website of a Korean company; default for
+# symbols ending in .KS) or CN (A-shares, CNINFO; default for symbols ending in .SZ or .SS).
+# Accessing EDGAR requires identifying yourself: before running, set the environment variable
+# SEC_USER_AGENT="valuation-monitor your-email" (see the README).
 stocks:
-  - symbol: 0700.HK   # Yahoo Finance 代码
-    name: 腾讯控股
+  - symbol: 0700.HK   # Yahoo Finance symbol
+    name: Tencent Holdings
     filing_format: highlights
     metrics: [pe, pe_non_ifrs, ps, pb]
   - symbol: 2382.HK
-    name: 舜宇光学科技
-    filing_format: statements   # 舜宇只披露 HKFRS 数据，没有 Non-IFRS，所以不配 pe_non_ifrs
+    name: Sunny Optical Technology
+    filing_format: statements   # Sunny only discloses HKFRS figures, no Non-IFRS, so pe_non_ifrs is not configured
     metrics: [pe, ps, pb]
   - symbol: JD
-    name: 京东（ADR）
+    name: JD.com (ADR)
     market: US
-    cik: 1549802   # 京东在美国证监会的编号
-    filing_format: press_release   # 股价是美元一股 ADS（2 股 A 类普通股），EPS 用每份 ADS 的人民币数据
+    cik: 1549802   # JD.com's SEC Central Index Key
+    filing_format: press_release   # the price is in USD per ADS (2 Class A ordinary shares); EPS is in RMB per ADS
     metrics: [pe, pe_non_gaap, ps, pb]
   - symbol: 005930.KS
-    name: 三星电子
-    market: KR   # 业绩取自三星 IR 网站的英文合并财务报表（K-IFRS），每季度发布
-    filing_format: kifrs_statements   # EPS 为普通股基本 EPS（韩元），股价 Yahoo 是韩元，不需要汇率
+    name: Samsung Electronics
+    market: KR   # earnings come from the English consolidated financial statements (K-IFRS) on the Samsung IR website, every quarter
+    filing_format: kifrs_statements   # EPS is the basic EPS of common stock (KRW); the Yahoo price is in KRW too, so no FX rate is needed
     metrics: [pe, ps, pb]
   - symbol: 002415.SZ
-    name: 海康威视
-    market: CN   # 业绩取自巨潮资讯网（证监会指定披露平台）的中文定期报告和年度业绩快报
-    filing_format: cn_report   # 股价和财报都是人民币；公司不披露 Non-GAAP 数据
+    name: Hikvision
+    market: CN   # earnings come from the Chinese periodic reports and annual express reports on CNINFO (the CSRC-designated disclosure platform)
+    filing_format: cn_report   # price and financials are both in RMB; the company does not disclose Non-GAAP figures
     metrics: [pe, ps, pb]

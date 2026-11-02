@@ -102,7 +102,7 @@ def unit_scale(table, rows: list[list[str]]) -> float:
     for s in table.find_all_previous(string=True, limit=40):
         if m := UNIT_RE.search(clean(s)):
             return 0.001 if m.group(1).lower() == "thousands" else 1.0
-    raise ValueError("找不到金额单位")
+    raise ValueError("Cannot find the unit of the amounts")
 
 
 def columns_by_date(header: Header, group: int, values: list[float]) -> dict[pd.Timestamp, float]:
@@ -137,7 +137,7 @@ def quarter_offsets(by_date: dict[pd.Timestamp, float]) -> tuple[pd.Period, list
     current = max(periods)
     out = [periods.get(current), periods.get(current - 4), periods.get(current - 1)]
     if out[0] is None or out[1] is None:
-        raise ValueError(f"季度数据缺少本期或去年同期: {sorted(periods)}")
+        raise ValueError(f"The quarterly data lacks the current or the prior-year quarter: {sorted(periods)}")
     return current, out[:2] if out[2] is None else out
 
 
@@ -241,16 +241,16 @@ def parse_press_release(html: bytes) -> Parsed:
 
     missing = {"revenue", "profit", "eps", "equity"} - candidates.keys()
     if missing:
-        raise ValueError(f"没有找到: {sorted(missing)}")
+        raise ValueError(f"Not found: {sorted(missing)}")
     values: dict[str, list[float]] = {}
     periods = set()
     for key, found in candidates.items():
         (period, first), *others = found
         for p, other in others:
             if p != period or any(not close(a, b, key) for a, b in zip(other, first)):
-                raise ValueError(f"{key} 在不同表格中不一致: {found}")
+                raise ValueError(f"{key} differs between tables: {found}")
         values[key] = first
         periods.add(period)
     if len(periods) != 1:
-        raise ValueError(f"各行的报告期不一致: {periods}")
+        raise ValueError(f"The rows disagree on the reporting period: {periods}")
     return Parsed("CNY", values, periods.pop())

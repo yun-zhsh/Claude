@@ -7,7 +7,7 @@ from valuation_monitor.filings import Announcement, build_history
 
 def test_num_formats_for_use_inside_sums():
     assert num(1234.5) == "1,234.5" and num(2874.0) == "2,874" and num(0.123456) == "0.1235"
-    assert num(-1.93) == "(-1.93)" and num(None) == "—"
+    assert num(-1.93) == "(-1.93)" and num(None) == "-"
 
 
 def test_sum_formula_marks_derived_periods():
@@ -18,7 +18,7 @@ def test_sum_formula_marks_derived_periods():
 
 def test_split_adjustment_is_explained():
     assert split_notes([Component("2018Q1", 1708.7, raw=85435.0), Component("2018Q2", 1617.0)]) == [
-        "2018Q1 公告原文是 85,435，按拆股记录调整为 1,708.7"
+        "2018Q1: the filing says 85,435, adjusted to 1,708.7 for the stock split"
     ]
 
 
@@ -43,21 +43,21 @@ def test_ttm_frame_lists_components_and_formulas_that_add_up():
     assert [row[f"period_{k}"] for k in range(1, 5)] == ["2024Q1", "2024Q2", "2024Q3", "2024Q4"]
     assert [row[f"eps_{k}"] for k in range(1, 5)] == [1.0, 2.0, 3.0, 4.0]
     assert row["eps_ttm"] == 10.0 and row["eps_ttm_formula"] == "2024Q1 1 + 2024Q2 2 + 2024Q3 3 + 2024Q4 4 = 10"
-    assert row["revenue_ttm"] == 460.0 and row["shares"] == 10.0  # 股数 = 40 ÷ 4
-    assert row["shares_formula"] == "公告没有披露股数，用归母净利润 40 ÷ 基本 EPS 4 反推 = 10（2024Q4，百万股；ADR 为百万份 ADS）"
-    assert row["shares_source"] == "反推"
-    assert row["revenue_per_share_formula"] == "460 ÷ 10 = 46"
-    assert row["book_value_per_share_formula"] == "560 ÷ 10 = 56"
+    assert row["revenue_ttm"] == 460.0 and row["shares"] == 10.0  # shares = 40 / 4
+    assert row["shares_formula"] == "The filing does not disclose the share count; implied from net profit 40 / basic EPS 4 = 10 (2024Q4, millions of shares; millions of ADS for ADRs)"
+    assert row["shares_source"] == "implied (profit / EPS)"
+    assert row["revenue_per_share_formula"] == "460 / 10 = 46"
+    assert row["book_value_per_share_formula"] == "560 / 10 = 56"
 
 
 def test_explain_lines_for_each_per_share_item():
     rec = history(provisional=True).ttm_detail[-1]
     assert explain("eps_ttm", rec)[0].endswith("= 10")
     ps = explain("revenue_per_share_ttm", rec)
-    assert ps[0].startswith("每股营收 TTM = 营收 TTM 460 ÷ 股数 10") and "2024Q1 100" in ps[1]
+    assert ps[0].startswith("Revenue per share (TTM) = TTM revenue 460 / shares 10") and "2024Q1 100" in ps[1]
     pb = explain("book_value_per_share", rec)
-    assert pb[0].startswith("每股净资产 = 期末归母净资产 560 ÷ 股数 10")
-    assert any("暂用初步数据" in line for line in pb)
+    assert pb[0].startswith("Book value per share = equity at period end 560 / shares 10")
+    assert any("preliminary data" in line for line in pb)
 
 
 def history_with_reported_shares(basis=""):
@@ -78,14 +78,14 @@ def history_with_reported_shares(basis=""):
 def test_reported_weighted_average_shares_are_used_before_the_implied_ones():
     h = history_with_reported_shares()
     row = h.ttm_frame().iloc[-1]
-    assert row["shares"] == 9.9 and row["shares_source"] == "公告披露" and row["shares_implied"] == 10.0  # 反推的 40 ÷ 4 只作对照
+    assert row["shares"] == 9.9 and row["shares_source"] == "reported" and row["shares_implied"] == 10.0  # the implied 40 / 4 is only a cross-check
     assert row["book_value_per_share"] == round(560.0 / 9.9, 4)
-    assert row["shares_formula"].startswith("公告披露的2024Q4基本 EPS 加权平均股数 9.9")
-    assert "对照：归母净利润 40 ÷ 基本 EPS 4 反推 10" in row["shares_formula"]
+    assert row["shares_formula"].startswith("2024Q4 basic EPS weighted average shares disclosed in the filing: 9.9")
+    assert "cross-check: net profit 40 / basic EPS 4 implies 10" in row["shares_formula"]
 
 
 def test_full_year_shares_are_turned_into_fourth_quarter_shares():
-    """第四季度公告只披露全年加权平均股数：本期 = (全年 × 全年天数 − 前三季度各自股数 × 天数) ÷ 第四季度天数。"""
+    """A Q4 filing only discloses the full-year weighted average shares: Q4 = (full year x days in year - sum of each of the first three quarters x its days) / days in Q4."""
     def a(period, published, shares, basis=""):
         return Announcement(pd.Period(period, freq="Q"), pd.Timestamp(published), f"u-{period}", "CNY", True,
                             {"eps": [1.0, 1.0], "revenue": [100.0, 100.0], "profit": [10.0, 10.0], "equity": [500.0, 480.0], "wa_shares": shares},
@@ -96,17 +96,17 @@ def test_full_year_shares_are_turned_into_fourth_quarter_shares():
             a("2024Q1", "2024-05-01 17:00", [10.2, 10.4]),
             a("2024Q2", "2024-08-01 17:00", [10.1, 10.3]),
             a("2024Q3", "2024-11-01 17:00", [10.05, 10.2]),
-            a("2024Q4", "2025-02-01 17:00", [10.0, 10.3], "全年"),  # 2024 年 366 天：91 + 91 + 92 + 92
+            a("2024Q4", "2025-02-01 17:00", [10.0, 10.3], "full year"),  # 2024 has 366 days: 91 + 91 + 92 + 92
         ]
     )
     row = h.ttm_frame().iloc[-1]
     expected = (10.0 * 366 - (10.2 * 91 + 10.1 * 91 + 10.05 * 92)) / 92
-    assert row["shares"] == pytest.approx(expected, abs=1e-3) and row["shares_source"] == "由全年数推算"
-    assert "（10 × 366 天 − （2024Q1 10.2 × 91 天 + 2024Q2 10.1 × 91 天 + 2024Q3 10.05 × 92 天））÷ 92 天 = 9.653" in row["shares_formula"]
+    assert row["shares"] == pytest.approx(expected, abs=1e-3) and row["shares_source"] == "derived from the full-year figure"
+    assert "(10 x 366 days - (2024Q1 10.2 x 91 days + 2024Q2 10.1 x 91 days + 2024Q3 10.05 x 92 days)) / 92 days = 9.653" in row["shares_formula"]
 
-    # 前三季度没有披露股数时，不用全年数硬凑，改为反推
-    h = build_history([a("2024Q4", "2025-02-01 17:00", [10.0, 10.3], "全年")])
-    assert h.ttm_frame().iloc[-1]["shares_source"] == "反推"
+    # when the first three quarters have no disclosed shares, do not force the full-year figure; fall back to implied
+    h = build_history([a("2024Q4", "2025-02-01 17:00", [10.0, 10.3], "full year")])
+    assert h.ttm_frame().iloc[-1]["shares_source"] == "implied (profit / EPS)"
 
 
 def test_share_counts_are_multiplied_by_splits():

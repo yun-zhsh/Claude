@@ -91,12 +91,12 @@ SERIES = FLOWS + BALANCES + SHARE_COUNTS
 SERIES_LABELS = {
     "eps": "EPS",
     "non_ifrs_eps": "Non-IFRS EPS",
-    "revenue": "营收",
-    "profit": "归母净利润",
-    "equity": "归母净资产",
-    "wa_shares": "加权平均股数",
+    "revenue": "Revenue",
+    "profit": "Net profit attributable to owners",
+    "equity": "Equity attributable to owners",
+    "wa_shares": "Weighted average shares",
 }
-PARSER_VERSIONS = {"highlights": 4, "statements": 2, "press_release": 2, "kifrs_statements": 3, "cn_report": 2}  # 解析规则变化时加 1，已保存的解析结果会自动重新解析
+PARSER_VERSIONS = {"highlights": 5, "statements": 3, "press_release": 3, "kifrs_statements": 4, "cn_report": 3}  # 解析规则变化时加 1，已保存的解析结果会自动重新解析
 PER_SHARE_TOLERANCE = 0.005  # 不同公告对同一数值允许的差异：每股数据（四舍五入、累计数相减）
 PER_SHARE_RELATIVE_TOLERANCE = 5e-4
 AMOUNT_TOLERANCE = 0.001  # 金额按相对差异
@@ -121,9 +121,9 @@ TTM_COLUMNS = [
 
 
 PROVISIONAL_NOTES = {
-    "KR": "来自业绩发布会材料（审阅前；营收、净利润只精确到 0.1 万亿韩元，净资产是估算值），英文财报发布后会自动换成财报数字",
-    "CN": "来自业绩快报（未经会计师审计，与年报的最终数字可能略有差异），年报发布后会自动换成年报数字",
-    "*": "是初步数据，正式报告发布后会自动替换",
+    "KR": "comes from the earnings call presentation (before the external review; revenue and net profit are only precise to KRW 0.1 trillion and equity is an estimate); it is replaced automatically when the English financial statements are out",
+    "CN": "comes from the express report (not audited by the accounting firm, so it may differ slightly from the final annual report numbers); it is replaced automatically when the annual report is out",
+    "*": "is preliminary and is replaced automatically when the official report is out",
 }
 
 
@@ -144,7 +144,7 @@ class Announcement:
     market: str = "HK"  # 上市地，决定收盘时间
     provisional: bool = False  # 暂用的初步数据，正式财报发布后会被取代
     shares_basis: str = ""  # 公告披露的加权平均股数对应的期间：空表示就是本期，“全年”表示披露的是全年数（第四季度）
-    shares_label: str = "基本 EPS 加权平均股数"  # 公告里披露的是什么股数（A 股公司披露的是期末总股本）
+    shares_label: str = "basic EPS weighted average shares"  # what kind of share count the filing discloses (A-share companies disclose the period-end total shares)
     note: str = ""  # 发布时间等需要说明的情况
 
     @property
@@ -175,7 +175,7 @@ class QuarterValue:
 def parse_period(title: str) -> pd.Period:
     m = PERIOD_RE.search(title)
     if not m:
-        raise ValueError(f"无法从标题识别报告期: {title}")
+        raise ValueError(f"Cannot tell the reporting period from the title: {title}")
     return pd.Period(year=int(m.group(3)), quarter=MONTH_TO_QUARTER[m.group(2).upper()], freq="Q")
 
 
@@ -232,7 +232,7 @@ def parse_summary_table(text: str) -> tuple[str, dict[str, list[float]]]:
         values[key] = [to_number(t) for t in m.group("body").split() if NUMBER_RE.fullmatch(t)]
         currency = currency or CURRENCY_CODES.get(m.group("ccy"), m.group("ccy"))
     if "eps" not in values:
-        raise ValueError("没有找到 EPS 行")
+        raise ValueError("The EPS row was not found")
 
     count = len(values["eps"])
     for key, pattern in (("revenue", REVENUE_RE), ("profit", PROFIT_RE)):
@@ -283,7 +283,7 @@ def parse_statements(pages: Pages) -> tuple[str, dict[str, list[float]]]:
     """
     start = next((i for i in range(len(pages)) if REVENUE_STMT_RE.search(" ".join(pages[i].split()))), None)
     if start is None:
-        raise ValueError("没有找到合并损益表")
+        raise ValueError("The consolidated income statement was not found")
 
     values: dict[str, list[float]] = {}
     currency = None
@@ -291,7 +291,7 @@ def parse_statements(pages: Pages) -> tuple[str, dict[str, list[float]]]:
 
     def amounts(m: re.Match) -> list[float]:
         if scale is None:
-            raise ValueError("找不到金额单位")
+            raise ValueError("Cannot find the unit of the amounts")
         return [to_number(m.group("a")) * scale, to_number(m.group("b")) * scale]
 
     for i in range(start, len(pages)):
@@ -316,7 +316,7 @@ def parse_statements(pages: Pages) -> tuple[str, dict[str, list[float]]]:
             break
     missing = {"revenue", "profit", "equity", "eps"} - values.keys()
     if missing:
-        raise ValueError(f"没有找到: {sorted(missing)}")
+        raise ValueError(f"Not found: {sorted(missing)}")
     for i in range(len(pages)):
         if m := WA_SHARES_STMT_RE.search(" ".join(pages[i].split())):
             values["wa_shares"] = [to_number(m.group("a")) / 1000, to_number(m.group("b")) / 1000]  # 千股 -> 百万股
@@ -331,10 +331,10 @@ FILING_FORMATS = {*FORMATS, "press_release", "kifrs_statements", "cn_report"}  #
 def parse_announcement(filing: Filing, fmt: str = "highlights", market: Market = HK) -> Announcement:
     """解析一份业绩公告，数值保持公告原样（金额已换算成百万元，EPS 已换算成元；未做拆股调整）。"""
     if fmt == "cn_report":  # A 股：定期报告或业绩快报（暂用）
-        parsed = parse_cn_express(filing.title, filing.content) if "业绩快报" in filing.title else parse_cn_report(filing.title, filing.content)
+        parsed = parse_cn_express(filing.title, filing.content) if "express" in filing.title else parse_cn_report(filing.title, filing.content)
         return Announcement(
             parsed.period, filing.published, filing.url, parsed.currency, parsed.quarterly, parsed.values, market.key,
-            filing.provisional, "", "期末总股本", filing.note,
+            filing.provisional, "", "period-end total shares", filing.note,
         )
     if fmt in ("press_release", "kifrs_statements"):  # 解析结果自带报告期和是否单季数据
         if fmt == "press_release":
@@ -343,7 +343,7 @@ def parse_announcement(filing: Filing, fmt: str = "highlights", market: Market =
             parsed = parse_kifrs_deck(filing.title, filing.content, filing.attachments["previous_bs"])
         else:
             parsed = parse_kifrs(filing.title, filing.content, filing.attachments["bs"], filing.attachments.get("note"))
-        basis = "全年" if parsed.period.quarter == 4 and not parsed.quarterly else ""
+        basis = "full year" if parsed.period.quarter == 4 and not parsed.quarterly else ""
         return Announcement(
             parsed.period, filing.published, filing.url, parsed.currency, parsed.quarterly, parsed.values, market.key,
             filing.provisional, basis,
@@ -357,12 +357,12 @@ def parse_announcement(filing: Filing, fmt: str = "highlights", market: Market =
     elif counts == {2}:
         quarterly = period.quarter == 1  # 一季度公告的“累计”就是单季
     else:
-        raise ValueError(f"{filing.url}: 各行的数值个数不符合预期: {values}")
+        raise ValueError(f"{filing.url}: unexpected number of values per row: {values}")
     basis = ""
     if shares is not None:
         # 腾讯的附注里三个月、累计各两个数（本期、去年同期）：取三个月的，对应本季度；
         # 只有两个数的是第一季度（三个月）或全年（第四季度公告没有单独列第四季度的股数）
-        basis = "全年" if period.quarter == 4 and (len(shares) == 2 or fmt == "statements") else ""
+        basis = "full year" if period.quarter == 4 and (len(shares) == 2 or fmt == "statements") else ""
         values["wa_shares"] = shares[:2]
     return Announcement(period, filing.published, filing.url, currency, quarterly, values, market.key, False, basis)
 
@@ -426,7 +426,7 @@ def announcements_from_frame(df: pd.DataFrame, market: Market = HK) -> list[Anno
                 market=market.key,
                 provisional=str(r.get("provisional", "")) == "1",
                 shares_basis=str(r.get("shares_basis", "")),
-                shares_label=str(r.get("shares_label", "")) or "基本 EPS 加权平均股数",
+                shares_label=str(r.get("shares_label", "")) or "basic EPS weighted average shares",
                 note=str(r.get("note", "")),
             )
         )
@@ -462,21 +462,21 @@ class EarningsHistory:
             fmt = "{:.3f}" if series in PER_SHARE else "{:,.0f}"
             for p, q in sorted(quarters.items()):
                 if q.max_deviation > tolerance(series, q.value):
-                    vals = ", ".join(fmt.format(o.value) + ("(累计数推算)" if o.derived else "") for o in q.observations)
+                    vals = ", ".join(fmt.format(o.value) + (" (derived from cumulative figures)" if o.derived else "") for o in q.observations)
                     out.append(
-                        f"{SERIES_LABELS[series]} {period_label(p, self.periods_per_year)} 在不同公告中数值不一致（可能是公司重述）[{vals}]，"
-                        f"采用最早公布的 {fmt.format(q.value)}"
+                        f"{SERIES_LABELS[series]} {period_label(p, self.periods_per_year)} differs between filings (probably a restatement) [{vals}]; "
+                        f"using the first published value {fmt.format(q.value)}"
                     )
         for a in self.announcements:
             if a.provisional:
-                out.append(f"{period_label(a.period, self.periods_per_year)} 的数据{PROVISIONAL_NOTES.get(a.market, PROVISIONAL_NOTES['*'])}")
+                out.append(f"The {period_label(a.period, self.periods_per_year)} data {PROVISIONAL_NOTES.get(a.market, PROVISIONAL_NOTES['*'])}")
         shares = {p: s for p in sorted(self.quarters["eps"]) if (s := implied_shares(self.quarters, p))}
         periods = list(shares)
         label = lambda p: period_label(p, self.periods_per_year)  # noqa: E731
         for prev, cur in zip(periods, periods[1:]):
             if cur - prev == self.step and abs(shares[cur] / shares[prev] - 1) > SHARES_CHANGE_LIMIT:
                 out.append(
-                    f"反推股数 {label(prev)} {shares[prev]:,.0f} → {label(cur)} {shares[cur]:,.0f} 百万股，变化超过 5%，请核对"
+                    f"Implied shares {label(prev)} {shares[prev]:,.0f} -> {label(cur)} {shares[cur]:,.0f} million changed by more than 5%; please check"
                 )
         return out
 
@@ -519,7 +519,7 @@ class EarningsHistory:
         extra["non_ifrs_eps_ttm_formula"] = [sum_formula(r["non_ifrs_eps"], r["non_ifrs_eps_ttm"]) for r in self.ttm_detail]
         extra["revenue_ttm_formula"] = [sum_formula(r["revenue"], r["revenue_ttm"]) for r in self.ttm_detail]
         extra["shares_formula"] = [shares_formula(r) for r in self.ttm_detail]
-        extra["shares_source"] = [{"reported": "公告披露", "derived": "由全年数推算", "implied": "反推"}[r["shares_source"]] for r in self.ttm_detail]
+        extra["shares_source"] = [{"reported": "reported", "derived": "derived from the full-year figure", "implied": "implied (profit / EPS)"}[r["shares_source"]] for r in self.ttm_detail]
         extra["shares_implied"] = [r["shares_implied"] for r in self.ttm_detail]
         extra["revenue_per_share_formula"] = [
             _division(r["revenue_ttm"], r["shares"], r["revenue_per_share_ttm"]) for r in self.ttm_detail
@@ -527,7 +527,7 @@ class EarningsHistory:
         extra["book_value_per_share_formula"] = [_division(r["equity"], r["shares"], r["book_value_per_share"]) for r in self.ttm_detail]
         extra["published_note"] = [r["note"] for r in self.ttm_detail]
         extra["split_note"] = [
-            "；".join(split_notes(r["eps"]) + split_notes(r["non_ifrs_eps"])) for r in self.ttm_detail
+            "; ".join(split_notes(r["eps"]) + split_notes(r["non_ifrs_eps"])) for r in self.ttm_detail
         ]
         df = pd.concat([df.reset_index(drop=True), pd.DataFrame(extra)], axis=1)
         return df[[c for c in TTM_FRAME_ORDER if c in df]]
@@ -536,7 +536,7 @@ class EarningsHistory:
 def _division(numerator: float | None, denominator: float | None, result: float | None) -> str:
     if numerator is None or not denominator or result is None:
         return ""
-    return f"{num(numerator)} ÷ {num(denominator)} = {num(result)}"
+    return f"{num(numerator)} / {num(denominator)} = {num(result)}"
 
 
 def effective_day(available: pd.Timestamp, trading_days: pd.DatetimeIndex | None):
@@ -562,7 +562,7 @@ def build_history(parsed: list[Announcement], splits: pd.Series | None = None) -
 
     currencies = {a.currency for a in announcements.values()}
     if len(currencies) != 1:
-        raise ValueError(f"公告中的 EPS 币种不一致: {currencies}")
+        raise ValueError(f"The filings disagree on the EPS currency: {currencies}")
     per_year = infer_periods_per_year(list(announcements))
     step = 4 // per_year
 

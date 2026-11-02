@@ -37,7 +37,7 @@ def classify(percentile: float, levels: list[Level]) -> str:
 def evaluate(series: pd.Series, lookback_years: int, levels: list[Level]) -> Valuation:
     series = series.dropna()
     if series.empty:
-        raise ValueError("指标序列为空（可能长期亏损或数据缺失）")
+        raise ValueError("The metric series is empty (the company may have been loss-making throughout, or data is missing)")
     as_of = series.index[-1]
     window_start = as_of - pd.DateOffset(years=lookback_years)
     window = series[series.index >= window_start]

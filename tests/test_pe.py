@@ -6,7 +6,7 @@ from valuation_monitor.config import DEFAULT_LEVELS, StockConfig, parse_config
 from valuation_monitor.data import StockData
 from valuation_monitor.metrics import METRICS
 
-STOCK = StockConfig(symbol="0700.HK", name="腾讯控股")
+STOCK = StockConfig(symbol="0700.HK", name="Tencent Holdings")
 
 
 def make_data(close, fx, ttm_rows):
@@ -48,16 +48,16 @@ def test_evaluate_percentile_and_window():
     assert v.observations == 10
     assert v.current == 20
     assert v.percentile == 100
-    assert v.level == "极度高估"
+    assert v.level == "Deeply overvalued"
 
 
-@pytest.mark.parametrize("pct,label", [(0, "极度低估"), (10, "极度低估"), (10.1, "低估"), (50, "合理"), (85, "高估"), (100, "极度高估")])
+@pytest.mark.parametrize("pct,label", [(0, "Deeply undervalued"), (10, "Deeply undervalued"), (10.1, "Undervalued"), (50, "Fair"), (85, "Overvalued"), (100, "Deeply overvalued")])
 def test_classify(pct, label):
     assert classify(pct, DEFAULT_LEVELS) == label
 
 
 def test_parse_config_rejects_unknown_metric():
-    with pytest.raises(ValueError, match="未知指标"):
+    with pytest.raises(ValueError, match="unknown metric"):
         parse_config({"stocks": [{"symbol": "0700.HK", "metrics": ["xyz"]}]})
 
 
@@ -79,10 +79,10 @@ def test_ps_and_pb_use_per_share_values_in_price_currency():
 
 
 def test_parse_config_filing_format():
-    raw = {"stocks": [{"symbol": "2382.HK", "name": "舜宇光学科技", "filing_format": "statements", "metrics": ["pe"]}]}
+    raw = {"stocks": [{"symbol": "2382.HK", "name": "Sunny Optical Technology", "filing_format": "statements", "metrics": ["pe"]}]}
     assert parse_config(raw).stocks[0].filing_format == "statements"
     assert parse_config({"stocks": [{"symbol": "0700.HK"}]}).stocks[0].filing_format == "highlights"
-    with pytest.raises(ValueError, match="公告版式"):
+    with pytest.raises(ValueError, match="unknown filing format"):
         parse_config({"stocks": [{"symbol": "0700.HK", "filing_format": "xyz"}]})
 
 
@@ -94,24 +94,24 @@ def test_parse_config_lookback_options():
     assert c.lookback_options == [3, 1] and c.lookback_years == 3 and c.max_lookback == 3
     with pytest.raises(ValueError, match="lookback_years"):
         parse_config({**raw, "lookback_options": [5, 1], "lookback_years": 10})  # 默认值必须是可选年数之一
-    with pytest.raises(ValueError, match="正整数"):
+    with pytest.raises(ValueError, match="positive integers"):
         parse_config({**raw, "lookback_options": [0, 3], "lookback_years": 3})
 
 
 def test_parse_config_us_stock():
-    raw = {"stocks": [{"symbol": "JD", "name": "京东（ADR）", "cik": 1549802, "metrics": ["pe", "pe_non_gaap"]}]}
+    raw = {"stocks": [{"symbol": "JD", "name": "JD.com (ADR)", "cik": 1549802, "metrics": ["pe", "pe_non_gaap"]}]}
     jd = parse_config(raw).stocks[0]
     assert (jd.market, jd.filing_format, jd.cik) == ("US", "press_release", 1549802)
-    assert jd.filing_source == "美国证监会 EDGAR" and not jd.cross_checks_prices
+    assert jd.filing_source == "SEC EDGAR" and not jd.cross_checks_prices
     hk = parse_config({"stocks": [{"symbol": "0700.HK"}]}).stocks[0]
-    assert (hk.market, hk.cik, hk.filing_source, hk.cross_checks_prices) == ("HK", None, "港交所披露易", True)
+    assert (hk.market, hk.cik, hk.filing_source, hk.cross_checks_prices) == ("HK", None, "HKEXnews", True)
     with pytest.raises(ValueError, match="cik"):
         parse_config({"stocks": [{"symbol": "JD"}]})
-    with pytest.raises(ValueError, match="不匹配"):
+    with pytest.raises(ValueError, match="does not match"):
         parse_config({"stocks": [{"symbol": "JD", "cik": 1, "filing_format": "highlights"}]})
-    with pytest.raises(ValueError, match="不匹配"):
+    with pytest.raises(ValueError, match="does not match"):
         parse_config({"stocks": [{"symbol": "0700.HK", "filing_format": "press_release"}]})
-    with pytest.raises(ValueError, match="未知的市场"):
+    with pytest.raises(ValueError, match="unknown market"):
         parse_config({"stocks": [{"symbol": "X", "market": "JP"}]})
 
 
@@ -121,8 +121,8 @@ def test_non_gaap_pe_uses_non_gaap_eps():
 
 
 def test_parse_config_korean_stock():
-    kr = parse_config({"stocks": [{"symbol": "005930.KS", "name": "三星电子", "metrics": ["pe"]}]}).stocks[0]
+    kr = parse_config({"stocks": [{"symbol": "005930.KS", "name": "Samsung Electronics", "metrics": ["pe"]}]}).stocks[0]
     assert (kr.market, kr.filing_format, kr.cik) == ("KR", "kifrs_statements", None)
-    assert not kr.cross_checks_prices and "三星" in kr.filing_source
-    with pytest.raises(ValueError, match="不匹配"):
+    assert not kr.cross_checks_prices and "Samsung" in kr.filing_source
+    with pytest.raises(ValueError, match="does not match"):
         parse_config({"stocks": [{"symbol": "005930.KS", "filing_format": "highlights"}]})

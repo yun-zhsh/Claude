@@ -10,7 +10,7 @@ import pytest
 from valuation_monitor.press_release import parse_press_release
 
 FOLDER = Path(__file__).parent.parent / "data" / "filings" / "JD"
-pytestmark = pytest.mark.skipif(not (FOLDER / "index.json").exists(), reason="没有保存的京东公告")
+pytestmark = pytest.mark.skipif(not (FOLDER / "index.json").exists(), reason="no saved JD filings")
 
 
 @cache

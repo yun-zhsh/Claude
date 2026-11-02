@@ -41,7 +41,7 @@ class YahooProvider:
         )
         result = (data.get("chart") or {}).get("result")
         if not result:
-            raise RuntimeError(f"Yahoo 没有返回 {symbol} 的行情: {data.get('chart', {}).get('error')}")
+            raise RuntimeError(f"Yahoo returned no quotes for {symbol}: {data.get('chart', {}).get('error')}")
         r = result[0]
         tz = r["meta"].get("exchangeTimezoneName", "UTC")
 

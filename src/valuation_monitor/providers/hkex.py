@@ -29,7 +29,7 @@ def stock_code(symbol: str) -> str:
     """0700.HK -> 00700。"""
     code, _, market = symbol.upper().partition(".")
     if market != "HK":
-        raise ValueError(f"暂只支持港股，收到 {symbol}")
+        raise ValueError(f"Only Hong Kong stocks are supported, got {symbol}")
     return code.zfill(5)
 
 
@@ -48,7 +48,7 @@ class HkexProvider:
         for s in info["stockInfo"]:
             if s["code"] == code:
                 return int(s["stockId"])
-        raise RuntimeError(f"披露易找不到股票代码 {code}")
+        raise RuntimeError(f"HKEXnews does not know the stock code {code}")
 
     def results_announcements(self, symbol: str, since: datetime) -> list[Filing]:
         """返回 since 之后发布的全部业绩公告（英文版），按发布时间升序。"""
@@ -62,7 +62,7 @@ class HkexProvider:
         except Exception as e:
             if not index:
                 raise
-            print(f"{symbol}: 无法访问披露易（{e}），使用本地已保存的 {len(index)} 份公告", file=sys.stderr)
+            print(f"{symbol}: cannot reach HKEXnews ({e}); using the {len(index)} saved filings", file=sys.stderr)
             found = [e for e in index if pd.Timestamp(e["published"]) >= pd.Timestamp(since)]
 
         filings = []
@@ -113,7 +113,7 @@ class HkexProvider:
             },
         )
         if data.get("hasNextRow"):
-            raise RuntimeError("披露易检索结果超过一页，需要缩小时间范围")
+            raise RuntimeError("The HKEXnews search returned more than one page; narrow the date range")
 
         found = []
         for row in json.loads(data["result"]):

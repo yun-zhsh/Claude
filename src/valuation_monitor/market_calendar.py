@@ -37,7 +37,7 @@ LUNAR_NEW_YEAR_EVES = {pd.Timestamp(d) - pd.Timedelta(days=1) for d in LUNAR_NEW
 
 def _hk_half_day(day: pd.Timestamp) -> bool:
     if day.year > int(LUNAR_NEW_YEAR[-1][:4]):
-        raise ValueError(f"农历新年日期表只到 {LUNAR_NEW_YEAR[-1][:4]} 年，请补充")
+        raise ValueError(f"The Lunar New Year table only goes up to {LUNAR_NEW_YEAR[-1][:4]}; please extend it")
     return (day.month, day.day) in ((12, 24), (12, 31)) or day in LUNAR_NEW_YEAR_EVES
 
 
@@ -92,7 +92,7 @@ def get_market(key: str) -> Market:
     try:
         return MARKETS[key]
     except KeyError:
-        raise ValueError(f"未知市场 {key!r}，可选：{', '.join(MARKETS)}") from None
+        raise ValueError(f"Unknown market {key!r}; choose from: {', '.join(MARKETS)}") from None
 
 
 # 以下函数默认港股，保持原有调用方式不变

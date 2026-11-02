@@ -1,5 +1,5 @@
-// 首页和股票页共用：顶部的“历史比较”下拉框决定历史分位按过去几年计算。
-// 各个回看年数下的结果在生成页面时已经算好，嵌在 #view-data 里，这里只负责切换显示。
+// Shared by the home page and the stock pages: the "History" drop-down at the top decides how many past years the percentile is based on.
+// The results for every window are computed when the page is generated and embedded in #view-data; this script only switches what is shown.
 (function () {
   const dataEl = document.getElementById("view-data");
   const view = dataEl ? JSON.parse(dataEl.textContent) : { default: 10, options: [], fields: {} };
@@ -9,13 +9,13 @@
 
   const valid = (v) => (v != null && view.options.map(String).includes(String(v)) ? String(v) : null);
   const stored = () => {
-    try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; }  // 隐私模式等情况下可能不可用
+    try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; }  // may be unavailable, e.g. in private browsing
   };
   const store = (years) => {
-    try { localStorage.setItem(STORAGE_KEY, years); } catch (e) { /* 不影响使用 */ }
+    try { localStorage.setItem(STORAGE_KEY, years); } catch (e) { /* does not affect usage */ }
   };
 
-  // 优先用网址里的 ?years=，其次是上次的选择，最后是默认值
+  // Prefer ?years= in the URL, then the last choice, then the default
   const initialYears = () =>
     valid(new URLSearchParams(location.search).get("years")) || valid(stored()) || String(view.default);
 
@@ -30,7 +30,7 @@
       el.querySelectorAll("[data-f-left]").forEach((t) => { t.style.left = f.percentile + "%"; });
     });
     document.querySelectorAll("[data-years-label]").forEach((t) => { t.textContent = years; });
-    // 页面之间的链接带上所选年数：即使浏览器不允许保存设置，换页后选择也不会丢
+    // Links between pages carry the selected years, so the choice survives page changes even if the browser refuses to store settings
     document.querySelectorAll("a[data-keep-years]").forEach((a) => {
       const u = new URL(a.getAttribute("href"), location.href);
       u.searchParams.set("years", years);
@@ -45,7 +45,7 @@
       store(years);
       const u = new URL(location.href);
       u.searchParams.set("years", years);
-      history.replaceState(null, "", u.pathname + u.search + u.hash);  // 刷新或分享网址时保持选择
+      history.replaceState(null, "", u.pathname + u.search + u.hash);  // keeps the choice on reload or when the URL is shared
     }
     render(years);
     listeners.forEach((fn) => fn(years));
@@ -55,7 +55,7 @@
 
   window.ValuationView = {
     view,
-    // 登记切换时要执行的函数，并立刻按当前选择执行一次（用于画图）
+    // Register a function to run when the choice changes, and run it once right away with the current choice (used to draw charts)
     onChange(fn) {
       listeners.push(fn);
       fn(current);

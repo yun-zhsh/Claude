@@ -13,7 +13,7 @@ from valuation_monitor.market_calendar import CN
 from valuation_monitor.providers.cninfo import CninfoProvider, classify, published_time
 
 FOLDER = Path(__file__).parent.parent / "data" / "filings" / "002415.SZ"
-saved = pytest.mark.skipif(not (FOLDER / "index.json").exists(), reason="没有保存的海康威视公告")
+saved = pytest.mark.skipif(not (FOLDER / "index.json").exists(), reason="no saved Hikvision filings")
 
 
 def test_classify_titles():
@@ -47,9 +47,9 @@ def test_a_share_market_closes_at_1500():
 
 
 def test_config_for_a_share():
-    s = parse_config({"stocks": [{"symbol": "002415.SZ", "name": "海康威视", "metrics": ["pe"]}]}).stocks[0]
-    assert (s.market, s.filing_format, s.cik) == ("CN", "cn_report", None) and "巨潮" in s.filing_source and not s.cross_checks_prices
-    with pytest.raises(ValueError, match="不匹配"):
+    s = parse_config({"stocks": [{"symbol": "002415.SZ", "name": "Hikvision", "metrics": ["pe"]}]}).stocks[0]
+    assert (s.market, s.filing_format, s.cik) == ("CN", "cn_report", None) and "CNINFO" in s.filing_source and not s.cross_checks_prices
+    with pytest.raises(ValueError, match="does not match"):
         parse_config({"stocks": [{"symbol": "002415.SZ", "filing_format": "highlights"}]})
 
 
@@ -99,7 +99,7 @@ def test_provider_classifies_dates_and_replaces_the_express_report(tmp_path, mon
     http.lists["业绩快报"] = [row("4", "2025年度业绩快报", ms("2026-01-21"), "2026-01-21")]
     provider = CninfoProvider(http, tmp_path)
     found = provider.results_announcements("002415.SZ", datetime(2025, 12, 1))
-    assert [(f.title, f.provisional) for f in found] == [("2025年度业绩快报", True), ("2026年第三季度报告", False)]
+    assert [(f.title, f.provisional) for f in found] == [("2025 annual express report", True), ("2026 Q3 report", False)]
     assert found[1].published == pd.Timestamp("2026-10-16 16:00:19")  # 用 PDF 上传时间，不是列表里的次日 00:00
     index = json.loads((tmp_path / "002415.SZ" / "index.json").read_text(encoding="utf-8"))
     assert {e["id"] for e in index} == {"1", "4"}  # 英文版、摘要不下载
@@ -111,10 +111,10 @@ def test_provider_classifies_dates_and_replaces_the_express_report(tmp_path, mon
     # 年报发布后：快报被取代，年报的发布时间沿用快报那天
     http.lists[""].append(row("5", "2025年年度报告", ms("2026-04-18"), "2026-04-18"))
     found = provider.results_announcements("002415.SZ", datetime(2025, 12, 1))
-    annual = next(f for f in found if "年度报告" in f.title)
+    annual = next(f for f in found if f.title == "2025 annual report")
     assert not annual.provisional and annual.published == pd.Timestamp("2026-01-21 00:00")  # 年报的数字第一次公开是在快报那天
-    assert "沿用业绩快报" in annual.note and "2026-04-18" in annual.note  # 说明数字是年报的、发布时间是快报的
-    assert [f.title for f in found] == ["2025年年度报告", "2026年第三季度报告"]
+    assert "publication time kept from the express report" in annual.note and "2026-04-18" in annual.note  # 说明数字是年报的、发布时间是快报的
+    assert [f.title for f in found] == ["2025 annual report", "2026 Q3 report"]
 
 
 @saved
@@ -136,7 +136,7 @@ def parsed(title_prefix, kind="report"):
 
 @saved
 def test_third_quarter_uses_the_single_quarter_column():
-    p = parsed("2026年三季度报告")
+    p = parsed("2026 Q3 report")
     assert p.quarterly and p.period == pd.Period("2026Q3")
     assert p.values["revenue"] == pytest.approx([27221.79484181]) and p.values["profit"] == pytest.approx([5015.68079576])
     assert p.values["eps"] == [0.547]  # 单季，不是前三季度累计的 1.409
@@ -146,14 +146,14 @@ def test_third_quarter_uses_the_single_quarter_column():
 
 @saved
 def test_annual_and_half_year_reports_are_cumulative_with_prior_year_columns():
-    p = parsed("2025年年度报告")
+    p = parsed("2025 annual report")
     assert not p.quarterly and p.period == pd.Period("2025Q4")
     assert p.values["eps"] == [1.546, 1.297] and p.values["profit"][0] == pytest.approx(14195.0, abs=1)
-    assert parsed("2026年半年度报告").values["eps"] == [0.862, 0.615]
+    assert parsed("2026 H1 report").values["eps"] == [0.862, 0.615]
 
 
 @saved
 def test_express_report_is_provisional_cumulative_data():
-    p = parsed("2025年度业绩快报", "express")
+    p = parsed("2025 annual express report", "express")
     assert not p.quarterly and p.period == pd.Period("2025Q4")
     assert p.values["eps"] == [1.545, 1.297] and p.values["wa_shares"] == pytest.approx([9164.87155])

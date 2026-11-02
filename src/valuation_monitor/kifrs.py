@@ -55,7 +55,7 @@ def to_number(token: str) -> float:
 def pair(regex: re.Pattern, text: str, name: str) -> list[float]:
     m = regex.search(text)
     if not m:
-        raise ValueError(f"没有找到 {name}")
+        raise ValueError(f"Not found in the statements: {name}")
     return [to_number(m.group("a")), to_number(m.group("b"))]
 
 
@@ -122,11 +122,11 @@ def scale_to_millions(raw: list[float], implied_millions: float) -> list[float] 
 def parse_kifrs(title: str, soi: bytes, bs: bytes, note: bytes | None = None) -> Parsed:
     m = TITLE_RE.search(title)
     if not m:
-        raise ValueError(f"无法从标题识别报告期: {title}")
+        raise ValueError(f"Cannot tell the reporting period from the title: {title}")
     quarter, year = int(m.group("q")), int(m.group("year"))
     income, balance = read_text(soi), read_text(bs)
     if f"{PERIOD_END[quarter]}, " not in income and f"{PERIOD_END[quarter]}," not in income.replace(" ,", ","):
-        raise ValueError(f"损益表里没有 {PERIOD_END[quarter]}，与标题的报告期 {quarter}Q {year} 不符")
+        raise ValueError(f"The income statement does not mention {PERIOD_END[quarter]}, so it does not match the reporting period {quarter}Q {year} in the title")
 
     total, nci = pair(TOTAL_EQUITY_RE, balance, "Total equity"), pair(NCI_RE, balance, "Non-controlling interests")
     values = {
@@ -138,7 +138,7 @@ def parse_kifrs(title: str, soi: bytes, bs: bytes, note: bytes | None = None) ->
     if note is not None and (raw := parse_weighted_shares(note)):
         scaled = scale_to_millions(raw, values["profit"][0] / values["eps"][0])
         if scaled is None:
-            print(f"{title}: 附注里的股数 {raw[0]:,.0f} 与净利润 ÷ EPS 的量级对不上，无法判断单位，股数改为反推", file=sys.stderr)
+            print(f"{title}: the share count in the notes ({raw[0]:,.0f}) is not of the order of profit / EPS, so its unit cannot be determined; shares are implied instead", file=sys.stderr)
         else:
             values["wa_shares"] = scaled
     return Parsed("KRW", values, pd.Period(year=year, quarter=quarter, freq="Q"), quarterly=quarter != 4)
@@ -165,7 +165,7 @@ def deck_columns(regex: re.Pattern, text: str, name: str) -> list[float]:
     """发布会材料里的一行，返回 [本季度, 去年同季度, 上一季度]。"""
     m = regex.search(text)
     if not m:
-        raise ValueError(f"发布会材料里没有找到 {name}（版式可能变了）")
+        raise ValueError(f"{name} was not found in the earnings call presentation (the layout may have changed)")
     yoy, qoq, cur = (float(m.group(k).replace(",", "")) for k in "abc")
     return [cur, yoy, qoq]
 
@@ -174,7 +174,7 @@ def fiscal_year_columns(regex: re.Pattern, text: str, name: str) -> list[float]:
     """第四季度材料里的一行，返回 [本年全年, 上年全年]。"""
     m = regex.search(text)
     if not m:
-        raise ValueError(f"第四季度发布会材料里没有找到 {name}（版式可能变了）")
+        raise ValueError(f"{name} was not found in the Q4 earnings call presentation (the layout may have changed)")
     return [float(m.group("fy1").replace(",", "")), float(m.group("fy0").replace(",", ""))]
 
 
@@ -188,11 +188,11 @@ def parse_kifrs_deck(title: str, deck: bytes, previous_bs: bytes) -> Parsed:
     """
     m = TITLE_RE.search(title)
     if not m:
-        raise ValueError(f"无法从标题识别报告期: {title}")
+        raise ValueError(f"Cannot tell the reporting period from the title: {title}")
     quarter, year = int(m.group("q")), int(m.group("year"))
     text = read_text(deck)
     if f"{quarter}Q {year} Results" not in text:
-        raise ValueError(f"发布会材料不是 {quarter}Q {year} 的，或版式已变")
+        raise ValueError(f"The presentation is not for {quarter}Q {year}, or its layout has changed")
 
     previous = read_text(previous_bs)
     total_prev, nci_prev = pair(TOTAL_EQUITY_RE, previous, "Total equity")[0], pair(NCI_RE, previous, "Non-controlling interests")[0]

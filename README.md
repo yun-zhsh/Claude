@@ -1,6 +1,6 @@
 # 股票估值监控
 
-当前版本 **v0.1.0**（MVP 版本：中文文档，运行时中文显示）。
+当前版本 **v0.1.0**（MVP 版本：中文文档，运行时中文显示）。**之后的版本起，软件运行时的所有显示一律为英文**（见下面的“语言规则”）；本 README 和代码注释仍用中文。
 
 判断一只股票当前的估值（PE、PS、PB 等）在它自己的历史上处于高位还是低位。
 
@@ -15,6 +15,14 @@
 | 海康威视 002415.SZ | PE、PS、PB（A 股，人民币；公司不披露 Non-GAAP 数据） | 每季度发布，巨潮资讯网的中文定期报告和年度业绩快报，`cn_report` 版式 |
 
 代码结构按“多只股票 × 多个指标”设计，加股票改配置，加指标写指标类（见“后续扩展”）。
+
+## 语言规则（重要）
+
+- **讨论可以用中文，但开发出来的软件必须是纯英文版**：任何用户运行软件时只会看到英文，**完全不出现中文**，包括股票名称（`config.yaml` 里用英文名，如 Tencent Holdings、Hikvision）。
+- “运行时可见”包括：网页（页面、按钮、提示框、走势图）、命令行输出和报错、下载的文件（文件名、CSV 列名和内容、zip）、自动生成的数据文件（`data/` 下的 CSV、JSON，含公告标题和来源说明）、GitHub Actions 的步骤名称、`config.yaml` 里的所有名称。
+- 唯一允许出现中文的程序文件是 `src/valuation_monitor/cn_patterns.py`：它只放“读懂中文公告”用的匹配规则（A 股公告是中文原文），内容不会显示给用户。
+- 代码注释、docstring、README 和测试可以用中文。
+- 新增股票、指标或功能时都要遵守；`tests/test_english_only.py` 会检查代码里的字符串、模板、配置、`data/` 和实际生成的页面与下载文件，出现中文就会失败。
 
 ## 快速开始
 
@@ -48,8 +56,8 @@ export SEC_USER_AGENT="valuation-monitor 你的邮箱"
   - 各指标的当前值、历史分位，以及标出当前位置的分位条；
   - 各指标的走势图（带 P10～P90 分位线，鼠标悬停可查看每天的数值）和股价走势图；
   - 数据来源与核对情况；
-  - 下载按钮：历史股价、历史业绩、每股指标（含算式）、每日估值明细、全部原始数据（zip）。下载的 CSV 使用中文列名，可以直接用 Excel 打开。
-  - **核对计算过程**：走势图上把光标放在某一天，会显示这一天比率的完整算式，如 `PE = 收盘价 ÷（每股数据 × 汇率）= 232,000 KRW ÷（32,308 KRW × 1）= 7.18`，下面接着写每股数据怎么来的（`TTM EPS = 2025Q4 2,874* + 2026Q1 7,123 + 2026Q2 10,849 + 2026Q3 11,462 = 32,308`；PS、PB 还会列出营收各期数值、净资产和股数的算法），取自哪一期业绩、哪天发布。
+  - 下载按钮：历史股价、历史业绩、每股指标（含算式）、每日估值明细、全部原始数据（zip）。下载的 CSV 使用英文列名（文件名如 `0700.HK_historical_prices.csv`），可以直接用 Excel 打开。
+  - **核对计算过程**：走势图上把光标放在某一天，会显示这一天比率的完整算式，如 `PE = close / (per-share value x FX rate) = 232,000 KRW / (32,308 KRW x 1) = 7.18`，下面接着写每股数据怎么来的（`TTM EPS = 2025Q4 2,874* + 2026Q1 7,123 + 2026Q2 10,849 + 2026Q3 11,462 = 32,308`（提示框和下载文件里的文字都是英文）；PS、PB 还会列出营收各期数值、净资产和股数的算法），取自哪一期业绩、哪天发布。
 - **更新数据**：页面右上角的按钮会联网补充最新的行情和公告。
 
 参数：`--port` 指定端口（默认 8050），`--no-browser` 启动后不自动打开浏览器；`-c`、`--data-dir`、`--refresh` 与命令行版相同。程序默认只允许本机访问。
@@ -81,32 +89,32 @@ GitHub Actions（`.github/workflows/pages.yml`）每 4 小时运行一次，即�
 输出示例（数值为 2026-11-02 当天的，之后会随行情变化；五只股票依次输出，这里只列腾讯）：
 
 ```
-腾讯控股 (0700.HK)  业绩数据来源：港交所披露易 48 份业绩公告原文，币种 CNY
-  ⚠ Non-IFRS EPS 2015Q1 在不同公告中数值不一致（可能是公司重述）[0.759, 0.776]，采用最早公布的 0.759
-  业绩明细  data/eps/0700.HK_periods.csv
-  股价核对  腾讯证券 vs Yahoo（还原除权调整后）：一致 2451 天，仅腾讯 10 天（明细见 data/prices/0700.HK/final.csv）
+Tencent Holdings (0700.HK)  Earnings source: HKEXnews, 48 original earnings filings, currency CNY
+  ⚠ Non-IFRS EPS 2015Q1 differs between filings (probably a restatement) [0.759, 0.776]; using the first published value 0.759
+  Earnings detail  data/eps/0700.HK_periods.csv
+  Price check  Tencent vs Yahoo (after undoing Yahoo's adjustments): Agree 2451 days, Tencent only 10 days (details in data/prices/0700.HK/final.csv)
 
-腾讯控股 (0700.HK)  PE (TTM)
-  日期      2026-11-02
-  当前值    12.78
-  历史分位  4.7%  →  极度低估
-  回看区间  2016-11-02 ~ 2026-11-02（2460 个交易日）
-  区间统计  最低 10.0 / 均值 28.8 / 最高 59.7
-  分位参考  P10=13.9  P30=19.3  P50=25.4  P70=37.2  P90=47.9
+Tencent Holdings (0700.HK)  PE (TTM)
+  Date        2026-11-02
+  Current     12.78
+  Percentile  4.7%  ->  Deeply undervalued
+  Window      2016-11-02 ~ 2026-11-02 (2460 trading days)
+  Range       min 10.0 / mean 28.8 / max 59.7
+  Bands       P10=13.9  P30=19.3  P50=25.4  P70=37.2  P90=47.9
 
-腾讯控股 (0700.HK)  PE Non-IFRS (TTM)
-  当前值    11.08
-  历史分位  0.3%  →  极度低估
+Tencent Holdings (0700.HK)  PE Non-IFRS (TTM)
+  Current     11.08
+  Percentile  0.3%  ->  Deeply undervalued
   ...
 
-腾讯控股 (0700.HK)  PS (TTM)
-  当前值    3.81
-  历史分位  0.9%  →  极度低估
+Tencent Holdings (0700.HK)  PS (TTM)
+  Current     3.81
+  Percentile  0.9%  ->  Deeply undervalued
   ...
 
-腾讯控股 (0700.HK)  PB
-  当前值    2.64
-  历史分位  0.6%  →  极度低估
+Tencent Holdings (0700.HK)  PB
+  Current     2.64
+  Percentile  0.6%  ->  Deeply undervalued
   ...
 ```
 
@@ -158,8 +166,8 @@ GitHub Actions（`.github/workflows/pages.yml`）每 4 小时运行一次，即�
 ## 判断方法
 
 1. 每个交易日算一次 PE = 收盘价 ÷（TTM 每股收益 × 汇率）。TTM 每股收益 = 最近 4 个季度的单季基本 EPS 之和。
-2. 取最近若干年（网页上可选 10、5、3、2、1 年，默认 10 年）的 PE 序列，计算当前值的**历史分位数**（这段时间里有多少比例的交易日 PE ≤ 当前值）。窗口越短，反映的越是近期的估值水平；窗口越长，越是长期的。同一个当前值在不同窗口里的分位可能差别很大，比如 2026-10-29 舜宇的 PB，在过去 10 年里是 6.7%（极度低估），在过去 1 年里是 34.1%（合理）。可选的年数在 `config.yaml` 的 `lookback_options` 里设置，`lookback_years` 是默认选中的一项。
-3. 按 `config.yaml` 中的 `levels` 映射为档位：≤10% 极度低估、≤30% 低估、≤70% 合理、≤90% 高估、其余极度高估。
+2. 取最近若干年（网页上可选 10、5、3、2、1 年，默认 10 年）的 PE 序列，计算当前值的**历史分位数**（这段时间里有多少比例的交易日 PE ≤ 当前值）。窗口越短，反映的越是近期的估值水平；窗口越长，越是长期的。同一个当前值在不同窗口里的分位可能差别很大，比如 2026-10-29 舜宇的 PB，在过去 10 年里是 6.7%（Deeply undervalued），在过去 1 年里是 34.1%（Fair）。可选的年数在 `config.yaml` 的 `lookback_options` 里设置，`lookback_years` 是默认选中的一项。
+3. 按 `config.yaml` 中的 `levels` 映射为档位：≤10% Deeply undervalued、≤30% Undervalued、≤70% Fair、≤90% Overvalued、其余 Deeply overvalued（档位名称是英文，在 `config.yaml` 里设置）。
 
 提供五个指标：
 

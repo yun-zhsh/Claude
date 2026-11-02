@@ -46,7 +46,7 @@ def make_http_client(cache_dir: str | Path = ".cache", ttl_seconds: int = 12 * 3
     agent = os.environ.get(USER_AGENT_ENV, "").strip()
     if not agent:
         raise SecUserAgentMissing(
-            f"访问美国证监会需要声明使用者：请设置环境变量 {USER_AGENT_ENV}，内容为“程序名 联系邮箱”，例如 valuation-monitor you@example.com"
+            f"The SEC requires you to identify yourself: set the environment variable {USER_AGENT_ENV} to \"program-name contact-email\", e.g. valuation-monitor you@example.com"
         )
     return HttpClient(cache_dir, ttl_seconds, refresh, user_agent=agent, min_interval=REQUEST_INTERVAL)
 
@@ -82,12 +82,12 @@ class SecProvider:
 
         try:
             if self.http is None:
-                raise SecUserAgentMissing(f"没有设置环境变量 {USER_AGENT_ENV}")
+                raise SecUserAgentMissing(f"The environment variable {USER_AGENT_ENV} is not set")
             added = self._examine_new(symbol, cik, since, folder, index, known)
         except Exception as e:
             if not any(e_["results"] for e_ in index):
                 raise
-            print(f"{symbol}: 无法访问美国证监会（{e}），使用本地已保存的 {sum(x['results'] for x in index)} 份公告", file=sys.stderr)
+            print(f"{symbol}: cannot reach the SEC ({e}); using the {sum(x['results'] for x in index)} saved filings", file=sys.stderr)
             added = True  # 已检查完的部分照常写入索引
 
         if added:
@@ -124,7 +124,7 @@ class SecProvider:
             known.add(entry["accession"])
             added = True
             if entry["results"]:
-                print(f"{symbol}: 新业绩公告 {entry['published']} {entry['title']}", file=sys.stderr)
+                print(f"{symbol}: new results release {entry['published']} {entry['title']}", file=sys.stderr)
         return added
 
     def _examine(self, cik: int, item: dict, folder: Path) -> dict:

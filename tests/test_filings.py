@@ -143,7 +143,7 @@ def test_build_history_flags_restatement_and_keeps_first_value():
 def test_build_history_rejects_mixed_currency():
     a, b = ann("2015Q1", "2015-05-14", True, [1.0]), ann("2015Q2", "2015-08-13", True, [1.0])
     b.currency = "USD"
-    with pytest.raises(ValueError, match="币种"):
+    with pytest.raises(ValueError, match="EPS currency"):
         build_history([a, b])
 
 
@@ -265,7 +265,7 @@ def test_parse_statements_note_column_variants(revenue_row):
 
 
 def test_parse_statements_requires_all_rows():
-    with pytest.raises(ValueError, match="合并损益表"):
+    with pytest.raises(ValueError, match="consolidated income statement"):
         parse_statements(["no statements here"])
     with pytest.raises(ValueError, match="equity"):
         parse_statements([INCOME_STATEMENT])
@@ -310,7 +310,7 @@ def test_semiannual_history_cross_checks_cumulative_totals():
     assert semiannual_history().discrepancies() == []
     # 次年年报把上年全年数重述为 2.60：2024 下半年出现第二个来源，数值不一致
     issues = semiannual_history(fy2024_prior=2.60).discrepancies()
-    assert len(issues) == 1 and "2024H2" in issues[0] and "累计数推算" in issues[0]
+    assert len(issues) == 1 and "2024H2" in issues[0] and "derived from cumulative figures" in issues[0]
 
 
 def test_period_label_and_frequency_inference():

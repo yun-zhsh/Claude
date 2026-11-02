@@ -16,7 +16,12 @@ class Level:
     label: str
 
 
-FILING_SOURCES = {"HK": "港交所披露易", "US": "美国证监会 EDGAR", "KR": "三星电子 IR 网站（英文财务报表）", "CN": "巨潮资讯网（证监会指定的信息披露平台）"}
+FILING_SOURCES = {
+    "HK": "HKEXnews",
+    "US": "SEC EDGAR",
+    "KR": "Samsung Electronics IR website (English financial statements)",
+    "CN": "CNINFO (the CSRC-designated disclosure platform)",
+}
 
 
 @dataclass(frozen=True)
@@ -55,11 +60,11 @@ class Config:
 
 
 DEFAULT_LEVELS = [
-    Level(10, "极度低估"),
-    Level(30, "低估"),
-    Level(70, "合理"),
-    Level(90, "高估"),
-    Level(100, "极度高估"),
+    Level(10, "Deeply undervalued"),
+    Level(30, "Undervalued"),
+    Level(70, "Fair"),
+    Level(90, "Overvalued"),
+    Level(100, "Deeply overvalued"),
 ]
 
 
@@ -77,24 +82,24 @@ def parse_config(raw: dict) -> Config:
         metrics = [m.lower() for m in s.get("metrics", ["pe"])]
         unknown = [m for m in metrics if m not in METRICS]
         if unknown:
-            raise ValueError(f"{s['symbol']}: 未知指标 {unknown}，可用指标: {sorted(METRICS)}")
+            raise ValueError(f"{s['symbol']}: unknown metric {unknown}; available metrics: {sorted(METRICS)}")
         symbol = str(s["symbol"])
         suffix_markets = {".HK": "HK", ".KS": "KR", ".KQ": "KR", ".SZ": "CN", ".SS": "CN"}
         default_market = next((m for suffix, m in suffix_markets.items() if symbol.upper().endswith(suffix)), "US")
         market = str(s.get("market", default_market)).upper()
         if market not in MARKETS:
-            raise ValueError(f"{symbol}: 未知的市场 {market}，可用市场: {sorted(MARKETS)}")
+            raise ValueError(f"{symbol}: unknown market {market}; available markets: {sorted(MARKETS)}")
         # 港股的业绩来自港交所公告（PDF），美股的来自美国证监会 EDGAR 的新闻稿（HTML），韩股的来自公司 IR 网站的财务报表
         default_format = {"HK": "highlights", "US": "press_release", "KR": "kifrs_statements", "CN": "cn_report"}[market]
         filing_format = str(s.get("filing_format", default_format))
         if filing_format not in FILING_FORMATS:
-            raise ValueError(f"{symbol}: 未知的公告版式 {filing_format}，可用版式: {sorted(FILING_FORMATS)}")
+            raise ValueError(f"{symbol}: unknown filing format {filing_format}; available formats: {sorted(FILING_FORMATS)}")
         foreign_formats = {"press_release": "US", "kifrs_statements": "KR", "cn_report": "CN"}  # 非港股版式只适用于对应市场
         if foreign_formats.get(filing_format, "HK" if market == "HK" else None) != market:
-            raise ValueError(f"{symbol}: 公告版式 {filing_format} 与市场 {market} 不匹配")
+            raise ValueError(f"{symbol}: filing format {filing_format} does not match market {market}")
         cik = int(s["cik"]) if s.get("cik") is not None else None
         if market == "US" and cik is None:
-            raise ValueError(f"{symbol}: 美股需要配置 cik（公司在美国证监会的编号）")
+            raise ValueError(f"{symbol}: US stocks need a cik (the company's SEC Central Index Key)")
         stocks.append(
             StockConfig(
                 symbol=symbol,
@@ -106,17 +111,17 @@ def parse_config(raw: dict) -> Config:
             )
         )
     if not stocks:
-        raise ValueError("配置中没有任何股票（stocks 为空）")
+        raise ValueError("The config has no stocks (stocks is empty)")
 
     levels = [Level(float(lv["upper"]), str(lv["label"])) for lv in raw.get("levels") or []]
     levels = sorted(levels, key=lambda lv: lv.upper) or DEFAULT_LEVELS
     if levels[-1].upper < 100:
-        raise ValueError("levels 最后一档的 upper 必须为 100")
+        raise ValueError("The last entry of levels must have upper = 100")
 
     options = sorted({int(y) for y in raw.get("lookback_options") or DEFAULT_LOOKBACK_OPTIONS}, reverse=True)
     if options[-1] < 1:
-        raise ValueError("lookback_options 里的年数必须是正整数")
+        raise ValueError("The years in lookback_options must be positive integers")
     default = int(raw.get("lookback_years", options[0]))
     if default not in options:
-        raise ValueError(f"lookback_years={default} 必须是 lookback_options {options} 之一")
+        raise ValueError(f"lookback_years={default} must be one of lookback_options {options}")
     return Config(stocks=stocks, lookback_years=default, levels=levels, lookback_options=options)

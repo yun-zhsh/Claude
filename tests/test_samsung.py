@@ -187,5 +187,5 @@ def test_fourth_quarter_deck_is_read_as_full_year_figures(monkeypatch):
     assert p.values["equity"][0] == pytest.approx(436_320_300 * 0.975, rel=0.01)  # 合计权益按归母比例折算
 
     monkeypatch.setattr(kifrs, "read_text", lambda pdf: DECK_4Q25.replace("4Q 2025 Results", "4Q 2025 Result") if pdf == b"deck" else real(pdf))
-    with pytest.raises(ValueError, match="版式已变"):
+    with pytest.raises(ValueError, match="layout has changed"):
         kifrs.parse_kifrs_deck("Samsung Electronics 4Q 2025 x", b"deck", bs)

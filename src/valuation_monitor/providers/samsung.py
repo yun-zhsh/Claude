@@ -99,7 +99,7 @@ class SamsungIrProvider:
         except Exception as e:
             if not index:
                 raise
-            print(f"{symbol}: 无法访问三星 IR 网站（{e}），使用本地已保存的 {len(index)} 份财报", file=sys.stderr)
+            print(f"{symbol}: cannot reach the Samsung IR website ({e}); using the {len(index)} saved reports", file=sys.stderr)
             added = False
         if added:
             index.sort(key=lambda e: e["published"])
@@ -168,7 +168,7 @@ class SamsungIrProvider:
                 continue
             published = calls.get((year, quarter))
             if published is None:
-                print(f"{symbol}: {year}Q{quarter} 在 IR 网站的 Events 页面找不到业绩发布会日期，无法确定发布时间，跳过", file=sys.stderr)
+                print(f"{symbol}: {year}Q{quarter} has no earnings call date on the IR Events page, so the publication time is unknown; skipped", file=sys.stderr)
                 continue
             if published < pd.Timestamp(since):
                 continue
@@ -185,7 +185,7 @@ class SamsungIrProvider:
             index.append({"year": year, "quarter": quarter, "published": f"{published:%Y-%m-%dT%H:%M:%S}", "url": kinds["soi"], "files": files})
             known.add((year, quarter))
             added = True
-            print(f"{symbol}: 新财报 {year}Q{quarter}，业绩发布会 {published}", file=sys.stderr)
+            print(f"{symbol}: new report {year}Q{quarter}, earnings call {published}", file=sys.stderr)
 
         # 早先保存的财报还没取过 EPS 附注（公告披露的加权平均股数）：补取
         for e in index:
@@ -208,5 +208,5 @@ class SamsungIrProvider:
                 {"year": year, "quarter": quarter, "published": f"{published:%Y-%m-%dT%H:%M:%S}", "url": deck, "files": {"deck": name}, "provisional": True}
             )
             added = True
-            print(f"{symbol}: {year}Q{quarter} 英文财报还没发布，先用业绩发布会材料（{published}）", file=sys.stderr)
+            print(f"{symbol}: the {year}Q{quarter} English statements are not out yet; using the earnings call presentation ({published}) for now", file=sys.stderr)
         return added

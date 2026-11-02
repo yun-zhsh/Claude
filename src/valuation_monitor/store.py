@@ -96,7 +96,7 @@ class PriceStore:
             tencent = self._frame(
                 folder / "tencent.csv",
                 folder / "tencent.json",
-                source=f"腾讯证券行情接口 {symbol}（未复权）",
+                source=f"Tencent quote API {symbol} (unadjusted)",
                 fetch=lambda since: self.quotes.daily_bars(symbol, since),
                 start=start,
                 decimals=BAR_DECIMALS,
@@ -129,7 +129,7 @@ class PriceStore:
         except Exception as e:
             if not market.cross_checks_prices:
                 raise
-            print(f"Yahoo Finance {symbol}: 无法获取（{e}），只用腾讯证券的数据", file=sys.stderr)
+            print(f"Yahoo Finance {symbol}: unavailable ({e}); using Tencent data only", file=sys.stderr)
             yahoo = pd.DataFrame(columns=list(YAHOO_DECIMALS))
 
         yahoo_meta = read_meta(folder / "yahoo.json")
@@ -204,16 +204,16 @@ class PriceStore:
             overlap = completed.index.intersection(stored.index)
             changed = (completed.loc[overlap, check] / stored.loc[overlap, check] - 1).abs() > MISMATCH_TOLERANCE
             if changed.any() and frozen:
-                print(f"{source}: 有 {int(changed.sum())} 天的历史数据与已保存的不同，保留已保存的数据", file=sys.stderr)
+                print(f"{source}: {int(changed.sum())} days of history differ from the saved data; keeping the saved data", file=sys.stderr)
             elif changed.any():
-                print(f"{source}: 历史数据被回溯调整（可能有新的除权），重新下载全部历史", file=sys.stderr)
+                print(f"{source}: history was adjusted retroactively (probably a new ex-rights event); re-downloading all history", file=sys.stderr)
                 live = fetch(fetch_from.to_pydatetime())
                 completed = live[live.index < today][columns].round(decimals)
                 stored = stored.iloc[0:0]
         except Exception as e:
             if stored.empty:
                 raise
-            print(f"{source}: 无法更新（{e}），使用已保存的数据（截至 {stored.index[-1]:%Y-%m-%d}）", file=sys.stderr)
+            print(f"{source}: cannot update ({e}); using saved data (up to {stored.index[-1]:%Y-%m-%d})", file=sys.stderr)
             return stored
 
         merged = pd.concat([stored, completed[~completed.index.isin(stored.index)]]).sort_index()
@@ -264,7 +264,7 @@ class EarningsStore:
             except Exception as e:
                 if not f.provisional:
                     raise
-                print(f"{symbol}: 无法解析暂用的初步数据 {f.url}（{e}），等正式财报", file=sys.stderr)
+                print(f"{symbol}: cannot parse the provisional data {f.url} ({e}); waiting for the official report", file=sys.stderr)
         history = build_history(adjust_for_splits(parsed, splits), splits)
 
         write_if_changed(paths["announcements"], announcements_to_frame(parsed, version).to_csv(index=False))

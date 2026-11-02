@@ -21,7 +21,7 @@ from valuation_monitor.providers.tencent import TencentQuoteProvider
 from valuation_monitor.providers.yahoo import YahooProvider
 from valuation_monitor.store import EarningsStore, PriceStore
 
-PRICE_STATUS_LABELS = {"agree": "一致", "mismatch": "不一致", "tencent_only": "仅腾讯", "yahoo_only": "仅 Yahoo"}
+PRICE_STATUS_LABELS = {"agree": "Agree", "mismatch": "Mismatch", "tencent_only": "Tencent only", "yahoo_only": "Yahoo only"}
 
 
 @dataclass
@@ -95,7 +95,7 @@ class Monitor:
         try:
             report.data = self.loader.load(stock)
         except Exception as e:  # 单只股票失败不影响其他股票
-            report.error = f"数据获取失败: {e}"
+            report.error = f"Failed to load data: {e}"
             return report
 
         report.discrepancies = report.data.earnings.discrepancies()
@@ -108,7 +108,7 @@ class Monitor:
                     v = evaluate(result.series, years, self.config.levels)
                     result.windows[years] = WindowResult(v, level_index(v.percentile, self.config.levels))
             except Exception as e:
-                result.error = f"计算失败: {e}"
+                result.error = f"Calculation failed: {e}"
             report.metrics.append(result)
         return report
 
