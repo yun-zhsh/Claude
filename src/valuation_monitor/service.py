@@ -70,7 +70,9 @@ class StockReport:
 
 
 class Monitor:
-    def __init__(self, config: Config, data_dir: str | Path = "data", cache_dir: str | Path = ".cache", refresh: bool = False):
+    def __init__(
+        self, config: Config, data_dir: str | Path = "data", cache_dir: str | Path = ".cache", refresh: bool = False, offline: bool = False
+    ):
         self.config = config
         self.data_dir = Path(data_dir)
         http = HttpClient(cache_dir=cache_dir, refresh=refresh)
@@ -80,15 +82,29 @@ class Monitor:
             sec_http = make_http_client(cache_dir, refresh=refresh)
         except SecUserAgentMissing:
             sec_http = None  # without a declared user, SEC is not contacted and the locally saved filings are used
+        cninfo_http = HttpClient(cache_dir=cache_dir, refresh=refresh, min_interval=CNINFO_INTERVAL)
+        self._clients = [c for c in (http, sec_http, cninfo_http) if c is not None]
+        self.offline = offline
         self.loader = DataLoader(
             config,
             self.prices,
             HkexProvider(http, self.data_dir / "filings"),
             SecProvider(sec_http, self.data_dir / "filings"),
             SamsungIrProvider(http, self.data_dir / "filings"),
-            CninfoProvider(HttpClient(cache_dir=cache_dir, refresh=refresh, min_interval=CNINFO_INTERVAL), self.data_dir / "filings"),
+            CninfoProvider(cninfo_http, self.data_dir / "filings"),
             self.earnings,
         )
+
+    @property
+    def offline(self) -> bool:
+        """When True nothing is fetched over the network and the saved data is used (fast; e.g. a web server showing what a scheduled job saved)."""
+        return self._offline
+
+    @offline.setter
+    def offline(self, value: bool) -> None:
+        self._offline = value
+        for client in self._clients:
+            client.offline = value
 
     def analyze(self, stock: StockConfig) -> StockReport:
         report = StockReport(stock=stock, updated_at=datetime.now())

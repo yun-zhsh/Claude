@@ -55,3 +55,21 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  Chart  {plot(stock, result.metric, result.series, result.valuation, args.plot)}")
             print()
     return 1 if failed else 0
+
+
+def update_main(argv: list[str] | None = None) -> int:
+    """Fetch the latest prices and filings and save them, without printing reports (for scheduled jobs)."""
+    parser = argparse.ArgumentParser(prog="valuation-monitor-update", description="Update the saved prices and filings")
+    add_common_args(parser)
+    args = parser.parse_args(argv)
+
+    monitor = Monitor(load_config(args.config), args.data_dir, args.cache_dir, args.refresh)
+    failed = False
+    for report in monitor.analyze_all():
+        if report.error:
+            print(f"{report.stock.name} ({report.stock.symbol}): {report.error}", file=sys.stderr)
+            failed = True
+        else:
+            last = report.latest_close
+            print(f"{report.stock.name} ({report.stock.symbol}): updated, latest close {last[1]:.2f} on {last[0]:%Y-%m-%d}" if last else f"{report.stock.name}: updated")
+    return 1 if failed else 0
