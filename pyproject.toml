@@ -1,7 +1,7 @@
 [project]
 name = "valuation-monitor"
 version = "0.1.0"
-description = "监控股票估值水平（PE/PS/PB 等）处于历史高位还是低位"
+description = "Monitor whether a stock's valuation (PE/PS/PB etc.) is high or low compared with its own history"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

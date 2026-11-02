@@ -1,4 +1,4 @@
-"""加载并校验 config.yaml。"""
+"""Load and validate config.yaml."""
 
 from __future__ import annotations
 
@@ -12,21 +12,26 @@ from valuation_monitor.market_calendar import MARKETS
 
 @dataclass(frozen=True)
 class Level:
-    upper: float  # 分位数上限（含），0-100
+    upper: float  # upper percentile bound (inclusive), 0-100
     label: str
 
 
-FILING_SOURCES = {"HK": "港交所披露易", "US": "美国证监会 EDGAR", "KR": "三星电子 IR 网站（英文财务报表）", "CN": "巨潮资讯网（证监会指定的信息披露平台）"}
+FILING_SOURCES = {
+    "HK": "HKEXnews",
+    "US": "SEC EDGAR",
+    "KR": "Samsung Electronics IR website (English financial statements)",
+    "CN": "CNINFO (the CSRC-designated disclosure platform)",
+}
 
 
 @dataclass(frozen=True)
 class StockConfig:
-    symbol: str  # Yahoo Finance 代码，如 0700.HK、JD
+    symbol: str  # Yahoo Finance symbol, e.g. 0700.HK, JD
     name: str
     metrics: list[str] = field(default_factory=lambda: ["pe"])
-    filing_format: str = "highlights"  # 业绩公告的版式，见 filings.FILING_FORMATS
-    market: str = "HK"  # 上市地：HK（港交所披露易）、US（美国证监会 EDGAR）、KR（韩国公司的 IR 网站）或 CN（A 股，巨潮资讯网）
-    cik: int | None = None  # 美股公司在美国证监会的编号（Central Index Key）
+    filing_format: str = "highlights"  # layout of the earnings filings, see filings.FILING_FORMATS
+    market: str = "HK"  # listing market: HK (HKEXnews), US (SEC EDGAR), KR (company IR website) or CN (A-shares, CNINFO)
+    cik: int | None = None  # SEC Central Index Key of a US-listed company
 
     @property
     def filing_source(self) -> str:
@@ -34,7 +39,7 @@ class StockConfig:
 
     @property
     def cross_checks_prices(self) -> bool:
-        """是否有两个以上来源的股价可以互相核对（港股有腾讯证券和 Yahoo，美股只有 Yahoo）。"""
+        """Whether prices from two or more sources can be cross-checked (HK: Tencent and Yahoo; US: Yahoo only)."""
         return MARKETS[self.market].cross_checks_prices
 
 
@@ -44,22 +49,22 @@ DEFAULT_LOOKBACK_OPTIONS = [10, 5, 3, 2, 1]
 @dataclass(frozen=True)
 class Config:
     stocks: list[StockConfig]
-    lookback_years: int = 10  # 默认选中的回看年数
+    lookback_years: int = 10  # default selected lookback in years
     levels: list[Level] = field(default_factory=list)
-    lookback_options: list[int] = field(default_factory=lambda: list(DEFAULT_LOOKBACK_OPTIONS))  # 网页上可选的回看年数
+    lookback_options: list[int] = field(default_factory=lambda: list(DEFAULT_LOOKBACK_OPTIONS))  # lookback years selectable on the web page
 
     @property
     def max_lookback(self) -> int:
-        """最长的回看年数，决定需要准备多少年的行情和业绩数据。"""
+        """The longest lookback in years; it decides how many years of prices and earnings are prepared."""
         return max(self.lookback_options)
 
 
 DEFAULT_LEVELS = [
-    Level(10, "极度低估"),
-    Level(30, "低估"),
-    Level(70, "合理"),
-    Level(90, "高估"),
-    Level(100, "极度高估"),
+    Level(10, "Deeply undervalued"),
+    Level(30, "Undervalued"),
+    Level(70, "Fair"),
+    Level(90, "Overvalued"),
+    Level(100, "Deeply overvalued"),
 ]
 
 
@@ -77,24 +82,24 @@ def parse_config(raw: dict) -> Config:
         metrics = [m.lower() for m in s.get("metrics", ["pe"])]
         unknown = [m for m in metrics if m not in METRICS]
         if unknown:
-            raise ValueError(f"{s['symbol']}: 未知指标 {unknown}，可用指标: {sorted(METRICS)}")
+            raise ValueError(f"{s['symbol']}: unknown metric {unknown}; available metrics: {sorted(METRICS)}")
         symbol = str(s["symbol"])
         suffix_markets = {".HK": "HK", ".KS": "KR", ".KQ": "KR", ".SZ": "CN", ".SS": "CN"}
         default_market = next((m for suffix, m in suffix_markets.items() if symbol.upper().endswith(suffix)), "US")
         market = str(s.get("market", default_market)).upper()
         if market not in MARKETS:
-            raise ValueError(f"{symbol}: 未知的市场 {market}，可用市场: {sorted(MARKETS)}")
-        # 港股的业绩来自港交所公告（PDF），美股的来自美国证监会 EDGAR 的新闻稿（HTML），韩股的来自公司 IR 网站的财务报表
+            raise ValueError(f"{symbol}: unknown market {market}; available markets: {sorted(MARKETS)}")
+        # HK earnings come from HKEXnews filings (PDF), US from SEC EDGAR press releases (HTML), KR from the company IR website financial statements
         default_format = {"HK": "highlights", "US": "press_release", "KR": "kifrs_statements", "CN": "cn_report"}[market]
         filing_format = str(s.get("filing_format", default_format))
         if filing_format not in FILING_FORMATS:
-            raise ValueError(f"{symbol}: 未知的公告版式 {filing_format}，可用版式: {sorted(FILING_FORMATS)}")
-        foreign_formats = {"press_release": "US", "kifrs_statements": "KR", "cn_report": "CN"}  # 非港股版式只适用于对应市场
+            raise ValueError(f"{symbol}: unknown filing format {filing_format}; available formats: {sorted(FILING_FORMATS)}")
+        foreign_formats = {"press_release": "US", "kifrs_statements": "KR", "cn_report": "CN"}  # non-HK formats only apply to their own market
         if foreign_formats.get(filing_format, "HK" if market == "HK" else None) != market:
-            raise ValueError(f"{symbol}: 公告版式 {filing_format} 与市场 {market} 不匹配")
+            raise ValueError(f"{symbol}: filing format {filing_format} does not match market {market}")
         cik = int(s["cik"]) if s.get("cik") is not None else None
         if market == "US" and cik is None:
-            raise ValueError(f"{symbol}: 美股需要配置 cik（公司在美国证监会的编号）")
+            raise ValueError(f"{symbol}: US stocks need a cik (the company's SEC Central Index Key)")
         stocks.append(
             StockConfig(
                 symbol=symbol,
@@ -106,17 +111,17 @@ def parse_config(raw: dict) -> Config:
             )
         )
     if not stocks:
-        raise ValueError("配置中没有任何股票（stocks 为空）")
+        raise ValueError("The config has no stocks (stocks is empty)")
 
     levels = [Level(float(lv["upper"]), str(lv["label"])) for lv in raw.get("levels") or []]
     levels = sorted(levels, key=lambda lv: lv.upper) or DEFAULT_LEVELS
     if levels[-1].upper < 100:
-        raise ValueError("levels 最后一档的 upper 必须为 100")
+        raise ValueError("The last entry of levels must have upper = 100")
 
     options = sorted({int(y) for y in raw.get("lookback_options") or DEFAULT_LOOKBACK_OPTIONS}, reverse=True)
     if options[-1] < 1:
-        raise ValueError("lookback_options 里的年数必须是正整数")
+        raise ValueError("The years in lookback_options must be positive integers")
     default = int(raw.get("lookback_years", options[0]))
     if default not in options:
-        raise ValueError(f"lookback_years={default} 必须是 lookback_options {options} 之一")
+        raise ValueError(f"lookback_years={default} must be one of lookback_options {options}")
     return Config(stocks=stocks, lookback_years=default, levels=levels, lookback_options=options)

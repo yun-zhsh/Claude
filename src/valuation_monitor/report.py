@@ -1,4 +1,4 @@
-"""文字报告和走势图。"""
+"""Text report and trend charts."""
 
 from __future__ import annotations
 
@@ -16,12 +16,12 @@ def format_text(stock: StockConfig, metric: Metric, v: Valuation) -> str:
     return "\n".join(
         [
             f"{stock.name} ({stock.symbol})  {metric.label}",
-            f"  日期      {v.as_of:%Y-%m-%d}",
-            f"  当前值    {v.current:.2f}",
-            f"  历史分位  {v.percentile:.1f}%  →  {v.level}",
-            f"  回看区间  {v.window_start:%Y-%m-%d} ~ {v.as_of:%Y-%m-%d}（{v.observations} 个交易日）",
-            f"  区间统计  最低 {v.min:.1f} / 均值 {v.mean:.1f} / 最高 {v.max:.1f}",
-            f"  分位参考  {bands}",
+            f"  Date        {v.as_of:%Y-%m-%d}",
+            f"  Current     {v.current:.2f}",
+            f"  Percentile  {v.percentile:.1f}%  ->  {v.level}",
+            f"  Window      {v.window_start:%Y-%m-%d} ~ {v.as_of:%Y-%m-%d} ({v.observations} trading days)",
+            f"  Range       min {v.min:.1f} / mean {v.mean:.1f} / max {v.max:.1f}",
+            f"  Bands       {bands}",
         ]
     )
 

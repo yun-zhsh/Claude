@@ -113,7 +113,7 @@ h2 { font-size: 1.1rem; margin: 0 0 0.75rem; }
   .metric-row { grid-template-columns: 1fr auto; }
 }
 
-/* 走势图提示框：显示这一天比率的完整算式 */
+/* Chart tooltip: shows the full formula of the ratio on that day */
 .audit-tip {
   position: absolute; z-index: 20; display: none; max-width: min(560px, calc(100vw - 24px)); pointer-events: none;
   background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 8px;

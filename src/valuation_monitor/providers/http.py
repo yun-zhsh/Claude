@@ -1,4 +1,4 @@
-"""带磁盘缓存和重试的 HTTP 请求。"""
+"""HTTP requests with a disk cache and retries."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-# Yahoo 会对完整的浏览器 UA 返回 429，简短 UA 反而可以正常访问
+# Yahoo answers 429 to a full browser UA; a short UA works
 USER_AGENT = "Mozilla/5.0"
 
 
@@ -22,7 +22,7 @@ class HttpClient:
         user_agent: str = USER_AGENT,
         min_interval: float = 0.0,
     ):
-        """min_interval：两次真正的网络请求之间至少间隔多少秒（命中缓存的不算），用于遵守数据源的限速规定。"""
+        """min_interval: minimum seconds between two real network requests (cache hits do not count), to respect the rate limit of the source."""
         self.cache_dir = Path(cache_dir)
         self.ttl_seconds = ttl_seconds
         self.refresh = refresh
@@ -34,7 +34,7 @@ class HttpClient:
     def get_bytes(
         self, url: str, params: dict | None = None, immutable: bool = False, cache: bool = True, retries: int = 3
     ) -> bytes:
-        """immutable=True 表示内容不会变，缓存永不过期，--refresh 也不重新下载；cache=False 不读写缓存（调用方自己保存）。"""
+        """immutable=True means the content never changes: the cache never expires and --refresh does not re-download; cache=False neither reads nor writes the cache (the caller saves it)."""
         key = hashlib.sha256(json.dumps([url, params], sort_keys=True).encode()).hexdigest()[:24]
         path = self.cache_dir / key
         if cache and path.exists() and (
@@ -63,7 +63,7 @@ class HttpClient:
         return data
 
     def post_json(self, url: str, data: dict, retries: int = 5) -> dict:
-        """POST 表单并返回 JSON（如巨潮资讯的公告查询）。结果按请求内容缓存（同 get_bytes 的缓存时间）。"""
+        """POST a form and return JSON (e.g. the CNINFO announcement query). The result is cached by request content (same cache time as get_bytes)."""
         key = hashlib.sha256(json.dumps([url, data], sort_keys=True).encode()).hexdigest()[:24]
         path = self.cache_dir / key
         if path.exists() and not self.refresh and time.time() - path.stat().st_mtime < self.ttl_seconds:
@@ -74,7 +74,7 @@ class HttpClient:
         return result
 
     def get_response(self, url: str, retries: int = 5) -> requests.Response:
-        """下载文件并返回完整响应（需要读响应头时用，如文件的上传时间）。不缓存，由调用方自己保存。"""
+        """Download a file and return the full response (use when response headers are needed, e.g. the upload time). Not cached; the caller saves it."""
         return self._send("get", url, retries)
 
     def _send(self, method: str, url: str, retries: int, **kwargs) -> requests.Response:

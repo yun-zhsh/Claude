@@ -11,7 +11,7 @@ def frame(closes, volumes=None):
 
 def test_consolidate_handles_stepwise_yahoo_adjustment():
     raw = [100.0 + i for i in range(30)]
-    # Yahoo 在第 15 天之前把价格调低 5%（如实物分派的除权）
+    # Yahoo lowers prices by 5% before day 15 (an ex-rights event such as a distribution in kind)
     yahoo = [p * (0.95 if i < 15 else 1.0) for i, p in enumerate(raw)]
     out = consolidate(frame(raw), frame(yahoo))
     assert (out["status"] == "agree").all()
@@ -23,16 +23,16 @@ def test_consolidate_handles_stepwise_yahoo_adjustment():
 def test_consolidate_flags_mismatch_and_ignores_zero_volume():
     raw = [100.0] * 20
     yahoo = list(raw)
-    yahoo[5] = 103.0  # 某天 Yahoo 数据有误
+    yahoo[5] = 103.0  # Yahoo data is wrong on one day
     yahoo_vol = [100] * 20
-    yahoo_vol[8] = 0  # 停市日的假数据
-    tencent = frame(raw).drop(frame(raw).index[8])  # 腾讯当天没有数据
+    yahoo_vol[8] = 0  # fake data on a closure day
+    tencent = frame(raw).drop(frame(raw).index[8])  # Tencent has no data that day
     out = consolidate(tencent, frame(yahoo, yahoo_vol))
 
     day5, day8 = out.index[5], frame(raw).index[8]
     assert out.loc[day5, "status"] == "mismatch"
-    assert out.loc[day5, "close"] == 100.0  # 不一致时采用腾讯价格
-    assert day8 not in out.index  # 双方都没有有效数据
+    assert out.loc[day5, "close"] == 100.0  # on disagreement the Tencent price is used
+    assert day8 not in out.index  # neither source has valid data
     assert (out.drop(day5)["status"] == "agree").all()
 
 
@@ -57,7 +57,7 @@ def test_consolidate_ex_date_next_to_missing_day():
     raw = [100.0] * 20
     yahoo = [p * (0.95 if i < 10 else 1.0) for i, p in enumerate(raw)]
     yahoo_vol = [100] * 20
-    yahoo_vol[9] = 0  # 除权日前一天 Yahoo 无有效数据
+    yahoo_vol[9] = 0  # Yahoo has no valid data the day before the ex-rights date
     out = consolidate(frame(raw), frame(yahoo, yahoo_vol))
     assert out["status"].value_counts().to_dict() == {"agree": 19, "tencent_only": 1}
     assert out["yahoo_factor"].iloc[10] == 1.0

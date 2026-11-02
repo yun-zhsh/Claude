@@ -1,13 +1,13 @@
-"""从三星电子英文版合并财务报表（K-IFRS）中提取业绩数据。
+"""Extract earnings data from Samsung Electronics' English consolidated financial statements (K-IFRS).
 
-每个季度读两份文件：合并损益表（soi）和合并财务状况表（bs）。
-  - 损益表的列：本期、去年同期的韩元（KRW）金额，再是同样两列的美元换算，然后是年初至今的各列。
-    一至三季度取“三个月”的前两列（本季度、去年同季度）；第四季度报告期是全年，取前两列
-    （本年、上年），当作累计数，单季数由程序用全年减前三季度得到。
-  - 营收取 Revenue，净利润取 Profit attributable to owners of the parent，EPS 取基本 EPS（普通股，韩元）；
-    金额单位是百万韩元。
-  - 归属母公司股东的净资产 = Total equity − Non-controlling interests，依次为本期末、上年末。
-三星有普通股和优先股，净利润包含归属优先股的部分，所以“净利润 ÷ 基本 EPS”反推的是普通股加优先股的合计加权股数。
+Two files are read for each quarter: the consolidated statement of income (soi) and of financial position (bs).
+  - Income statement columns: KRW amounts of this period and the same period last year, then the same two columns converted to USD, then the year-to-date columns.
+    For Q1-Q3 the first two columns of "three months" are used (this quarter, same quarter last year); for Q4 the reporting period is the full year and the first two
+    columns (this year, last year) are used as cumulative figures; the single quarter is obtained by the program as full year minus the first three quarters.
+  - Revenue is Revenue, net profit is Profit attributable to owners of the parent, EPS is basic EPS (ordinary shares, KRW);
+    amounts are in millions of KRW.
+  - Equity attributable to owners of the parent = Total equity - Non-controlling interests, for the end of this period and the end of last year.
+Samsung has ordinary and preferred shares and net profit includes the part attributable to preferred shares, so "net profit / basic EPS" implies the combined weighted average shares of ordinary plus preferred shares.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from pypdf import PdfReader
 
 from valuation_monitor.parsed import Parsed
 
-AMT = r"\(?\d{1,3}(?:,\d{3})+\)?"  # 带千位分隔的金额；附注编号（如 27、18, 19）不算
+AMT = r"\(?\d{1,3}(?:,\d{3})+\)?"  # amounts with thousands separators; note numbers (e.g. 27, 18, 19) do not count
 EPS_AMT = r"\(?\d[\d,]*\)?"
 TITLE_RE = re.compile(r"(?P<q>[1-4])Q (?P<year>20\d\d)")
 PERIOD_END = {1: "March 31", 2: "June 30", 3: "September 30", 4: "December 31"}
@@ -41,9 +41,9 @@ def read_text(pdf: bytes) -> str:
 
 
 def clean_text(text: str) -> str:
-    text = " ".join(re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", " ", text).split())  # 个别文件里夹着控制字符
-    text = re.sub(r"(\d), (\d{3})\b", r"\1,\2", text)  # PDF 文字提取会在千位分隔符后插入空格，如“44, 260,956”
-    # 也会把最后一组数字拆开，如“5,969,78 3”：前面不足三位、加上后面刚好三位的才合并
+    text = " ".join(re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", " ", text).split())  # a few files contain control characters
+    text = re.sub(r"(\d), (\d{3})\b", r"\1,\2", text)  # PDF text extraction inserts a space after thousands separators, e.g. "44, 260,956"
+    # it also splits the last digit group, e.g. "5,969,78 3": merge only when the first part has fewer than three digits and together they make exactly three
     return re.sub(r"(?<![\d,])(\d{1,3}(?:,\d{3})*,)(\d{1,2}) (\d{1,2})(?![\d,])", lambda m: m.group(1) + m.group(2) + m.group(3) if len(m.group(2) + m.group(3)) == 3 else m.group(0), text)
 
 
@@ -55,26 +55,26 @@ def to_number(token: str) -> float:
 def pair(regex: re.Pattern, text: str, name: str) -> list[float]:
     m = regex.search(text)
     if not m:
-        raise ValueError(f"没有找到 {name}")
+        raise ValueError(f"Not found in the statements: {name}")
     return [to_number(m.group("a")), to_number(m.group("b"))]
 
 
-# EPS 附注（Notes 里的 Earnings per Share）：加权平均股数，单位千股。
-# 第一、二、三季度的附注里每年两列（三个月、累计），共四个数：本年三个月、本年累计、去年三个月、去年累计；
-# 第一季度和全年只有本年、去年两个数。
+# EPS note (Earnings per Share in the Notes): weighted average shares, in thousands of shares.
+# In the Q1, Q2, Q3 notes each year has two columns (three months, cumulative), four numbers in all: this year three months, this year cumulative, last year three months, last year cumulative;
+# Q1 and the full year have only two numbers, this year and last year.
 SHARE_ROW = r"Weighted-average number of {kind} shares outstanding(?: \(in thousands\))? (?P<n>(?:[\d,]+ ){{1,4}})"
 COMMON_SHARES_RE = re.compile(SHARE_ROW.format(kind="(?:ordinary|common)"))
 PREFERRED_SHARES_RE = re.compile(SHARE_ROW.format(kind="(?:preferred|preference)"))
 
 
 def eps_note_pages(note: bytes) -> bytes | None:
-    """从完整的附注 PDF 里只留下 Earnings per Share 附注所在的页（原文页面原样保留；优先股部分常在下一页），
-    下载保存时用，省得每个季度存几百 KB。"""
+    """From the full note PDF keep only the pages with the Earnings per Share note (pages unchanged; the preferred-share part is often on the next page),
+    used when saving the download, so that each quarter does not store hundreds of KB."""
     from pypdf import PdfWriter
 
     reader = PdfReader(io.BytesIO(note))
     texts = [read_text_of_page(page) for page in reader.pages]
-    # 要的是附注里的表（“Weighted-average number of ordinary shares outstanding 5,767,030 …”），不是会计政策里的文字说明
+    # what is needed is the table in the notes ("Weighted-average number of ordinary shares outstanding 5,767,030 ..."), not the text in the accounting policies
     first = next((i for i, t in enumerate(texts) if COMMON_SHARES_RE.search(t + " ")), None)
     if first is None:
         return None
@@ -96,9 +96,9 @@ def current_and_prior(numbers: str) -> tuple[float, float] | None:
 
 
 def parse_weighted_shares(note: bytes) -> list[float] | None:
-    """附注里披露的普通股加优先股基本 EPS 加权平均股数（附注原样的数，单位不定），依次为本期、去年同期。
+    """Basic EPS weighted average shares of ordinary plus preferred shares disclosed in the note (numbers as in the note, unit varies): this period, same period last year.
 
-    单位在不同年份的附注里不一样（千股、股），由调用方对照净利润 ÷ EPS 的量级来判断。
+    The unit differs between years (thousands of shares, shares); the caller decides it by comparing with the magnitude of net profit / EPS.
     """
     text = read_text(note) + " "
     common = COMMON_SHARES_RE.search(text)
@@ -112,7 +112,7 @@ def parse_weighted_shares(note: bytes) -> list[float] | None:
 
 
 def scale_to_millions(raw: list[float], implied_millions: float) -> list[float] | None:
-    """附注里的股数是千股还是股？按哪个单位换算后与“归母净利润 ÷ 基本 EPS”相差不到 5% 就用哪个。"""
+    """Are the shares in the note in thousands or in single shares? Use the unit whose conversion is within 5% of "net profit attributable to owners / basic EPS"."""
     for factor in (1e-6, 1e-3, 1.0):
         if abs(raw[0] * factor / implied_millions - 1) < 0.05:
             return [v * factor for v in raw]
@@ -122,11 +122,11 @@ def scale_to_millions(raw: list[float], implied_millions: float) -> list[float] 
 def parse_kifrs(title: str, soi: bytes, bs: bytes, note: bytes | None = None) -> Parsed:
     m = TITLE_RE.search(title)
     if not m:
-        raise ValueError(f"无法从标题识别报告期: {title}")
+        raise ValueError(f"Cannot tell the reporting period from the title: {title}")
     quarter, year = int(m.group("q")), int(m.group("year"))
     income, balance = read_text(soi), read_text(bs)
     if f"{PERIOD_END[quarter]}, " not in income and f"{PERIOD_END[quarter]}," not in income.replace(" ,", ","):
-        raise ValueError(f"损益表里没有 {PERIOD_END[quarter]}，与标题的报告期 {quarter}Q {year} 不符")
+        raise ValueError(f"The income statement does not mention {PERIOD_END[quarter]}, so it does not match the reporting period {quarter}Q {year} in the title")
 
     total, nci = pair(TOTAL_EQUITY_RE, balance, "Total equity"), pair(NCI_RE, balance, "Non-controlling interests")
     values = {
@@ -138,61 +138,61 @@ def parse_kifrs(title: str, soi: bytes, bs: bytes, note: bytes | None = None) ->
     if note is not None and (raw := parse_weighted_shares(note)):
         scaled = scale_to_millions(raw, values["profit"][0] / values["eps"][0])
         if scaled is None:
-            print(f"{title}: 附注里的股数 {raw[0]:,.0f} 与净利润 ÷ EPS 的量级对不上，无法判断单位，股数改为反推", file=sys.stderr)
+            print(f"{title}: the share count in the notes ({raw[0]:,.0f}) is not of the order of profit / EPS, so its unit cannot be determined; shares are implied instead", file=sys.stderr)
         else:
             values["wa_shares"] = scaled
     return Parsed("KRW", values, pd.Period(year=year, quarter=quarter, freq="Q"), quarterly=quarter != 4)
 
 
-# 业绩发布会（Earnings Call）材料，2026 年起的版式：三列依次为去年同季度、上一季度、本季度
+# Earnings Call material, layout since 2026: three columns: same quarter last year, previous quarter, this quarter
 DECK_PCT_COLUMNS = r"(?P<a>[\d.]+) [\d.]+% (?P<b>[\d.]+) [\d.]+% (?P<c>[\d.]+) [\d.]+%"
 DECK_SALES_RE = re.compile(rf"\bSales {DECK_PCT_COLUMNS}")
 DECK_PROFIT_RE = re.compile(rf"Profit ?attributable to owners of the parent {DECK_PCT_COLUMNS}")
 DECK_EPS_RE = re.compile(r"EPS ?\(KRW\) ?※ ?Common stock (?P<a>[\d,]+) (?P<b>[\d,]+) (?P<c>[\d,]+)")
 DECK_EQUITY_RE = re.compile(r"Shareholder equity (?P<a>[\d,]+\.\d) (?P<b>[\d,]+\.\d) (?P<c>[\d,]+\.\d)")
-# 第四季度的材料多了全年两列：去年同季度、上一季度、本季度、上年全年、本年全年（只有营收、净利润带“占比%”）
+# The Q4 material has two more full-year columns: same quarter last year, previous quarter, this quarter, last full year, this full year (only revenue and net profit carry a "share %")
 FY_PCT = r"(?P<q4y>[\d.]+) (?P<q3>[\d.]+) [\d.]+% (?P<q4>[\d.]+) [\d.]+% (?P<fy0>[\d.]+) [\d.]+% (?P<fy1>[\d.]+) [\d.]+%"
 DECK_FY_SALES_RE = re.compile(rf"\bSales {FY_PCT}")
 DECK_FY_PROFIT_RE = re.compile(rf"Profit ?attributable to owners of the parent {FY_PCT}")
 DECK_FY_EPS_RE = re.compile(
     r"(?:EPS ?\(KRW\) ?※ ?Common stock|Earnings per share ?\(KRW\)) (?P<q4y>[\d,]+) (?P<q3>[\d,]+) (?P<q4>[\d,]+) (?P<fy0>[\d,]+) (?P<fy1>[\d,]+)"
 )
-TRILLION = 1_000_000  # 百万韩元
+TRILLION = 1_000_000  # millions of KRW
 BILLION = 1_000
 
 
 def deck_columns(regex: re.Pattern, text: str, name: str) -> list[float]:
-    """发布会材料里的一行，返回 [本季度, 去年同季度, 上一季度]。"""
+    """A row of the call material, returns [this quarter, same quarter last year, previous quarter]."""
     m = regex.search(text)
     if not m:
-        raise ValueError(f"发布会材料里没有找到 {name}（版式可能变了）")
+        raise ValueError(f"{name} was not found in the earnings call presentation (the layout may have changed)")
     yoy, qoq, cur = (float(m.group(k).replace(",", "")) for k in "abc")
     return [cur, yoy, qoq]
 
 
 def fiscal_year_columns(regex: re.Pattern, text: str, name: str) -> list[float]:
-    """第四季度材料里的一行，返回 [本年全年, 上年全年]。"""
+    """A row of the Q4 material, returns [this full year, last full year]."""
     m = regex.search(text)
     if not m:
-        raise ValueError(f"第四季度发布会材料里没有找到 {name}（版式可能变了）")
+        raise ValueError(f"{name} was not found in the Q4 earnings call presentation (the layout may have changed)")
     return [float(m.group("fy1").replace(",", "")), float(m.group("fy0").replace(",", ""))]
 
 
 def parse_kifrs_deck(title: str, deck: bytes, previous_bs: bytes) -> Parsed:
-    """业绩发布会材料里的当季业绩（审阅前，先用着，英文财报发布后换成财报数字）。
+    """The quarter's results in the earnings call material (before review; used for now and replaced by the English statements when they are out).
 
-    营收和净利润只精确到 0.1 万亿韩元；EPS 是精确的韩元数。材料里的净资产含非控股权益，
-    归属母公司的净资产按上一季度财报里“归母 ÷ 合计”的比例估算（非控股权益只占 2%～3%，变化很小）。
-    第四季度和年度财报一样当作全年累计数（本年、上年）处理，由程序用全年减前三季度得到单季数，
-    这样第四季度的 TTM EPS 与年报的全年 EPS 一致，财报发布后数字也不会跳变。
+    Revenue and net profit are only precise to 0.1 trillion KRW; EPS is the exact KRW figure. The equity in the material includes non-controlling interests;
+    equity attributable to the parent is estimated with the "attributable / total" ratio of the previous quarter's statements (non-controlling interests are only 2-3%, so it changes little).
+    Q4 is handled like the annual report as full-year cumulative figures (this year, last year), and the single quarter is obtained by the program as full year minus the first three quarters,
+    so the Q4 TTM EPS equals the full-year EPS of the annual report and the numbers do not jump once the statements are out.
     """
     m = TITLE_RE.search(title)
     if not m:
-        raise ValueError(f"无法从标题识别报告期: {title}")
+        raise ValueError(f"Cannot tell the reporting period from the title: {title}")
     quarter, year = int(m.group("q")), int(m.group("year"))
     text = read_text(deck)
     if f"{quarter}Q {year} Results" not in text:
-        raise ValueError(f"发布会材料不是 {quarter}Q {year} 的，或版式已变")
+        raise ValueError(f"The presentation is not for {quarter}Q {year}, or its layout has changed")
 
     previous = read_text(previous_bs)
     total_prev, nci_prev = pair(TOTAL_EQUITY_RE, previous, "Total equity")[0], pair(NCI_RE, previous, "Non-controlling interests")[0]

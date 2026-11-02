@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}{{ report.stock.name }} - 股票估值监控{% endblock %}
+{% block title %}{{ report.stock.name }} - Stock Valuation Monitor{% endblock %}
 {% block content %}
-<a class="back" href="{{ url_for('index') }}" data-keep-years>← 返回股票列表</a>
+<a class="back" href="{{ url_for('index') }}" data-keep-years>&larr; Back to the stock list</a>
 <div class="stock-head page-head">
   <div>
     <h1>{{ report.stock.name }} <span class="muted">{{ report.stock.symbol }}</span></h1>
-    <div class="muted">数据更新于 {{ report.updated_at.strftime("%Y-%m-%d %H:%M") }}{% if static_site %}（定时自动更新）{% endif %}</div>
+    <div class="muted">Data updated {{ report.updated_at.strftime("%Y-%m-%d %H:%M") }}{% if static_site %} (updated automatically on a schedule){% endif %}</div>
   </div>
   {% if report.latest_close %}
   <div class="price">
@@ -27,14 +27,14 @@
     {% set f = m.windows[default_years] %}
     <div class="big" data-f="current">{{ f.current }}</div>
     <div class="percentile">
-      <span>历史分位 <strong><span data-f="percentile">{{ f.percentile }}</span>%</strong></span>
+      <span>Historical percentile <strong><span data-f="percentile">{{ f.percentile }}</span>%</strong></span>
       <span class="badge" data-f="level" data-f-color style="--c: {{ f.color }}">{{ f.level }}</span>
     </div>
     <div class="meter"><div class="meter-dot" data-f-left data-f-color style="left: {{ f.percentile }}%; --c: {{ f.color }}"></div></div>
     <dl class="stats">
-      <dt>回看区间</dt><dd data-f="range">{{ f.range }}</dd>
-      <dt>最低 / 均值 / 最高</dt><dd data-f="stats">{{ f.stats }}</dd>
-      <dt>分位参考</dt><dd data-f="bands">{{ f.bands }}</dd>
+      <dt>Window</dt><dd data-f="range">{{ f.range }}</dd>
+      <dt>Min / mean / max</dt><dd data-f="stats">{{ f.stats }}</dd>
+      <dt>Percentile bands</dt><dd data-f="bands">{{ f.bands }}</dd>
     </dl>
     {% else %}
     <div class="error">{{ m.error }}</div>
@@ -45,49 +45,49 @@
 
 {% for c in data.charts.metrics %}
 <section class="card chart-card">
-  <h2>{{ c.label }} 走势（过去 <span data-years-label>{{ default_years }}</span> 年）</h2>
+  <h2>{{ c.label }} trend (past <span data-years-label>{{ default_years }}</span> year(s))</h2>
   <div class="chart-box"><canvas id="chart-{{ c.key }}"></canvas></div>
 </section>
 {% endfor %}
 
 <section class="card chart-card">
-  <h2>股价走势（{{ report.data.price_currency }}，{{ '实际成交价' if report.stock.cross_checks_prices else '收盘价' }}，过去 <span data-years-label>{{ default_years }}</span> 年）</h2>
+  <h2>Share price ({{ report.data.price_currency }}, {{ 'actual traded price' if report.stock.cross_checks_prices else 'closing price' }}, past <span data-years-label>{{ default_years }}</span> year(s))</h2>
   <div class="chart-box"><canvas id="chart-price"></canvas></div>
 </section>
 
 <section class="card">
-  <h2>下载数据</h2>
+  <h2>Download data</h2>
   <div class="downloads">
-    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='prices.csv') }}" download="{{ download_name(report.stock.symbol, 'prices.csv') }}">下载历史股价</a>
-    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='eps.csv') }}" download="{{ download_name(report.stock.symbol, 'eps.csv') }}">下载历史业绩</a>
-    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='ttm.csv') }}" download="{{ download_name(report.stock.symbol, 'ttm.csv') }}">每股指标（含算式）</a>
-    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='valuation.csv') }}" download="{{ download_name(report.stock.symbol, 'valuation.csv') }}">每日估值明细</a>
-    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='raw.zip') }}" download="{{ download_name(report.stock.symbol, 'raw.zip') }}">全部原始数据（zip）</a>
+    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='prices.csv') }}" download="{{ download_name(report.stock.symbol, 'prices.csv') }}">Download historical prices</a>
+    <a class="btn" href="{{ url_for('download', symbol=report.stock.symbol, name='eps.csv') }}" download="{{ download_name(report.stock.symbol, 'eps.csv') }}">Download historical earnings</a>
+    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='ttm.csv') }}" download="{{ download_name(report.stock.symbol, 'ttm.csv') }}">Per-share metrics (with formulas)</a>
+    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='valuation.csv') }}" download="{{ download_name(report.stock.symbol, 'valuation.csv') }}">Daily valuation detail</a>
+    <a class="btn btn-secondary" href="{{ url_for('download', symbol=report.stock.symbol, name='raw.zip') }}" download="{{ download_name(report.stock.symbol, 'raw.zip') }}">All raw data (zip)</a>
   </div>
   <ul class="muted small">
     {% if report.stock.cross_checks_prices %}
-    <li>历史股价：每个交易日最终采用的收盘价，以及腾讯证券、Yahoo 两个来源的价格和核对状态。</li>
+    <li>Historical prices: the closing price finally used on each trading day, plus the prices from the two sources (Tencent, Yahoo) and their cross-check status.</li>
     {% else %}
-    <li>历史股价：每个交易日的收盘价（来自 Yahoo Finance，已按拆股调整）。</li>
+    <li>Historical prices: the closing price on each trading day (from Yahoo Finance, adjusted for stock splits).</li>
     {% endif %}
-    <li>历史业绩：从{{ report.stock.filing_source }}业绩公告原文提取的每期（季度或半年）营收、归母净利润、基本 EPS、期末归母净资产，含首次公布时间、生效交易日、被几份公告证实、原文链接。</li>
-    <li>每股指标：每份公告发布后计算估值所用的 TTM EPS、每股营收、每股净资产及股数，列出 TTM 覆盖的各期数值和每一步的算式（如 TTM EPS = 第1期 + 第2期 + 第3期 + 第4期），方便逐项核对。</li>
-    <li>每日估值明细：每个交易日、每项指标的计算过程：比率 = 收盘价 ÷（每股数据 × 汇率），以及当天采用的是哪一期业绩。走势图上把光标放在某一天，也能看到同样的算式。</li>
-    <li>全部原始数据：各来源的原始行情、汇率、公告解析结果和公告索引。</li>
+    <li>Historical earnings: for each period (quarter or half year), the revenue, net profit attributable to owners, basic EPS and equity at period end extracted from the original earnings filings ({{ report.stock.filing_source }}), with the first publication time, effective trading day, number of confirming filings and the link to the original filing.</li>
+    <li>Per-share metrics: the TTM EPS, revenue per share, book value per share and share count used for valuation after each filing, with the values of every period the TTM covers and the formula of each step (e.g. TTM EPS = period 1 + period 2 + period 3 + period 4), so each can be checked.</li>
+    <li>Daily valuation detail: the calculation of every metric on every trading day: ratio = close / (per-share value x FX rate), and which period of earnings was used that day. Hovering over a day in a trend chart shows the same formula.</li>
+    <li>All raw data: the raw prices, FX rates, parsed filings and the filing index of every source.</li>
   </ul>
 </section>
 
 <section class="card">
-  <h2>数据来源与核对</h2>
+  <h2>Data sources and checks</h2>
   <dl class="stats">
-    <dt>业绩数据</dt>
-    <dd>{{ report.stock.filing_source }} {{ report.data.earnings.announcements|length }} 份业绩公告原文，币种 {{ report.data.earnings.currency }}</dd>
-    <dt>股价核对</dt>
+    <dt>Earnings data</dt>
+    <dd>{{ report.stock.filing_source }}: {{ report.data.earnings.announcements|length }} original earnings filings, currency {{ report.data.earnings.currency }}</dd>
+    <dt>Price check</dt>
     {% if report.stock.cross_checks_prices %}
-    <dd>腾讯证券 vs Yahoo（还原除权调整后），近 {{ max_lookback_years }} 年：
-      {% for k, n in report.price_check.items() %}{{ status_labels[k] }} {{ n }} 天{% if not loop.last %}，{% endif %}{% endfor %}</dd>
+    <dd>Tencent vs Yahoo (after undoing Yahoo's adjustments), past {{ max_lookback_years }} years:
+      {% for k, n in report.price_check.items() %}{{ status_labels[k] }} {{ n }} days{% if not loop.last %}, {% endif %}{% endfor %}</dd>
     {% else %}
-    <dd>仅 Yahoo Finance 一个来源，没有第二个来源可以核对</dd>
+    <dd>Yahoo Finance only; there is no second source to cross-check against</dd>
     {% endif %}
   </dl>
   {% if report.discrepancies %}
@@ -117,7 +117,7 @@
     P70: ["#fb923c", [6, 4]], P90: ["#dc2626", [2, 3]],
   };
 
-  // 提示框：用网页元素自己画（Chart.js 自带的提示框不会自动换行），显示这一天比率的完整算式
+  // Tooltip: drawn as a web element (the built-in Chart.js tooltip does not wrap lines); shows the full formula of the ratio on that day
   const fmt = (x, d = 4) => Number(x).toLocaleString("en-US", { maximumFractionDigits: d });
   let tip = null;
   function showTip(ctx, build) {
@@ -156,14 +156,14 @@
         scales: { x: { ticks: { maxTicksLimit: 10, maxRotation: 0 } } },
         plugins: {
           legend: { position: "bottom", labels: { boxWidth: 14 } },
-          tooltip: { enabled: false, filter: (item) => item.datasetIndex === 0, external: (ctx) => showTip(ctx, build) },  // 分位线是水平线，提示框里只显示指标本身
+          tooltip: { enabled: false, filter: (item) => item.datasetIndex === 0, external: (ctx) => showTip(ctx, build) },  // the percentile lines are horizontal; the tooltip only shows the metric itself
         },
         elements: { point: { radius: 0, hoverRadius: 3 } },
       },
     });
   }
 
-  // 每张图的数据在 setWindow 里按所选的回看年数截取；ISO 日期可以直接按字符串比较
+  // each chart's data is cut to the selected window in setWindow; ISO dates compare correctly as strings
   const metricCharts = charts.metrics.map((m) => {
     const names = Object.keys(view.fields[`${symbol}|${m.key}`][view.default].band_values);
     const datasets = [{ label: m.label, data: [], borderColor: color("--accent"), borderWidth: 1.5 }];
@@ -172,16 +172,16 @@
       datasets.push({ label: name, data: [], borderColor: c, borderDash: dash, borderWidth: 1 });
     });
     const entry = { m, names, from: 0 };
-    // 比率 = 收盘价 ÷（每股数据 × 汇率）；每股数据的算式来自 m.records（见 audit.py）
+    // ratio = close / (per-share value x FX rate); the formula of the per-share value comes from m.records (see audit.py)
     const build = (i) => {
       const k = entry.from + i;
       const rec = m.records[m.rec[k]];
       const fx = m.fx ? m.fx[k] : 1;
-      const rows = [[`${m.dates[k]}　${m.label} = ${fmt(m.values[k], 2)}`, "audit-head"]];
-      rows.push([`${m.label} = 收盘价 ÷（每股数据 × 汇率）`]);
-      rows.push([`= ${fmt(m.price[k])} ${m.price_ccy} ÷（${fmt(rec.per_share)} ${m.report_ccy} × ${fmt(fx, 6)}）= ${fmt(m.price[k] / (rec.per_share * fx), 4)}`, "audit-calc"]);
-      if (m.fx) rows.push([`汇率：1 ${m.report_ccy} = ${fmt(fx, 6)} ${m.price_ccy}`]);
-      rows.push([`每股数据取自 ${rec.title}`, "audit-src"]);
+      const rows = [[`${m.dates[k]}  ${m.label} = ${fmt(m.values[k], 2)}`, "audit-head"]];
+      rows.push([`${m.label} = close / (per-share value x FX rate)`]);
+      rows.push([`= ${fmt(m.price[k])} ${m.price_ccy} / (${fmt(rec.per_share)} ${m.report_ccy} x ${fmt(fx, 6)}) = ${fmt(m.price[k] / (rec.per_share * fx), 4)}`, "audit-calc"]);
+      if (m.fx) rows.push([`FX rate: 1 ${m.report_ccy} = ${fmt(fx, 6)} ${m.price_ccy}`]);
+      rows.push([`Per-share value taken from the ${rec.title}`, "audit-src"]);
       rec.lines.forEach((l) => rows.push([l, "audit-line"]));
       return rows;
     };
@@ -189,11 +189,11 @@
     return entry;
   });
   const priceChart = lineChart("chart-price", [
-    { label: "收盘价", data: [], borderColor: color("--accent"), borderWidth: 1.5 },
+    { label: "Close", data: [], borderColor: color("--accent"), borderWidth: 1.5 },
   ], (i) => {
     const p = charts.price;
     const k = priceFrom + i;
-    return [[`${p.dates[k]}　收盘价 ${fmt(p.values[k])} ${p.ccy}`, "audit-head"]];
+    return [[`${p.dates[k]}  Close ${fmt(p.values[k])} ${p.ccy}`, "audit-head"]];
   });
   let priceFrom = 0;
 

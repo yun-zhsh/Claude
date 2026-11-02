@@ -1,18 +1,18 @@
-# 定时更新数据，把新数据提交回仓库，并把网页发布到 GitHub Pages。
-# 首次使用前：仓库 Settings → Pages → Build and deployment → Source 选择 “GitHub Actions”。
-name: 更新数据并发布网页
+# Update the data on a schedule, commit the new data back to the repository, and publish the website to GitHub Pages.
+# Before first use: repository Settings > Pages > Build and deployment > Source = "GitHub Actions".
+name: Update data and publish site
 
 on:
   schedule:
-    # 每 4 小时一次（UTC 1:47 起），即香港时间 9:47、13:47、17:47、21:47、1:47、5:47。
-    # 避开整点以减少排队延迟；GitHub 不保证准点，可能晚几分钟到半小时以上。
+    # Every 4 hours (from 01:47 UTC), i.e. 09:47, 13:47, 17:47, 21:47, 01:47 and 05:47 Hong Kong time.
+    # Off the hour to reduce queueing delays; GitHub does not guarantee punctuality and may be minutes to half an hour late.
     - cron: "47 1-23/4 * * *"
-  workflow_dispatch: # 允许在 Actions 页面手动运行
+  workflow_dispatch: # allow manual runs from the Actions page
   push:
     branches: [main]
 
 permissions:
-  contents: write # 提交更新后的数据
+  contents: write # commit the updated data
   pages: write
   id-token: write
 
@@ -24,7 +24,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      TZ: Asia/Hong_Kong # 页面上显示的更新时间用香港时间
+      TZ: Asia/Hong_Kong # the update time shown on the pages is in Hong Kong time
     steps:
       - uses: actions/checkout@v4
 
@@ -34,22 +34,22 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: 安装
+      - name: Install
         run: pip install -e .
 
-      - name: 更新数据并导出网页
+      - name: Update data and export the site
         env:
-          # 访问美国证监会 EDGAR 需要声明使用者，内容为“程序名 联系邮箱”，在仓库 Secrets 中设置
+          # Accessing SEC EDGAR requires identifying yourself: "program-name contact-email", set in the repository Secrets
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: valuation-monitor-export --out _site --base-path "/${{ github.event.repository.name }}"
 
-      - name: 提交更新后的数据
+      - name: Commit the updated data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data
           if git diff --cached --quiet; then
-            echo "数据没有变化"
+            echo "No data changes"
           else
             git commit -m "Update data $(date '+%Y-%m-%d %H:%M %Z')"
             git pull --rebase origin "${GITHUB_REF_NAME}"

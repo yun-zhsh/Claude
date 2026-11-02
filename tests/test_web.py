@@ -14,7 +14,7 @@ from valuation_monitor.web import create_app, export_site
 
 @pytest.fixture
 def monitor(tmp_path):
-    config = parse_config({"stocks": [{"symbol": "0700.HK", "name": "腾讯控股", "metrics": ["pe", "pe_non_ifrs"]}]})
+    config = parse_config({"stocks": [{"symbol": "0700.HK", "name": "Tencent Holdings", "metrics": ["pe", "pe_non_ifrs"]}]})
     monitor = Monitor(config, data_dir=tmp_path, cache_dir=tmp_path / "cache")
 
     days = pd.bdate_range("2024-01-01", periods=300)
@@ -55,15 +55,15 @@ def client(monitor):
 def test_footer_shows_the_version(client):
     from valuation_monitor import __version__
 
-    assert f"股票估值监控 v{__version__}" in client.get("/").get_data(as_text=True)
+    assert f"Stock Valuation Monitor v{__version__}" in client.get("/").get_data(as_text=True)
 
 
 def test_index_lists_stocks(client):
     html = client.get("/").get_data(as_text=True)
-    assert "腾讯控股" in html and "0700.HK" in html
+    assert "Tencent Holdings" in html and "0700.HK" in html
     assert "/stock/0700.HK/" in html
-    assert "更新数据" in html
-    assert "PE (TTM)" in html and "分位" in html
+    assert "Update data" in html
+    assert "PE (TTM)" in html and "percentile" in html
 
 
 def test_stock_page_has_charts_and_downloads(client):
@@ -71,8 +71,8 @@ def test_stock_page_has_charts_and_downloads(client):
     assert 'id="chart-pe"' in html and 'id="chart-pe_non_ifrs"' in html and 'id="chart-price"' in html
     for name in ("prices.csv", "eps.csv", "ttm.csv", "raw.zip"):
         assert f"/stock/0700.HK/download/{name}" in html
-    assert 'download="0700.HK_历史股价.csv"' in html
-    assert client.get("/stock/0700.HK").status_code == 308  # 不带 / 的网址会跳转
+    assert 'download="0700.HK_historical_prices.csv"' in html
+    assert client.get("/stock/0700.HK").status_code == 308  # a URL without the trailing / redirects
     assert client.get("/stock/9999.HK/").status_code == 404
 
 
@@ -80,11 +80,11 @@ def test_downloads(client):
     r = client.get("/stock/0700.HK/download/prices.csv")
     assert r.status_code == 200
     text = r.data.decode("utf-8-sig")
-    assert text.splitlines()[0].startswith("日期,收盘价（实际成交价）")
-    assert "腾讯证券,一致" in text
-    assert "历史股价" in r.headers["Content-Disposition"] or "%E5%8E%86%E5%8F%B2" in r.headers["Content-Disposition"]
+    assert text.splitlines()[0].startswith("Date,Close (actual traded price)")
+    assert "Tencent,Agree" in text
+    assert "historical_prices" in r.headers["Content-Disposition"]
 
-    assert client.get("/stock/0700.HK/download/eps.csv").data.decode("utf-8-sig").startswith("报告期（季度或半年）,币种")
+    assert client.get("/stock/0700.HK/download/eps.csv").data.decode("utf-8-sig").startswith("Period (quarter or half year),Currency")
     names = zipfile.ZipFile(io.BytesIO(client.get("/stock/0700.HK/download/raw.zip").data)).namelist()
     assert "prices/0700.HK/final.csv" in names and "eps/0700.HK_periods.csv" in names
     assert client.get("/stock/0700.HK/download/other").status_code == 404
@@ -104,10 +104,10 @@ def test_export_site(monitor, tmp_path):
     index = (out / "index.html").read_text(encoding="utf-8")
     assert 'href="/Claude/stock/0700.HK/"' in index
     assert "/Claude/static/style.css" in index
-    assert "/refresh" not in index and "更新数据" not in index  # 静态网站没有更新按钮
+    assert "/refresh" not in index and "Update data" not in index  # the static site has no update button
     page = (out / "stock" / "0700.HK" / "index.html").read_text(encoding="utf-8")
-    assert "/Claude/stock/0700.HK/download/prices.csv" in page and "定时自动更新" in page
-    assert (out / "stock" / "0700.HK" / "download" / "prices.csv").read_bytes().decode("utf-8-sig").startswith("日期")
+    assert "/Claude/stock/0700.HK/download/prices.csv" in page and "updated automatically on a schedule" in page
+    assert (out / "stock" / "0700.HK" / "download" / "prices.csv").read_bytes().decode("utf-8-sig").startswith("Date")
     assert (out / "static" / "chart.umd.min.js").exists()
     assert (out / ".nojekyll").exists()
 
@@ -148,17 +148,17 @@ def test_index_has_years_dropdown_and_all_windows(client):
     html = client.get("/").get_data(as_text=True)
     assert 'id="years-select"' in html
     for y in (10, 5, 3, 2, 1):
-        assert f'<option value="{y}"' in html and f"过去 {y} 年" in html
-    assert '<option value="10" selected>' in html  # 默认 10 年
+        assert f'<option value="{y}"' in html and f"Past {y} {'year' if y == 1 else 'years'}" in html
+    assert '<option value="10" selected>' in html  # default 10 years
     assert 'data-keep-years' in html and 'data-ref="0700.HK|pe"' in html and "static/app.js" in html
 
     view = view_json(html)
     assert view["default"] == 10 and view["options"] == [10, 5, 3, 2, 1]
     windows = view["fields"]["0700.HK|pe"]
-    assert set(windows) == {"10", "5", "3", "2", "1"}  # 键的顺序不重要，页面按键查找
+    assert set(windows) == {"10", "5", "3", "2", "1"}  # the order of keys does not matter; the page looks them up by key
     f = windows["1"]
     assert set(f) == {"current", "percentile", "level", "color", "range", "stats", "bands", "start", "band_values"}
-    assert f["start"] > windows["10"]["start"]  # 一年窗口比十年窗口的起点晚
+    assert f["start"] > windows["10"]["start"]  # the one-year window starts later than the ten-year window
     assert set(f["band_values"]) == {"P10", "P30", "P50", "P70", "P90"}
 
 
@@ -169,7 +169,7 @@ def test_stock_page_has_chart_data_for_every_window(client):
     charts = view["charts"]
     assert {m["key"] for m in charts["metrics"]} == {"pe", "pe_non_ifrs"}
     assert set(charts["price"]["starts"]) == {"10", "5", "3", "2", "1"}
-    # 走势图数据覆盖最长的回看年数，页面上再按所选年数截取
+    # the chart data covers the longest lookback; the page cuts it to the selected years
     assert charts["metrics"][0]["dates"][0] >= view["fields"]["0700.HK|pe"]["10"]["start"]
     assert 'data-f="percentile"' in html and "ValuationView.onChange" in html
     assert 'href="/"' in html and "data-keep-years" in html
@@ -187,25 +187,26 @@ def test_valuation_download_shows_how_each_ratio_is_calculated(client):
 
     raw = client.get("/stock/0700.HK/download/valuation.csv").data.decode("utf-8-sig")
     df = pd.read_csv(io.StringIO(raw))
-    close = "收盘价（股价币种）"
-    converted = "PE (TTM)｜每股数据（换算成股价币种）= 每股数据 × 汇率"
-    ratio = "PE (TTM)｜比率 = 收盘价 ÷ 换算后每股数据"
+    close = "Close (price currency)"
+    converted = "PE (TTM) | Per-share value (price currency) = per-share value x FX rate"
+    ratio = "PE (TTM) | Ratio = close / per-share value (price currency)"
     ok = df[ratio].notna()
     assert ok.any()
     assert ((df.loc[ok, close] / df.loc[ok, converted]) - df.loc[ok, ratio]).abs().max() < 1e-9
-    assert (df["PE (TTM)｜每股数据（财报币种）"] * df["汇率（1 单位财报币种 = 多少股价币种）"] - df[converted]).abs().max() < 1e-9
-    assert df.loc[ok, "PE (TTM)｜业绩记录（报告期）"].iloc[-1] == "2024Q2"
+    assert (df["PE (TTM) | Per-share value (reporting currency)"] * df["FX rate (1 unit of reporting currency = ? price currency)"] - df[converted]).abs().max() < 1e-9
+    assert df.loc[ok, "PE (TTM) | Earnings record (period)"].iloc[-1] == "2024Q2"
 
 
 def test_ttm_download_shows_the_components_and_formulas(client):
     import io
 
     df = pd.read_csv(io.StringIO(client.get("/stock/0700.HK/download/ttm.csv").data.decode("utf-8-sig")))
-    row = df[df["TTM 第4期"] == "2024Q2"].iloc[0]
-    parts = [row[f"第{k}期 基本 EPS"] for k in range(1, 5)]
-    assert row["TTM EPS = 各期基本 EPS 之和"] == pytest.approx(sum(parts))
-    assert row["TTM EPS 算式（* 表示由累计数相减得到）"].endswith(f"= {row['TTM EPS = 各期基本 EPS 之和']:g}")
-    assert "2023Q3" in row["TTM EPS 算式（* 表示由累计数相减得到）"]
+    row = df[df["TTM period 4"] == "2024Q2"].iloc[0]
+    parts = [row[f"Period {k}: basic EPS"] for k in range(1, 5)]
+    eps_ttm = "TTM EPS = sum of the periods' basic EPS"
+    assert row[eps_ttm] == pytest.approx(sum(parts))
+    assert row["TTM EPS formula (* = obtained by subtracting cumulative figures)"].endswith(f"= {row[eps_ttm]:g}")
+    assert "2023Q3" in row["TTM EPS formula (* = obtained by subtracting cumulative figures)"]
 
 
 def test_chart_payload_carries_the_calculation_for_the_tooltip(client):
@@ -216,6 +217,6 @@ def test_chart_payload_carries_the_calculation_for_the_tooltip(client):
     assert charts["fx"] and len(charts["fx"]) == n and charts["price_ccy"] == "HKD" and charts["report_ccy"] == "CNY"
     rec = charts["records"][str(charts["rec"][-1])]
     assert "TTM EPS" in rec["lines"][0] and "2024Q2" in rec["title"]
-    # 提示框里重算的比率与走势图上的值一致
+    # the ratio recomputed in the tooltip matches the value on the trend chart
     k = n - 1
     assert charts["price"][k] / (rec["per_share"] * charts["fx"][k]) == pytest.approx(charts["values"][k], abs=0.006)

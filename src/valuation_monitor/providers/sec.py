@@ -1,14 +1,14 @@
-"""美国证监会 EDGAR：检索并下载美股上市公司（外国私人发行人）的季度业绩新闻稿原文。
+"""SEC EDGAR: search for and download the original quarterly earnings press releases of US-listed (foreign private issuer) companies.
 
-外国私人发行人不提交 10-Q，业绩以 6-K 的形式提交，正文是附件 99.1 的新闻稿（HTML）。
-流程：从 submissions 接口列出全部 6-K → 看每份 6-K 的文件清单，挑出体量合适的新闻稿附件 →
-标题是“… Announces … Results”的才是业绩公告。
+Foreign private issuers do not file 10-Q; earnings are furnished on Form 6-K, whose body is the press release in exhibit 99.1 (HTML).
+Flow: list all 6-Ks from the submissions API -> look at the file list of each 6-K and pick the press release exhibit of a plausible size ->
+only a title like "... Announces ... Results" is an earnings announcement.
 
-下载过的业绩公告保存在 data/filings/<股票代码>/ 目录（随代码一起提交到仓库），目录中的 index.json
-记录每份已检查过的 6-K（包括不是业绩公告的），下次不再重复检查。无法访问 EDGAR 时直接使用本地已保存的公告。
+Downloaded earnings filings are saved in data/filings/<symbol>/ (committed to the repository with the code); index.json there
+records every 6-K that has been checked (including those that are not earnings), so they are not checked again. When EDGAR cannot be reached the locally saved filings are used.
 
-EDGAR 要求每个请求带上能联系到使用者的 User-Agent，并且每秒不超过 10 个请求。
-联系方式不写在代码里，而是通过环境变量 SEC_USER_AGENT 提供，如“valuation-monitor 你的邮箱”。
+EDGAR requires every request to carry a User-Agent that identifies a contact, and allows at most 10 requests per second.
+The contact is not written in the code but provided through the SEC_USER_AGENT environment variable, e.g. "valuation-monitor your-email".
 """
 
 from __future__ import annotations
@@ -28,12 +28,12 @@ from valuation_monitor.providers.http import HttpClient
 USER_AGENT_ENV = "SEC_USER_AGENT"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/{name}"
 ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{name}"
-REQUEST_INTERVAL = 0.2  # 秒；官方上限是每秒 10 个请求
-# 业绩新闻稿附件的体量：太小的是通知，太大的是年报或招股文件之类（有的 6-K 附件超过 15MB）
+REQUEST_INTERVAL = 0.2  # seconds; the official limit is 10 requests per second
+# Size of earnings press release exhibits: too small are notices, too large are annual reports or prospectuses (some 6-K exhibits exceed 15MB)
 MIN_EXHIBIT_BYTES = 100_000
 MAX_EXHIBIT_BYTES = 3_000_000
 EXHIBIT_RE = re.compile(r"ex-?99", re.I)
-# 新闻稿开头的标题，如“JD.com Announces Second Quarter 2026 Results”“… Announces Fourth Quarter and Full Year 2025 Results”
+# Title at the start of the press release, e.g. "JD.com Announces Second Quarter 2026 Results", "... Announces Fourth Quarter and Full Year 2025 Results"
 EXHIBIT_LABEL_RE = re.compile(r"^.*?\bExhibi?t? ?99\.\d\s+", re.I)
 RESULTS_HEADLINE_RE = re.compile(r"\bannounces?\b.{0,80}?\bresults\b", re.I)
 
@@ -46,22 +46,22 @@ def make_http_client(cache_dir: str | Path = ".cache", ttl_seconds: int = 12 * 3
     agent = os.environ.get(USER_AGENT_ENV, "").strip()
     if not agent:
         raise SecUserAgentMissing(
-            f"访问美国证监会需要声明使用者：请设置环境变量 {USER_AGENT_ENV}，内容为“程序名 联系邮箱”，例如 valuation-monitor you@example.com"
+            f"The SEC requires you to identify yourself: set the environment variable {USER_AGENT_ENV} to \"program-name contact-email\", e.g. valuation-monitor you@example.com"
         )
     return HttpClient(cache_dir, ttl_seconds, refresh, user_agent=agent, min_interval=REQUEST_INTERVAL)
 
 
 def to_new_york(accepted: str) -> pd.Timestamp:
-    """acceptanceDateTime（UTC，如 2026-08-13T10:05:29.000Z）-> 纽约当地时间（不带时区）。"""
+    """acceptanceDateTime (UTC, e.g. 2026-08-13T10:05:29.000Z) -> New York local time (timezone-naive)."""
     return pd.Timestamp(accepted).tz_convert("America/New_York").tz_localize(None).floor("s")
 
 
 def headline(html: bytes) -> str | None:
-    """新闻稿开头的标题；不是业绩新闻稿时返回 None。"""
+    """The title at the start of the press release; None if it is not an earnings press release."""
     from bs4 import BeautifulSoup
 
     text = " ".join(BeautifulSoup(html[:200_000], "lxml").get_text(" ").split())
-    text = EXHIBIT_LABEL_RE.sub("", text, count=1)[:1500]  # 去掉文件头里的“EX-99.1 Exhibit 99.1”之类的字样
+    text = EXHIBIT_LABEL_RE.sub("", text, count=1)[:1500]  # strip labels such as "EX-99.1 Exhibit 99.1" from the file header
     m = RESULTS_HEADLINE_RE.search(text)
     if not m:
         return None
@@ -74,7 +74,7 @@ class SecProvider:
         self.archive_dir = Path(archive_dir)
 
     def results_announcements(self, symbol: str, cik: int, since: datetime) -> list[Filing]:
-        """返回 since 之后发布的全部业绩新闻稿，按发布时间升序。"""
+        """All earnings press releases published after `since`, in ascending order of publication time."""
         folder = self.archive_dir / symbol.upper()
         index_path = folder / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
@@ -82,13 +82,13 @@ class SecProvider:
 
         try:
             if self.http is None:
-                raise SecUserAgentMissing(f"没有设置环境变量 {USER_AGENT_ENV}")
+                raise SecUserAgentMissing(f"The environment variable {USER_AGENT_ENV} is not set")
             added = self._examine_new(symbol, cik, since, folder, index, known)
         except Exception as e:
             if not any(e_["results"] for e_ in index):
                 raise
-            print(f"{symbol}: 无法访问美国证监会（{e}），使用本地已保存的 {sum(x['results'] for x in index)} 份公告", file=sys.stderr)
-            added = True  # 已检查完的部分照常写入索引
+            print(f"{symbol}: cannot reach the SEC ({e}); using the {sum(x['results'] for x in index)} saved filings", file=sys.stderr)
+            added = True  # the part already checked is written to the index as usual
 
         if added:
             index.sort(key=lambda e: e["published"])
@@ -105,7 +105,7 @@ class SecProvider:
     def _six_k_list(self, cik: int) -> list[dict]:
         data = self.http.get_json(SUBMISSIONS_URL.format(name=f"CIK{cik:010d}.json"))
         blocks = [data["filings"]["recent"]]
-        for extra in data["filings"].get("files", []):  # 更早的记录分在其他文件里
+        for extra in data["filings"].get("files", []):  # older records are split into other files
             blocks.append(self.http.get_json(SUBMISSIONS_URL.format(name=extra["name"])))
         out = []
         for b in blocks:
@@ -124,7 +124,7 @@ class SecProvider:
             known.add(entry["accession"])
             added = True
             if entry["results"]:
-                print(f"{symbol}: 新业绩公告 {entry['published']} {entry['title']}", file=sys.stderr)
+                print(f"{symbol}: new results release {entry['published']} {entry['title']}", file=sys.stderr)
         return added
 
     def _examine(self, cik: int, item: dict, folder: Path) -> dict:

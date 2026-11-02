@@ -1,15 +1,15 @@
-"""交易时间：判断公告发布时当天的收盘价是否已经反映了这份公告。
+"""Trading hours: decide whether the closing price of the publication day already reflects a filing.
 
-港股：全日市 16:00 收盘；平安夜（12 月 24 日）、除夕（12 月 31 日）、农历除夕如果是交易日，
-只开上午市，12:00 收盘。
-韩股：15:30（首尔时间）收盘，没有半日市。
-A 股：15:00（北京时间）收盘，没有半日市。
-美股（纽交所/纳斯达克）：常规 16:00（纽约时间）收盘；感恩节次日、7 月 3 日（周一至周四）、
-平安夜（周一至周四）提前到 13:00 收盘。
+HK: full day closes at 16:00; Christmas Eve (24 Dec), New Year's Eve (31 Dec) and Lunar New Year's Eve, if trading days,
+have a morning session only and close at 12:00.
+KR: closes at 15:30 (Seoul time), no half days.
+CN (A-shares): closes at 15:00 (Beijing time), no half days.
+US (NYSE/Nasdaq): regular close 16:00 (New York time); the day after Thanksgiving, 3 July (Mon-Thu) and
+Christmas Eve (Mon-Thu) close early at 13:00.
 
-哪些日子是交易日不在这里判断，而是以实际有成交的行情数据为准，
-这样周末、公众假期、台风或暴雨停市都会自然排除。
-发布时间一律是交易所所在地的当地时间（不带时区）。
+Which days are trading days is not decided here but by the price data that actually traded,
+so weekends, public holidays and typhoon or rainstorm closures are excluded naturally.
+Publication times are always local time of the exchange (no timezone).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import pandas as pd
 FULL_DAY_CLOSE = time(16, 0)
 HALF_DAY_CLOSE = time(12, 0)
 
-# 农历正月初一（公历），除夕是前一天
+# Lunar New Year (first day of the first lunar month, Gregorian date); the eve is the day before
 LUNAR_NEW_YEAR = [
     "2010-02-14", "2011-02-03", "2012-01-23", "2013-02-10", "2014-01-31", "2015-02-19",
     "2016-02-08", "2017-01-28", "2018-02-16", "2019-02-05", "2020-01-25", "2021-02-12",
@@ -37,12 +37,12 @@ LUNAR_NEW_YEAR_EVES = {pd.Timestamp(d) - pd.Timedelta(days=1) for d in LUNAR_NEW
 
 def _hk_half_day(day: pd.Timestamp) -> bool:
     if day.year > int(LUNAR_NEW_YEAR[-1][:4]):
-        raise ValueError(f"农历新年日期表只到 {LUNAR_NEW_YEAR[-1][:4]} 年，请补充")
+        raise ValueError(f"The Lunar New Year table only goes up to {LUNAR_NEW_YEAR[-1][:4]}; please extend it")
     return (day.month, day.day) in ((12, 24), (12, 31)) or day in LUNAR_NEW_YEAR_EVES
 
 
 def _thanksgiving(year: int) -> pd.Timestamp:
-    """11 月的第四个星期四。"""
+    """The fourth Thursday of November."""
     first = pd.Timestamp(year=year, month=11, day=1)
     return first + pd.Timedelta(days=(3 - first.weekday()) % 7 + 21)
 
@@ -50,7 +50,7 @@ def _thanksgiving(year: int) -> pd.Timestamp:
 def _us_half_day(day: pd.Timestamp) -> bool:
     if day == _thanksgiving(day.year) + pd.Timedelta(days=1):
         return True
-    # 7 月 3 日、12 月 24 日：只有在周一至周四才提前收盘（落在周五/周末时休市或另有安排）
+    # 3 July and 24 December close early only on Monday-Thursday (on Friday/weekends the market is closed or follows other arrangements)
     return (day.month, day.day) in ((7, 3), (12, 24)) and day.weekday() < 4
 
 
@@ -61,19 +61,19 @@ class Market:
     full_close: time
     half_close: time
     half_day: Callable[[pd.Timestamp], bool]
-    cross_checks_prices: bool = False  # 是否有第二个来源的股价可以核对（只有港股有腾讯证券）
+    cross_checks_prices: bool = False  # whether a second source of prices can be used to cross-check (only HK, via Tencent)
 
     def is_half_day(self, day: pd.Timestamp) -> bool:
-        """如果这天开市，是否提前收盘（不判断这天是否开市）。"""
+        """Whether the market closes early on this day if it is open (does not decide whether it is open)."""
         return self.half_day(pd.Timestamp(day).normalize())
 
     def close_time(self, day: pd.Timestamp) -> time:
         return self.half_close if self.is_half_day(day) else self.full_close
 
     def available_date(self, published: pd.Timestamp) -> pd.Timestamp:
-        """最早哪一天的收盘价可能已经反映了这份公告（自然日，不一定是交易日）。
+        """The earliest day whose closing price may already reflect this filing (calendar day, not necessarily a trading day).
 
-        当天收盘前发布（盘前、盘中、午休）：当天；收盘后发布：下一天。
+        Published before the close (pre-market, intraday, lunch break): the same day; after the close: the next day.
         """
         day = pd.Timestamp(published).normalize()
         return day + pd.Timedelta(days=1) if pd.Timestamp(published).time() >= self.close_time(day) else day
@@ -81,9 +81,9 @@ class Market:
 
 HK = Market("HK", "Asia/Hong_Kong", FULL_DAY_CLOSE, HALF_DAY_CLOSE, _hk_half_day, cross_checks_prices=True)
 US = Market("US", "America/New_York", FULL_DAY_CLOSE, time(13, 0), _us_half_day)
-# 韩国交易所：15:30 收盘，没有提前收盘的半日市（休市日由行情数据判断）
+# Korea Exchange: closes at 15:30, no early-close half days (closure days are decided by the price data)
 KR = Market("KR", "Asia/Seoul", time(15, 30), time(15, 30), lambda day: False)
-# A 股（上交所、深交所）：15:00 收盘，没有半日市（休市日由行情数据判断）
+# A-shares (SSE, SZSE): closes at 15:00, no half days (closure days are decided by the price data)
 CN = Market("CN", "Asia/Shanghai", time(15, 0), time(15, 0), lambda day: False)
 MARKETS = {m.key: m for m in (HK, US, KR, CN)}
 
@@ -92,10 +92,10 @@ def get_market(key: str) -> Market:
     try:
         return MARKETS[key]
     except KeyError:
-        raise ValueError(f"未知市场 {key!r}，可选：{', '.join(MARKETS)}") from None
+        raise ValueError(f"Unknown market {key!r}; choose from: {', '.join(MARKETS)}") from None
 
 
-# 以下函数默认港股，保持原有调用方式不变
+# The functions below default to the HK market so existing calls keep working
 def is_half_day(day: pd.Timestamp, market: Market = HK) -> bool:
     return market.is_half_day(day)
 
@@ -109,9 +109,9 @@ def available_date(published: pd.Timestamp, market: Market = HK) -> pd.Timestamp
 
 
 def effective_trading_day(available: pd.Timestamp, trading_days: pd.DatetimeIndex) -> pd.Timestamp | None:
-    """可用日期当天或之后的第一个交易日。
+    """The first trading day on or after the available date.
 
-    返回 None 的情况：可用日期早于行情数据的起点（无法确定），或晚于最后一个交易日（尚未开市）。
+    Returns None when the available date is before the start of the price data (cannot be decided) or after the last trading day (market not yet open).
     """
     available = pd.Timestamp(available).normalize()
     if len(trading_days) == 0 or available < trading_days[0]:

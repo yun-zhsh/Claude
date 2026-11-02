@@ -1,1 +1,1 @@
-"""外部数据源。每个 provider 只负责取数和整理格式，不做估值计算。"""
+"""External data sources. Each provider only fetches and reformats data; it does no valuation calculation."""
