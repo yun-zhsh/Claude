@@ -56,7 +56,7 @@ export SEC_USER_AGENT="valuation-monitor 你的邮箱"
 
 ### 在线网页（GitHub Pages）
 
-网址：https://yun-zhsh.github.io/Claude/ （手机、电脑都可以直接打开）
+网址：https://yun-zhsh.github.io/Watchlist-monitor/ （手机、电脑都可以直接打开）
 
 GitHub Actions（`.github/workflows/pages.yml`）每 4 小时运行一次，即香港时间 9:47、13:47、17:47、21:47、1:47、5:47（GitHub 不保证准点，可能晚几分钟到半小时以上）。每次运行会：
 
