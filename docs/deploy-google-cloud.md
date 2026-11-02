@@ -58,8 +58,14 @@ Link billing (use the ACCOUNT_ID from the list above):
 gcloud billing projects link $PROJECT_ID --billing-account=ACCOUNT_ID
 ```
 
-Create a budget alert in the console: Billing -> Budgets & alerts -> Create budget, scope it to this project, amount
-5 USD. (It only sends email; it does not stop anything.)
+Set up cost protection in the console (Billing -> Budgets & caps -> Create new). Two budgets are worth having:
+
+1. **A spend cap on Cloud Run** (the service that can scale): in the wizard choose the spend cap type, project `Watchlist monitor`,
+   service **Cloud Run**, amount 5 USD. The Budgets page says services are paused when a cap is exceeded, and an enforced cap
+   resets at the start of each month. Costs are recorded within about 24 hours, so a cap can be exceeded slightly.
+   A spend cap can only cover one service; the wizard has no "all services" option.
+2. **An alert budget for the whole billing account**: type *budget alert*, all services, 5 USD, thresholds 50/90/100%,
+   email notifications on. It only sends email.
 
 Enable the services used:
 
@@ -127,13 +133,22 @@ gcloud run jobs deploy valuation-update \
   --task-timeout=30m --max-retries=1
 ```
 
-Run it once by hand to check it works, and read the log it prints:
+Run it once by hand to check it works. Do not use `--wait`: it keeps the terminal busy, and pressing Ctrl+C only stops
+waiting (the job keeps running in the cloud).
 
 ```bash
-gcloud run jobs execute valuation-update --region=$REGION --wait
+gcloud run jobs execute valuation-update --region=$REGION
 ```
 
-Every stock should show "updated". If one fails, the message says why (a network problem, a changed filing layout, ...).
+After a minute or two read the log:
+
+```bash
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="valuation-update" AND textPayload:("Data directory" OR "updated" OR "ERROR" OR "cannot")' --limit=30 --format="value(timestamp,textPayload)" --freshness=1h --order=asc
+```
+
+The first line must be `Data directory: /data` (the mounted bucket), followed by one "updated" line per stock. If you see
+dozens of "new results release" lines instead, the job is not using the bucket data. If one stock fails, the message says why
+(a network problem, a changed filing layout, ...). A normal run takes about a minute.
 
 ## 6. Deploy the web page, visible only to you
 
@@ -160,6 +175,25 @@ gcloud iap web add-iam-policy-binding \
 
 (If your `gcloud` does not know this command, open the console: Security -> Identity-Aware Proxy -> find `valuation-web`
 -> Add principal -> your account -> role "IAP-secured Web App User".)
+
+### 6b. Only if you have no Google Workspace organization (a personal Google account)
+
+With a personal account the project is not inside an organization, so IAP has no OAuth client and the page shows
+`Empty Google Account OAuth client ID(s)/secret(s).` Create one in the console (these steps are not available in `gcloud`):
+
+1. Open https://console.cloud.google.com/auth/overview (check the project in the top bar) -> **Get started**: app name
+   `Watchlist monitor`, your email as support and contact email, audience **External**. Then Audience -> **Test users** ->
+   add your own account and keep the status **Testing**. Only test users can sign in.
+2. Clients -> **Create client** -> application type **Web application**, name `IAP Cloud Run`, create it.
+   Copy the **Client ID** and the **Client secret**. The secret is a password: keep it out of chats and the repository.
+3. Edit the client and add this under **Authorized redirect URIs**, with your own client ID, then save
+   (it can take a few minutes to apply):
+   `https://iap.googleapis.com/v1/oauth/clientIds/CLIENT_ID:handleRedirect`
+4. Open https://console.cloud.google.com/security/iap, find `valuation-web` (Cloud Run), open its settings and enter the
+   Client ID and Client secret as the custom OAuth client. Save.
+
+The first sign-in shows "Google hasn't verified this app" because the consent screen is in Testing: click **Advanced**, then
+**Go to Watchlist monitor (unsafe)**, and allow.
 
 Get the address and open it in the browser. Google asks you to sign in; the first request after a quiet period takes
 a few seconds (the instance starts from zero):
@@ -201,6 +235,7 @@ Only the data access code in `store.py` changes, and the page and parsers stay a
 
 ## Troubleshooting
 
+- **`Empty Google Account OAuth client ID(s)/secret(s).`:** see step 6b.
 - **The page shows a permission error:** your account is not on the IAP list (step 6), or you are signed in with a
   different Google account.
 - **The page is empty or an old date shows:** check that the job ran (`gcloud run jobs executions list --job=valuation-update --region=$REGION`)
