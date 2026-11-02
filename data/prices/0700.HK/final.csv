@@ -2708,3 +2708,4 @@ date,close,source,status,tencent_close,yahoo_close_unadjusted,yahoo_factor
 2026-10-28,387.6,tencent,agree,387.6,387.6,1.0
 2026-10-29,377.6,tencent,agree,377.6,377.6,1.0
 2026-10-30,383.6,tencent,agree,383.6,383.6,1.0
+2026-11-02,392.2,tencent,tencent_only,392.2,,1.0
