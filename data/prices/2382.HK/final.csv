@@ -2707,4 +2707,4 @@ date,close,source,status,tencent_close,yahoo_close_unadjusted,yahoo_factor
 2026-10-28,65.8,tencent,agree,65.8,65.8,1.0
 2026-10-29,64.05,tencent,agree,64.05,64.05,1.0
 2026-10-30,63.3,tencent,agree,63.3,63.3,1.0
-2026-11-02,63.55,tencent,tencent_only,63.55,,1.0
+2026-11-02,63.55,tencent,agree,63.55,63.55,1.0
