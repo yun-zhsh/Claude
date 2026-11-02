@@ -70,3 +70,24 @@ def test_wsgi_app_is_built_from_environment_variables(tmp_path, monkeypatch):
     wsgi = importlib.import_module("valuation_monitor.web.wsgi")
     app = wsgi.make_app()
     assert app.config["refresh"] and wsgi.Monitor  # the app exists and does not fetch at import time
+
+
+def test_command_line_defaults_come_from_the_environment(monkeypatch):
+    """The container sets these variables; the update job must use the mounted data directory, not an empty local one."""
+    import argparse
+
+    from valuation_monitor.cli import add_common_args
+
+    parser = argparse.ArgumentParser()
+    add_common_args(parser)
+    args = parser.parse_args([])
+    assert (args.config, args.data_dir, args.cache_dir) == ("config.yaml", "data", ".cache")
+
+    monkeypatch.setenv("VALUATION_CONFIG", "/app/config.yaml")
+    monkeypatch.setenv("VALUATION_DATA_DIR", "/data")
+    monkeypatch.setenv("VALUATION_CACHE_DIR", "/tmp/cache")
+    parser = argparse.ArgumentParser()
+    add_common_args(parser)
+    args = parser.parse_args([])
+    assert (args.config, args.data_dir, args.cache_dir) == ("/app/config.yaml", "/data", "/tmp/cache")
+    assert parser.parse_args(["--data-dir", "elsewhere"]).data_dir == "elsewhere"  # an explicit option still wins

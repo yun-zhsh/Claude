@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
 from valuation_monitor.config import load_config
@@ -9,10 +10,15 @@ from valuation_monitor.service import PRICE_STATUS_LABELS, Monitor
 
 
 def add_common_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("-c", "--config", default="config.yaml", help="Path to the config file (default: config.yaml)")
-    parser.add_argument("--data-dir", default="data", help="Directory where prices, filings and EPS data are saved (default: data)")
+    """Options shared by all commands. The defaults can be set through environment variables (used by the container image):
+    VALUATION_CONFIG, VALUATION_DATA_DIR and VALUATION_CACHE_DIR."""
+    config = os.environ.get("VALUATION_CONFIG", "config.yaml")
+    data_dir = os.environ.get("VALUATION_DATA_DIR", "data")
+    cache_dir = os.environ.get("VALUATION_CACHE_DIR", ".cache")
+    parser.add_argument("-c", "--config", default=config, help=f"Path to the config file (default: {config})")
+    parser.add_argument("--data-dir", default=data_dir, help=f"Directory where prices, filings and EPS data are saved (default: {data_dir})")
     parser.add_argument("--refresh", action="store_true", help="Ignore the 12-hour network request cache")
-    parser.add_argument("--cache-dir", default=".cache", help="Directory for the request cache (default: .cache)")
+    parser.add_argument("--cache-dir", default=cache_dir, help=f"Directory for the request cache (default: {cache_dir})")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -63,6 +69,7 @@ def update_main(argv: list[str] | None = None) -> int:
     add_common_args(parser)
     args = parser.parse_args(argv)
 
+    print(f"Data directory: {args.data_dir}")
     monitor = Monitor(load_config(args.config), args.data_dir, args.cache_dir, args.refresh)
     failed = False
     for report in monitor.analyze_all():
