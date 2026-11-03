@@ -72,12 +72,18 @@ class StockReport:
 
 class Monitor:
     def __init__(
-        self, config: Config, data_dir: str | Path = "data", cache_dir: str | Path = ".cache", refresh: bool = False, offline: bool = False
+        self,
+        config: Config,
+        data_dir: str | Path = "data",
+        cache_dir: str | Path = ".cache",
+        refresh: bool = False,
+        offline: bool = False,
+        db_path: str | Path | None = None,
     ):
         self.config = config
         self.data_dir = Path(data_dir)
         http = HttpClient(cache_dir=cache_dir, refresh=refresh)
-        self.db = Database(self.data_dir / "valuation.db")
+        self.db = Database(db_path or self.data_dir / "valuation.db")  # the database may live outside the data directory (e.g. a local copy of a bucket object)
         self.prices = PriceStore(TencentQuoteProvider(http), YahooProvider(http), self.data_dir, self.db)
         self.earnings = EarningsStore(self.data_dir, self.db)
         try:

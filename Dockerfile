@@ -1,6 +1,7 @@
 # Container image for Google Cloud Run: the web page (default command) and the scheduled update job
-# (override the command with `valuation-monitor-update`). The data is not baked in: it lives in a Cloud Storage
-# bucket mounted at /data. See docs/deploy-google-cloud.md.
+# (override the command with `valuation-monitor-update`). Nothing is baked in: the original filings live in a Cloud Storage
+# bucket mounted at /data, and the SQLite database is a local copy of a bucket object (VALUATION_DB_URI, set at deploy time).
+# See cloud.py and docs/deploy-google-cloud.md.
 FROM python:3.12-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
@@ -13,6 +14,7 @@ RUN pip install --no-cache-dir '.[cloud]'
 
 ENV VALUATION_CONFIG=/app/config.yaml \
     VALUATION_DATA_DIR=/data \
+    VALUATION_DB_PATH=/tmp/valuation/valuation.db \
     VALUATION_CACHE_DIR=/tmp/cache \
     TZ=Asia/Hong_Kong \
     PYTHONUNBUFFERED=1

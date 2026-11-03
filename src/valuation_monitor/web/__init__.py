@@ -11,9 +11,11 @@ from __future__ import annotations
 import argparse
 import io
 import shutil
+import sys
 import threading
 import time
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 
 import pandas as pd
@@ -136,10 +138,22 @@ def chart_payload(report: StockReport, config: Config) -> dict:
     }
 
 
-def create_app(monitor: Monitor, static_site: bool = False, reload_seconds: float = 0, cached_load_offline: bool = False) -> Flask:
+def create_app(
+    monitor: Monitor,
+    static_site: bool = False,
+    reload_seconds: float = 0,
+    cached_load_offline: bool = False,
+    sync: Callable[[], object] | None = None,
+    update_remotely: Callable[[], object] | None = None,
+) -> Flask:
     """reload_seconds: when > 0, pages older than this are rebuilt from the saved data on the next request (a server whose data
     is updated by another process, e.g. a scheduled job). cached_load_offline: such automatic loads do not use the network;
-    only the "Update data" button (and `refresh()`) fetch."""
+    only the "Update data" button (and `refresh()`) fetch.
+
+    sync: called before each automatic rebuild, to bring the saved data up to date first (e.g. download a newer database).
+    update_remotely: when given, the "Update data" button calls this (e.g. starts the update job) instead of fetching itself;
+    the page then shows that an update was started.
+    """
     app = Flask(__name__)
     state: dict[str, StockReport] = {}
     loaded_at = [0.0]
@@ -157,9 +171,18 @@ def create_app(monitor: Monitor, static_site: bool = False, reload_seconds: floa
             state.update({r.stock.symbol: r for r in reports})
             loaded_at[0] = time.monotonic()
 
+    sync_lock = threading.Lock()
+
     def ensure_state() -> None:
-        if not state or (reload_seconds > 0 and time.monotonic() - loaded_at[0] > reload_seconds):
-            refresh(offline=cached_load_offline)
+        def stale() -> bool:
+            return not state or (reload_seconds > 0 and time.monotonic() - loaded_at[0] > reload_seconds)
+
+        if stale():
+            with sync_lock:  # one request does the work, the others wait and then find it done
+                if stale():
+                    if sync:
+                        sync()
+                    refresh(offline=cached_load_offline)
 
     app.config["refresh"] = refresh
 
@@ -197,10 +220,19 @@ def create_app(monitor: Monitor, static_site: bool = False, reload_seconds: floa
 
     @app.post("/refresh")
     def refresh_view():
-        refresh()
         target = request.form.get("next", "")
         # only allow redirecting back to pages of this site ("//host" would be taken by the browser as an external URL)
-        return redirect(target if target.startswith("/") and not target.startswith("//") else url_for("index"))
+        target = target if target.startswith("/") and not target.startswith("//") else url_for("index")
+        if update_remotely:
+            try:
+                update_remotely()
+                note = "updating=1"
+            except Exception as e:  # e.g. missing permission: the page says so instead of failing
+                print(f"Could not start the update: {e}", file=sys.stderr)
+                note = "update_failed=1"
+            return redirect(f"{target}{'&' if '?' in target else '?'}{note}")
+        refresh()
+        return redirect(target)
 
     @app.get("/stock/<symbol>/download/<name>")
     def download(symbol: str, name: str):
@@ -223,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-browser", action="store_true", help="Do not open the browser automatically")
     args = parser.parse_args(argv)
 
-    monitor = Monitor(load_config(args.config), args.data_dir, args.cache_dir, args.refresh)
+    monitor = Monitor(load_config(args.config), args.data_dir, args.cache_dir, args.refresh, db_path=args.db)
     app = create_app(monitor)
     print("Updating data...")
     app.config["refresh"]()
@@ -274,7 +306,7 @@ def export_main(argv: list[str] | None = None) -> int:
     parser.add_argument("--base-path", default="", help="Sub-path the site is served from, e.g. /repository-name for a GitHub Pages project site")
     args = parser.parse_args(argv)
 
-    monitor = Monitor(load_config(args.config), args.data_dir, args.cache_dir, args.refresh)
+    monitor = Monitor(load_config(args.config), args.data_dir, args.cache_dir, args.refresh, db_path=args.db)
     written = export_site(monitor, args.out, args.base_path)
     print(f"Exported {len(written)} files to {args.out}/")
     return 0

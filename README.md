@@ -83,10 +83,12 @@ Notes:
 ### Running on Google Cloud (dynamic page, only you can open it)
 
 The page can also run on Google Cloud Run: a scheduled Cloud Run job (`valuation-monitor-update`) fetches the data every
-4 hours into a Cloud Storage bucket, the page (served with gunicorn, `valuation_monitor.web.wsgi:app`) shows what is in the
-bucket and has the "Update data" button, and Identity-Aware Proxy lets only your Google account in. The
-`Dockerfile` builds one image used for both. Step-by-step instructions are in
-[docs/deploy-google-cloud.md](docs/deploy-google-cloud.md). It runs side by side with the GitHub Pages site.
+4 hours, the page (served with gunicorn, `valuation_monitor.web.wsgi:app`) shows it and lets you start an update with the
+"Update data" button, and Identity-Aware Proxy lets only your Google account in. The SQLite database is kept as an object in a
+Cloud Storage bucket: the job downloads it, updates it and uploads it back (refusing if someone else uploaded a newer version
+in the meantime), and the page reads a downloaded copy (`cloud.py`). The `Dockerfile` builds one image used for both.
+Step-by-step instructions are in [docs/deploy-google-cloud.md](docs/deploy-google-cloud.md). It runs side by side with the
+GitHub Pages site.
 
 ### Command line
 
@@ -327,6 +329,7 @@ src/valuation_monitor/
   config.py                        config parsing
   data.py                          gathers the data sources into what the metric calculations need
   db.py                            the SQLite database: tables, reading and writing only what changed
+  cloud.py                         keeps the database in a Google Cloud Storage object (pull, push with a version check, start the update job)
   legacy.py                        import and export in the CSV/JSON layout used before the database (also the raw data download)
   store.py                         saving prices and earnings in the database, incremental updates
   prices.py                        decides the final price from several sources
