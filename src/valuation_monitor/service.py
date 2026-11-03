@@ -11,6 +11,7 @@ import pandas as pd
 from valuation_monitor.analysis import Valuation, evaluate, level_index
 from valuation_monitor.config import Config, StockConfig
 from valuation_monitor.data import DataLoader, StockData
+from valuation_monitor.db import Database
 from valuation_monitor.metrics import METRICS, Metric
 from valuation_monitor.providers.cninfo import REQUEST_INTERVAL as CNINFO_INTERVAL, CninfoProvider
 from valuation_monitor.providers.hkex import HkexProvider
@@ -76,8 +77,9 @@ class Monitor:
         self.config = config
         self.data_dir = Path(data_dir)
         http = HttpClient(cache_dir=cache_dir, refresh=refresh)
-        self.prices = PriceStore(TencentQuoteProvider(http), YahooProvider(http), self.data_dir)
-        self.earnings = EarningsStore(self.data_dir)
+        self.db = Database(self.data_dir / "valuation.db")
+        self.prices = PriceStore(TencentQuoteProvider(http), YahooProvider(http), self.data_dir, self.db)
+        self.earnings = EarningsStore(self.data_dir, self.db)
         try:
             sec_http = make_http_client(cache_dir, refresh=refresh)
         except SecUserAgentMissing:
@@ -132,10 +134,9 @@ class Monitor:
         return [self.analyze(stock) for stock in self.config.stocks]
 
     def price_check(self, symbol: str) -> dict[str, int]:
-        path = self.prices.final_path(symbol)
-        if not path.exists():
+        final = self.prices.final(symbol)
+        if final is None:
             return {}
-        final = pd.read_csv(path, index_col="date", parse_dates=True)
         final = final[final.index >= final.index[-1] - pd.DateOffset(years=self.config.max_lookback)]
         counts = final["status"].value_counts()
         return {k: int(counts[k]) for k in PRICE_STATUS_LABELS if k in counts}

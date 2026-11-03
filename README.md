@@ -99,8 +99,8 @@ Example output (values of 2026-11-02; they change with prices; the five stocks a
 ```
 Tencent Holdings (0700.HK)  Earnings source: HKEXnews, 48 original earnings filings, currency CNY
   ⚠ Non-IFRS EPS 2015Q1 differs between filings (probably a restatement) [0.759, 0.776]; using the first published value 0.759
-  Earnings detail  data/eps/0700.HK_periods.csv
-  Price check  Tencent vs Yahoo (after undoing Yahoo's adjustments): Agree 2451 days, Tencent only 10 days (details in data/prices/0700.HK/final.csv)
+  Earnings detail  table periods in data/valuation.db
+  Price check  Tencent vs Yahoo (after undoing Yahoo's adjustments): Agree 2451 days, Tencent only 10 days (details: table prices_final in data/valuation.db)
 
 Tencent Holdings (0700.HK)  PE (TTM)
   Date        2026-11-02
@@ -135,32 +135,33 @@ Options:
 
 ## Saved data
 
-Downloaded and extracted data is saved in the `data/` directory and committed to the repository with the code. Later runs only add what is new; when the network is down the saved data is used.
+Everything the program saves lives in `data/` and is committed to the repository with the code: one **SQLite database**, `data/valuation.db`, for prices, FX rates, parsed filings and earnings, plus the original filings as files. Later runs only add what is new; when the network is down the saved data is used.
 
-| File | Content | Updated by |
+| Where | Content | Updated by |
 | --- | --- | --- |
 | `data/filings/0700.HK/*.pdf`, `index.json` | Original earnings announcement PDFs (49 since 2014, about 20MB); the index records title, publication time and source link | Only newly published announcements are downloaded |
 | `data/filings/JD/*.htm`, `index.json` | Original JD earnings press release HTML (49 since 2014, about 23MB); the index records every 6-K that was checked (including non-earnings ones) so they are not checked again | Only newly filed 6-Ks are checked and downloaded |
 | `data/filings/2382.HK/*.pdf`, `index.json` | Original Sunny Optical earnings announcement PDFs (24 since 2014); same index | Only newly published announcements are downloaded |
 | `data/filings/005930.KS/*.pdf`, `index.json` | Excerpts of Samsung's English financial statements: consolidated statement of income (`soi`), of financial position (`bs`), and the EPS note page (`*_eps.pdf`); while the latest quarter's statements are not out, the earnings call material is kept temporarily; the index records the earnings call time | Only newly published quarters are downloaded |
 | `data/filings/002415.SZ/*.pdf`, `index.json` | Relevant pages of Hikvision's original Chinese periodic and express reports (about 59 since 2014, about 29MB); the index records publication time, the basis for it and the source link (titles in the index are English) | Only newly published filings are downloaded |
-| `data/prices/0700.HK/tencent.csv` | Tencent daily bars: open, high, low, close, volume, **unadjusted actual traded prices** | Only trading days after the last saved day are downloaded |
-| `data/prices/0700.HK/yahoo.csv` | Yahoo daily bars: open, high, low, close (ex-rights adjusted), adjclose (further adjusted for dividends), volume | Same; when Yahoo adjusts history retroactively the whole history is downloaded again |
-| `data/prices/0700.HK/yahoo.json` | Split records etc. | Updated with the Yahoo data |
-| `data/prices/0700.HK/final.csv` | **The final closing price decided from all sources**, plus source, cross-check status, the price of each source and the Yahoo adjustment factor | Decided again on every run |
-| `data/prices/JD/`, `005930.KS/`, `002415.SZ/` (`yahoo.csv`, `yahoo.json`, `final.csv`) | US, Korean and A-share stocks have only Yahoo as a source, so no `tencent.csv`; Yahoo's close is already split-adjusted | Same |
-| `data/fx/CNYHKD.csv`, `CNYUSD.csv` | Daily FX rates of RMB to HKD and USD (USD is for JD) | Only new trading days are downloaded |
-| `data/eps/0700.HK_announcements.csv` | Values parsed from each filing as stated: revenue, net profit attributable to owners, basic EPS, Non-IFRS/Non-GAAP basic EPS, equity attributable to owners at period end, shares disclosed in the filing, plus whether the data is preliminary, the basis of the share count and a publication time note | Only new filings are parsed |
-| `data/eps/0700.HK_periods.csv` | Per-period (quarter; half year for half-yearly reporters) revenue, net profit attributable to owners, EPS, equity at period end, weighted average shares disclosed in the filing (`wa_shares`), implied shares (for cross-checking), with first publication time, effective trading day, number of confirming filings, largest deviation and source link | Recomputed from the table above on every run |
-| `data/eps/0700.HK_ttm.csv` | The per-share data used for valuation after each filing, **with the full calculation**: EPS and revenue of each period the TTM covers (periods 1-4), the TTM total, latest net profit and basic EPS, shares, revenue per share, equity at period end, book value per share, and the formula text of every step; also publication time, available date, effective trading day, whether the data is preliminary and the split adjustment note | Same |
+| `data/valuation.db`, table `price_bars` | Daily bars of each source and symbol: Tencent (open, high, low, close, volume, **unadjusted actual traded prices**; HK stocks only) and Yahoo (close ex-rights adjusted, adjclose further adjusted for dividends) | Only trading days after the last saved day are inserted; when Yahoo adjusts history retroactively the series is downloaded again |
+| table `fx_rates` | Daily FX rates of RMB to HKD and USD (USD is for JD) | Only new trading days are inserted |
+| table `prices_final` | **The final closing price decided from all sources**, plus source, cross-check status, the price of each source and the Yahoo adjustment factor | Decided again on every run; only changed days are written |
+| table `meta` | One JSON document per series: source note, where the download starts, currency, split records | Updated with the series |
+| table `announcements` | Values parsed from each filing as stated: revenue, net profit attributable to owners, basic EPS, Non-IFRS/Non-GAAP basic EPS, equity at period end, shares disclosed in the filing, plus whether the data is preliminary, the basis of the share count and a publication time note | Only new filings are parsed |
+| table `periods` | Per-period (quarter; half year for half-yearly reporters) revenue, net profit attributable to owners, EPS, equity at period end, weighted average shares disclosed in the filing (`wa_shares`), implied shares (for cross-checking), with first publication time, effective trading day, number of confirming filings, largest deviation and source link | Recomputed from `announcements` on every run; rewritten only if it changed |
+| table `ttm` | The per-share data used for valuation after each filing, **with the full calculation**: EPS and revenue of each period the TTM covers (periods 1-4), the TTM total, latest net profit and basic EPS, shares, revenue per share, equity at period end, book value per share, and the formula text of every step; also publication time, available date, effective trading day, whether the data is preliminary and the split adjustment note | Same |
 
 Notes:
 
+- **Looking at the data**: any SQLite tool opens `data/valuation.db` (for example `sqlite3 data/valuation.db "select * from prices_final where symbol = '0700.HK' order by date desc limit 5"`). The page's download buttons give CSV files, and `python -m valuation_monitor.legacy export-csv DIR` (also installed as `valuation-monitor-db export-csv DIR`) writes the whole database as CSV and JSON files (`prices/<symbol>/...`, `fx/...`, `eps/<symbol>_<table>.csv`), the layout used before the database existed. `import-csv DIR` reads such a folder back; the round trip is byte for byte.
+- **Why a binary file in git**: the database is small (a few MB for five companies) and only changed rows are written, so the repository grows slowly. The program never rebuilds or vacuums the file, and the scheduled workflow fails if it grows over 50MB, as a reminder to stop keeping it in git. Do not commit it from a local run: only the scheduled workflow does, and a binary file cannot be merged. If `git pull` complains about local changes to it, `git checkout data/valuation.db` drops them.
 - Raw traded prices and FX rates are never changed once saved. On every incremental download the program compares the last 7 saved days with the source and gives a notice if the source changed its history.
-- Yahoo's adjusted prices change retroactively with new ex-rights events by nature; when a change is found the whole history is downloaded again (the old version is still visible in git history).
+- Yahoo's adjusted prices change retroactively with new ex-rights events by nature; when a change is found the whole series is downloaded again (older versions of the database are still in git history).
 - Today's prices can still change before the close, so they take part in the calculation but are not saved. Whether a day has "closed" is decided in each source's own timezone: Hong Kong time for HK stocks, London time for Yahoo FX.
 - After the parsing rules are improved (add 1 to the number of the layout in `PARSER_VERSIONS` in `filings.py`) the saved parse results are invalidated automatically and parsed again.
-- Other features can read these files directly. The table uses `0700.HK` as the example; for other stocks replace the symbol in the file name.
+- Other features can read the database directly; every table has a `symbol` (or `pair`) column that tells the stocks apart.
+- The schema version is kept in SQLite's `user_version`; a database written by a newer version of the program is refused instead of being damaged.
 
 ## How to check the calculation
 
@@ -169,7 +170,7 @@ Every number can be traced back to the raw data step by step; the pages and the 
 1. **Chart tooltip** (cursor on a day): ratio = close / (per-share value x FX rate), with that day's close, FX rate and per-share value substituted; the per-share value is expanded into the sum of the TTM periods (or TTM revenue / shares, equity / shares; shares are taken from the figure disclosed in the filing first and only implied from net profit / basic EPS if none is disclosed, see "Shares").
 2. **Daily valuation detail** (`valuation.csv`): for each trading day and each metric, one row with the close, price source, FX rate, which period of earnings was used that day (reporting period and publication time), the per-share value (reporting currency and converted) and the ratio. The ratio column = close / converted per-share value, which can be checked directly in Excel.
 3. **Per-share metrics** (`ttm.csv`): one row per filing; after finding the period in the daily valuation detail, this lists the value of each period the TTM covers (periods 1-4), the total and the formula. For example Samsung 2026Q3: `TTM EPS = 2025Q4 2,874* + 2026Q1 7,123 + 2026Q2 10,849 + 2026Q3 11,462 = 32,308`, where `*` means the period was obtained by subtracting cumulative figures (Q4 = full year - first three quarters).
-4. **Historical earnings** (`eps.csv`): the value of each period, first publication time, number of confirming filings and the source link; the values as stated in the filings are in `data/eps/<symbol>_announcements.csv`, and the values before and after split adjustment are compared in the "split adjustment note" column of `ttm.csv`.
+4. **Historical earnings** (`eps.csv`): the value of each period, first publication time, number of confirming filings and the source link; the values as stated in the filings are in the `announcements` table, and the values before and after split adjustment are compared in the "split adjustment note" column of `ttm.csv`.
 
 ## Method
 
@@ -226,7 +227,7 @@ The combination rules:
 1. Zero-volume rows are invalid.
 2. Estimate Yahoo's daily adjustment factor from the ratio of the two sources. A day's ratio is accepted as soon as it equals that of the previous or next trading day. This also gives the correct factor on the ex-rights date itself, and a few outlier days do not affect the result.
 3. Undo Yahoo's adjustment and compare with Tencent's price; a difference of at most 0.2% counts as agreement.
-4. The final price is Tencent's; the unadjusted Yahoo price is used only on days Tencent is missing. On disagreement Tencent's price is still used and marked `mismatch` in `final.csv` for manual review.
+4. The final price is Tencent's; the unadjusted Yahoo price is used only on days Tencent is missing. On disagreement Tencent's price is still used and marked `mismatch` in the `prices_final` table for manual review.
 
 Current cross-check result (Tencent): since 2015-10 there are 2709 trading days; the two sources agree on 2699, and the other 10 are half days (invalid Yahoo data); there are no disagreeing days.
 
@@ -255,7 +256,7 @@ Both layouts read the "Equity attributable to ... of the Company" subtotal from 
   - The program also checks the shares of adjacent periods and gives a notice when they change by more than 5%, to catch extraction errors; the disclosed shares and the implied shares are compared with each other (see "Shares").
 - **Independent verification**: the parse results of Sunny's 24 filings were checked against the revenue and net profit in the narrative text on page 1 of each filing (e.g. "profit ... attributable to owners of the Company was approximately RMB1,808.4 million"); all 12 agree. The implied weighted average shares agree with those disclosed in the note (e.g. 1,076.2 million for the first half of 2026, the note says 1,076,196 thousand).
 - **Annual check**: for quarterly reporters the four single-quarter EPS add up to the full-year EPS disclosed in the annual report (e.g. Tencent 2015: 0.741 + 0.787 + 0.800 + 0.769 = 3.097). For half-yearly reporters the second half = full year - first half, which holds by construction and relies on the cross-checks above.
-- **Manual checking**: in `data/eps/<symbol>_periods.csv` every period lists the value, first publication time, effective trading day, number of confirming filings, largest deviation and source link.
+- **Manual checking**: in the `periods` table every period lists the value, first publication time, effective trading day, number of confirming filings, largest deviation and source link.
 - **No peeking at future data**: each EPS value is only used after its filing is published; the exact rules are in the next section.
 - **Currency and splits**: the currency is read from the filing text ("RMB per share"). If a split happened, both the pre-split EPS and the price are converted to the current share basis using the split records (the saved prices remain actual traded prices); revenue, net profit and equity are totals and unaffected by splits; shares (disclosed and implied) are multiplied by the split ratio, on the same basis as EPS.
 
@@ -325,7 +326,9 @@ src/valuation_monitor/
   cli.py                           command line entry points (valuation-monitor, valuation-monitor-update)
   config.py                        config parsing
   data.py                          gathers the data sources into what the metric calculations need
-  store.py                         reading, writing and incremental updates of the data/ directory
+  db.py                            the SQLite database: tables, reading and writing only what changed
+  legacy.py                        import and export in the CSV/JSON layout used before the database (also the raw data download)
+  store.py                         saving prices and earnings in the database, incremental updates
   prices.py                        decides the final price from several sources
   filings.py                       extracts revenue, net profit, EPS and equity from filings (parse functions per layout), cross-checks, computes TTM and per-share data
   market_calendar.py               closing times, half days, effective trading day of filings (HK, US, Korea, A-share)
@@ -341,7 +344,7 @@ src/valuation_monitor/
   report.py                        text report and trend charts (CLI)
   service.py                       fetches data and computes the metrics (shared by CLI and web)
   web/                             web interface (Flask; wsgi.py is the server entry point for Cloud Run): page templates, styles, Chart.js, chart tooltips, download file generation (including daily valuation detail), static site export
-data/                              saved original filings, prices, FX rates, EPS (see "Saved data")
+data/                              valuation.db (prices, FX rates, parsed filings, earnings) and the saved original filings (see "Saved data")
 .github/workflows/pages.yml        scheduled data update and GitHub Pages publication
 Dockerfile, docs/                  container image and the Google Cloud deployment guide
 tests/                             unit tests (offline, no network access)
@@ -349,7 +352,7 @@ tests/                             unit tests (offline, no network access)
 
 ## Extending
 
-- **Add a Hong Kong stock**: add an entry under `stocks` in `config.yaml` (symbol, English name, `filing_format`, `metrics`) and run once; the program downloads all earnings announcements from HKEXnews automatically. **Always check the data the first time**: look for parse errors; check in `data/eps/<symbol>_periods.csv` that revenue, net profit and shares look reasonable (they should be stable, and the disclosed shares should be close to the implied cross-check value); check a few numbers against the narrative text on page 1 of the announcement. If the company's announcement layout differs from both existing HK layouts, add a parse function to `FORMATS` in `filings.py`.
+- **Add a Hong Kong stock**: add an entry under `stocks` in `config.yaml` (symbol, English name, `filing_format`, `metrics`) and run once; the program downloads all earnings announcements from HKEXnews automatically. **Always check the data the first time**: look for parse errors; check in the `periods` table of `data/valuation.db` that revenue, net profit and shares look reasonable (they should be stable, and the disclosed shares should be close to the implied cross-check value); check a few numbers against the narrative text on page 1 of the announcement. If the company's announcement layout differs from both existing HK layouts, add a parse function to `FORMATS` in `filings.py`.
 - **New metric**: extract the extra data from the filings in `filings.py`, implement the metric class under `metrics/` (metrics of the "price / per-share figure" kind can inherit `PriceMultiple` directly), then register it in `metrics/__init__.py`.
 - **Add a US stock** (foreign private issuer whose results are filed on 6-K): add an entry to `config.yaml` (symbol, English name, `market: US`, `cik`, `metrics`); the `cik` can be found on the company's EDGAR page. The rest is as above: check the parse results the first time, and compare with the full-year figures of the company's 20-F annual report.
 - **Add an A-share**: add an entry to `config.yaml` (symbol such as `600036.SS`, English name, `market: CN`, `metrics`); the program downloads periodic and express reports from CNINFO automatically; the Chinese report layout is basically the same across companies (uniform CSRC format); check the parse results the first time.

@@ -1,5 +1,11 @@
 # Running the web page on Google Cloud
 
+> **Important: the data now lives in a SQLite database (`data/valuation.db`).** This guide was written for the earlier CSV files,
+> which a mounted bucket handles well. A SQLite file does not work reliably on a mounted bucket (it needs file locking), so
+> **do not redeploy the Cloud Run job or service from a version with the database until the cloud part is adapted**
+> (the plan: the update job downloads the database from the bucket, updates it locally and uploads it back with a version check;
+> the page reads a downloaded copy). Services deployed earlier keep running on the CSV files already in the bucket.
+
 This runs the dynamic page (the one with the "Update data" button) on Google Cloud, visible only to your Google account.
 The GitHub Pages site and its 4-hourly workflow are untouched and keep working side by side.
 

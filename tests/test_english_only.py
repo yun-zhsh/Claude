@@ -100,6 +100,23 @@ def test_saved_data_files_have_no_cjk():
     assert not offenders, offenders
 
 
+def test_saved_database_has_no_cjk():
+    """data/valuation.db is binary, so the text cells of every table are checked here."""
+    import sqlite3
+
+    path = ROOT / "data" / "valuation.db"
+    if not path.exists():
+        pytest.skip("no saved database")
+    offenders = []
+    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as conn:
+        for (table,) in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall():
+            for row in conn.execute(f'SELECT * FROM "{table}"'):
+                if any(isinstance(v, str) and CJK.search(v) for v in row):
+                    offenders.append(f"{table}: {[v for v in row if isinstance(v, str) and CJK.search(v)][0][:40]!r}")
+                    break
+    assert not offenders, offenders
+
+
 def test_rendered_pages_and_downloads_have_no_cjk(client, monitor, tmp_path):  # noqa: F811
     pages = ["/", "/stock/0700.HK/"] + [f"/stock/0700.HK/download/{n}" for n in ("prices.csv", "eps.csv", "ttm.csv", "valuation.csv")]
     for url in pages:

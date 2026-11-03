@@ -3,6 +3,7 @@ from datetime import datetime
 import pandas as pd
 import pytest
 
+from valuation_monitor.db import PRICE_COLUMNS
 from valuation_monitor.filings import Announcement
 from valuation_monitor.providers.base import Filing
 from valuation_monitor.providers.yahoo import PriceHistory
@@ -56,8 +57,9 @@ class FakeYahoo:
         return PriceHistory(b["close"], pd.Series(self.splits, dtype=float), "HKD", "Asia/Hong_Kong", bars=b)
 
 
-def read(path):
-    return pd.read_csv(path, index_col="date", parse_dates=True)
+def saved(store, symbol, source):
+    """The raw bars of one source saved in the database."""
+    return store.db.read_series("price_bars", {"symbol": symbol, "source": source}, PRICE_COLUMNS[source])
 
 
 def test_price_store_saves_each_source_and_fetches_incrementally(tmp_path):
@@ -67,10 +69,9 @@ def test_price_store_saves_each_source_and_fetches_incrementally(tmp_path):
 
     h = store.prices("0700.HK", days_ago(40).to_pydatetime())
     assert h.close.tolist() == [100.0, 101.0, 102.0, 103.0]  # includes today's live price
-    folder = tmp_path / "prices" / "0700.HK"
-    assert read(folder / "tencent.csv")["close"].tolist() == [100.0, 101.0, 102.0]  # today has not closed, not saved
-    assert read(folder / "yahoo.csv")["close"].tolist() == [95.0, 95.95, 96.9]
-    final = read(folder / "final.csv")
+    assert saved(store, "0700.HK", "tencent")["close"].tolist() == [100.0, 101.0, 102.0]  # today has not closed, not saved
+    assert saved(store, "0700.HK", "yahoo")["close"].tolist() == [95.0, 95.95, 96.9]
+    final = store.final("0700.HK")
     assert final["status"].tolist() == ["agree"] * 3
     assert final["yahoo_close_unadjusted"].tolist() == pytest.approx([100.0, 101.0, 102.0])
 
@@ -100,7 +101,7 @@ def test_price_store_redownloads_yahoo_when_history_is_readjusted(tmp_path):
     quotes.closes[days_ago(1)] = 100.0
     store.prices("0700.HK", days_ago(20).to_pydatetime())
     assert yahoo.calls[-1] == days_ago(20)
-    assert read(tmp_path / "prices" / "0700.HK" / "yahoo.csv")["close"].tolist() == [90.0, 90.0, 100.0]
+    assert saved(store, "0700.HK", "yahoo")["close"].tolist() == [90.0, 90.0, 100.0]
 
 
 def test_price_store_adjusts_raw_prices_for_splits_in_memory(tmp_path):
@@ -110,7 +111,7 @@ def test_price_store_adjusts_raw_prices_for_splits_in_memory(tmp_path):
 
     h = store.prices("0700.HK", days_ago(20).to_pydatetime())
     assert h.close.tolist() == pytest.approx([100.0, 102.0, 103.0])
-    assert read(tmp_path / "prices" / "0700.HK" / "tencent.csv")["close"].tolist() == [500.0, 510.0, 103.0]
+    assert saved(store, "0700.HK", "tencent")["close"].tolist() == [500.0, 510.0, 103.0]
 
     yahoo.offline = True  # split records are saved and still take effect offline
     h = store.prices("0700.HK", days_ago(20).to_pydatetime())
@@ -133,12 +134,11 @@ def test_us_stock_uses_yahoo_only_and_is_not_split_adjusted_again(tmp_path):
     assert h.close.tolist() == [20.0, 21.0, 22.0]
     assert h.currency == "USD" and h.timezone == "America/New_York"
     assert h.splits.to_dict() == {days_ago(3): 5.0}  # the split records are still used to adjust EPS
-    folder = tmp_path / "prices" / "JD"
-    assert not (folder / "tencent.csv").exists()
-    final = read(folder / "final.csv")
+    assert saved(store, "JD", "tencent").empty
+    final = store.final("JD")
     assert set(final["status"]) == {"yahoo_only"} and final["close"].tolist() == [20.0, 21.0, 22.0]
 
-    yahoo.offline = True  # offline the saved data is used, and the currency is also recorded in yahoo.json
+    yahoo.offline = True  # offline the saved data is used, and the currency is also saved with the Yahoo data
     h = store.prices("JD", days_ago(20).to_pydatetime(), US)
     assert h.close.tolist() == [20.0, 21.0, 22.0] and h.currency == "USD"
 
@@ -165,5 +165,4 @@ def test_earnings_store_parses_each_filing_once(tmp_path, monkeypatch):
     second = store.load("0700.HK", [filing], pd.Series(dtype=float))
     assert calls == ["https://example.com/a.pdf"]
     assert second.quarters["eps"][pd.Period("2026Q2")].value == first.quarters["eps"][pd.Period("2026Q2")].value
-    assert (tmp_path / "eps" / "0700.HK_periods.csv").exists()
-    assert (tmp_path / "eps" / "0700.HK_ttm.csv").exists()
+    assert store.periods("0700.HK") is not None and store.ttm("0700.HK") is not None
