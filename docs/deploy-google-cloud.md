@@ -241,8 +241,24 @@ gcloud scheduler jobs run valuation-update-every-4h --location=$REGION
 
 ## Updating later
 
-After code or `config.yaml` changes are merged, run steps 5 and 6 again (the `gcloud run ... deploy --source .` commands)
-from an up-to-date clone (`git pull`). The data in the bucket is not touched.
+After code or `config.yaml` changes are merged, in Cloud Shell:
+
+```bash
+cd ~/Watchlist-monitor && git pull origin main
+scripts/deploy-cloud.sh          # or: scripts/deploy-cloud.sh job   /   scripts/deploy-cloud.sh web
+```
+
+The script builds the container image **once** and deploys the update job and the web page from it (the commands of steps 5 and 6 build
+twice, one image each). It also makes rebuilds faster in two ways: `.gcloudignore` keeps `data/` (the original filings, about 70 MB) out
+of the upload, and `cloudbuild.yaml` reuses the layers of the previous build while the `Dockerfile` installs the dependencies in a
+layer of their own, so a code-only change does not reinstall pandas and the rest. The first run after this change builds everything
+once, as before; later code-only builds should be clearly shorter. The script prints how long the build and the whole run took,
+so you can see the effect. The settings default to the values of this guide (`PROJECT_ID`, `REGION`, `BUCKET`, `SA` from the
+environment override them). The data in the bucket is not touched.
+
+Small things need no deployment at all: parsing, calculation, pages and downloads can be developed and tested locally with the
+saved data (`pytest`, `valuation-monitor-web`), and only changes to what is specific to the cloud (`cloud.py`, `wsgi.py`, the
+`Dockerfile`) need a real deployment to try.
 
 ## Upgrading an existing deployment (from the CSV version)
 
@@ -252,7 +268,7 @@ If the job and page were deployed before the database existed, they keep running
 1. In the clone: `git pull origin main`.
 2. Put the database into the bucket: `gcloud storage cp data/valuation.db gs://$BUCKET/valuation.db`
    (the job catches up with the days that are missing on its next run).
-3. Redeploy the job with the command of step 5 and the page with the command of step 6 (both now carry `VALUATION_DB_URI`;
+3. Redeploy the job and the page with `scripts/deploy-cloud.sh` (or the commands of steps 5 and 6) (both now carry `VALUATION_DB_URI`;
    the page also `VALUATION_UPDATE_JOB`), and give the service account the Run Invoker role on the job (first command of step 6).
 4. Run the job once (step 5) and check the log for `Database: ... downloaded` and `Database uploaded`, then open the page.
 5. Optional clean-up of the old CSV files in the bucket: `gcloud storage rm -r gs://$BUCKET/prices gs://$BUCKET/fx gs://$BUCKET/eps`
