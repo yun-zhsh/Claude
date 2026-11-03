@@ -442,3 +442,8 @@ Low priority, to be done when needed:
 ```bash
 .venv/bin/pytest
 ```
+
+Continuous integration (`.github/workflows/ci.yml`): every pull request runs the tests on the oldest and the newest supported Python
+(3.10 and 3.12) and builds the container image used on Cloud Run, with a smoke test of the image. The publishing workflow
+(`pages.yml`) calls the same tests after every code change and **publishes nothing if they fail**; its scheduled data updates
+skip them, because the code has not changed since it last passed. `tests/test_workflows.py` guards that wiring.

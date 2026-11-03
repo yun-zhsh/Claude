@@ -80,7 +80,7 @@ def test_python_string_literals_have_no_cjk():
 @pytest.mark.parametrize(
     "path",
     [*sorted(SRC.glob("web/templates/*.html")), *sorted(SRC.glob("web/static/*.js")), *sorted(SRC.glob("web/static/*.css")),
-     ROOT / "config.yaml", ROOT / ".github" / "workflows" / "pages.yml"],
+     ROOT / "config.yaml", ROOT / ".github" / "workflows" / "pages.yml", ROOT / ".github" / "workflows" / "ci.yml"],
     ids=lambda p: str(p.relative_to(ROOT)),
 )
 def test_templates_static_files_and_config_have_no_cjk(path):
