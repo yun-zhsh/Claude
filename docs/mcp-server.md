@@ -12,6 +12,44 @@ tests (`tests/test_mcp_server.py`), not just requested in a prompt.
 | **Point in time** | Asking about a past day gives the answer someone would have got on that day. | Every tool takes `as_of` (YYYY-MM-DD). Only prices up to that day and filings already in effect by then are used, and the percentile window ends there. The strongest test removes every filing published after the day and checks that the answer is identical. |
 | **No model arithmetic** | The assistant does not calculate. | Ratios, percentiles, levels and statistics are computed in Python by the same code as the web page (`metrics/`, `analysis.py`); a test compares the two. The server returns finished numbers and tells the assistant to quote them as given. |
 
+## Running it in the cloud
+
+Besides stdio on your own machine, the same server runs as a web service on Google Cloud Run (`--transport streamable-http`), so an assistant
+anywhere can use it by its address, without installing anything. Setup is one command in Cloud Shell (after the other parts of
+[docs/deploy-google-cloud.md](deploy-google-cloud.md) are in place):
+
+```bash
+cd ~/Watchlist-monitor && git pull origin main && scripts/deploy-cloud.sh mcp
+```
+
+It prints the address, `https://valuation-mcp-....run.app/mcp`. Clients that take a URL use it as is, for example
+`claude mcp add --transport http valuation-monitor https://valuation-mcp-....run.app/mcp`; custom connectors in other assistants
+(ChatGPT, Claude.ai, Gemini) ask for the same address, and whether your plan offers them is up to the provider. A quick check without any
+assistant:
+
+```bash
+curl -s -X POST https://valuation-mcp-....run.app/mcp -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+**The four rules hold in the cloud as well, and the open endpoint adds guards:**
+
+| Guard | How |
+| --- | --- |
+| Cannot write | It runs as its own service account (`valuation-mcp`) whose only role is `roles/storage.objectViewer` on the data bucket, with the bucket mounted read-only. The update job's account, the SEC secret and the permission to start the job are not given to it. The database is opened read-only as before. |
+| Limited traffic | At most 60 requests a minute from one address and 600 in all (per instance, `VALUATION_MCP_PER_CLIENT_LIMIT` / `VALUATION_MCP_TOTAL_LIMIT`), at most 2 instances, 20 concurrent requests each, 60 s per request, 64 KB per request, plus the spend cap and budget alerts of the project. Over the limit the answer is HTTP 429. |
+| Nothing held open | Stateless requests, POST only: there are no sessions and no streams a caller could keep open. |
+| Logged without addresses | One line per request in Cloud Logging with a short hash of the address. |
+| Fresh data | It downloads the database object when a newer version exists, checked every ten minutes, so the update job's results appear without a redeploy. |
+
+**Switching it off** takes one command and keeps the service for later:
+
+```bash
+gcloud run services remove-iam-policy-binding valuation-mcp --region=$REGION --member=allUsers --role=roles/run.invoker
+```
+
+(`gcloud run services delete valuation-mcp --region=$REGION` removes it.) It costs next to nothing when idle: it scales to zero.
+
 ## Tools
 
 | Tool | Use |
@@ -106,7 +144,10 @@ Being honest about the limits is part of the design.
 - **Yahoo-only markets can lag.** US, Korean and A-share prices come from one source, whose newest day can arrive about a day late
   (see Known limitations in the README). `list_stocks` and the warnings show how old the newest price is.
 - **Not investment advice.** A percentile of a company's own past says nothing about its future or about other companies.
-- **Local only.** The server speaks stdio and reads files on the machine it runs on; it does not open a port and has no credentials.
-  Putting it behind a network endpoint would need authentication, which is deliberately not built.
+- **Local by default, public when you deploy it.** Run on your machine (stdio) the server has no port and no credentials. The Cloud Run
+  service below is open to anyone who has the address, deliberately: the data is public (original filings and prices, the same as the
+  GitHub Pages site) and the service can only read it, so what an open endpoint risks is abuse and cost, not leaks. Those are limited
+  (see below), not eliminated. If you would rather not have it public, do not run `scripts/deploy-cloud.sh mcp`, or switch it off at once
+  (see "Switching it off").
 - **Text going to the model is produced by this code.** Results contain numbers, dates, links and fixed sentences; no text copied from a
   filing or a web page is passed through, which keeps prompt injection through the data out of the picture.
