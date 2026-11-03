@@ -30,7 +30,7 @@ nothing here can make a company publish. Change the limits in `config.yaml` if a
 **What happens on a failure:**
 
 - *Cloud Run job:* the job saves and uploads the data first, then prints the `STALE` lines and exits with a failure. The failed
-  execution is what an alert on the job should react to (step 3 of this page, not set up yet).
+  execution is what the alert of section 3 reacts to.
 - *GitHub workflow:* the data is committed and **the site is still published** (an old page is better than none), and then the
   last step of the deploy job fails the run. A failed scheduled run makes GitHub send an email.
 
@@ -47,10 +47,10 @@ the source in a browser (Yahoo Finance's chart for that symbol, for example) to 
 `valuation-monitor-update` locally to see the real error. A source that changed its format needs a fix in `providers/`.
 
 **Known gap:** the check only runs when the job runs. A job that never starts (the schedule disabled, a permission removed) is not
-caught by this check; the GitHub side runs independently and would still fail, and an alert on "no successful execution for a long
-time" is part of step 3.
+caught by this check; the GitHub side runs independently and would still fail, and the "no successful execution for 12 hours"
+alert of section 3 covers it.
 
-## 3. Alerts when the Cloud Run job fails (the files are in place; you run the setup once)
+## 3. Alerts when the Cloud Run job fails (set up on the project and tested; the second alert is not drilled yet)
 
 Two email alerts from Cloud Monitoring, defined in `ops/alerts/` and created by `scripts/setup-alerts.sh`:
 
@@ -83,10 +83,27 @@ Alerting > Incidents and closes by itself an hour after the last failure. The se
 without a success); to see it work, pause the schedule for 12 hours (`gcloud scheduler jobs pause valuation-update-every-4h --location=$REGION`),
 wait for the email, and resume it (`gcloud scheduler jobs resume ...`).
 
-**Status of the verification:** the policy files are valid Cloud Monitoring alert policies (parsed with Google's own library) and
-the script's logic is tested against a fake `gcloud` and `curl` (`tests/test_alerts.py`). Neither has run against Google Cloud yet: the
-first run of the script and the test above are the verification, and the result belongs in this table.
+**Status of the verification:** the policy files are valid Cloud Monitoring alert policies (parsed with Google's own library), the
+script's logic is tested against a fake `gcloud` and `curl` (`tests/test_alerts.py`), and it has been run against the real project; the
+failed-execution alert has been fired on purpose. The silent-job alert has not been fired yet (it needs 12 hours without a success).
 
 | Date | What was tested | Result |
 | --- | --- | --- |
-| (not done yet) | setup script; failed-execution alert; silent-job alert | |
+| 2026-11-03 | `scripts/setup-alerts.sh` on the real project | The preflight found `run.googleapis.com/job/completed_execution_count` with a `result` label; the email channel and both policies were created. Listing the policies by display name works, so a second run recognises them. |
+| 2026-11-03 | Failed-execution alert: an execution of `valuation-update` made to fail on purpose (`VALUATION_CONFIG=/nonexistent.yaml`, exit code 1, no data touched) | Worked. The incident opened in Cloud Monitoring within minutes (opened 15:37:19 UTC-5, "value of 1.000 above the threshold of 0.000") and the email from Google Cloud Alerting arrived in the inbox with the policy documentation. The email channel reports no verification status, and it was not needed. |
+| | Silent-job alert (no successful execution for 12 hours) | not tested yet: pause the schedule for 12 hours as described above |
+
+Notes from the first alert: the email's subject says "No severity", because the policy sets none (a `severity` field could be added to
+the policy files; existing policies are not changed by running the script again, so they would have to be deleted and created again).
+The incident closes by itself an hour after the last failure.
+
+## To do: checks that have not been done yet
+
+Things that are configured or tested only in part. Tick one off by doing it and writing the result in the table of its section.
+
+| What | Why it is open | How |
+| --- | --- | --- |
+| Fire the **data freshness failure** in the real GitHub workflow | Only the case "data is fresh" has run there (the failure step was skipped, as it should). That a stale series still publishes the site, then turns the run red and sends the email, is tested in `tests/test_workflows.py` and `tests/test_freshness.py` but has not happened for real. | Commit a throwaway change on `main` that sets every limit in `config.yaml` `freshness.max_price_age_days` to `0` (a stock whose newest day is yesterday is then stale), let the workflow run (or start it by hand), and check three things: the site is still updated, the run ends red at "Fail the run if the data is stale", and GitHub sends the failure email. **Then revert the commit at once**: until then every scheduled run is red. |
+| Fire the **silent job** alert (no successful update for 12 hours) | Created, never fired: it needs 12 hours without a success. | `gcloud scheduler jobs pause valuation-update-every-4h --location=$REGION`, wait for the email (about 12 hours), then `gcloud scheduler jobs resume valuation-update-every-4h --location=$REGION`. Do it on a day when nothing depends on fresh data. |
+| Measure the **effect of the build cache** of `scripts/deploy-cloud.sh` | The first build had nothing to reuse: 97 s for the build, 126 s in all (2026-11-03). The point of the cache is the next code-only deploy. | Deploy again after a code-only change and write the two figures the script prints ("the build took ...s", "Done in ...s") here, next to the first ones. |
+| Add a **severity** to the alert policies | The email subject says "No severity". Cosmetic. | Add `"severity": "ERROR"` to the files in `ops/alerts/`, delete the two policies in Cloud Monitoring and run `scripts/setup-alerts.sh` again (it leaves existing policies as they are). |
