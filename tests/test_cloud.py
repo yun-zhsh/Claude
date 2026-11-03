@@ -55,6 +55,7 @@ def test_update_command_saves_data_and_reports_each_stock(monitor, capsys, monke
 
     monkeypatch.setattr(cli, "Monitor", lambda *a, **k: monitor)
     monkeypatch.setattr(cli, "load_config", lambda path: monitor.config)
+    monkeypatch.setattr(cli, "check_freshness", lambda db, config: [])  # the fixture's old price would be stale: freshness has its own tests
     assert cli.update_main([]) == 0
     assert "Tencent Holdings (0700.HK): updated" in capsys.readouterr().out
 

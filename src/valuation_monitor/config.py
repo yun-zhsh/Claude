@@ -46,12 +46,25 @@ class StockConfig:
 DEFAULT_LOOKBACK_OPTIONS = [10, 5, 3, 2, 1]
 
 
+DEFAULT_MAX_PRICE_AGE_DAYS = {"HK": 5, "US": 5, "KR": 6, "CN": 10}  # long enough for weekends and the longest holidays (China's Golden Week and New Year)
+
+
+@dataclass(frozen=True)
+class Freshness:
+    """How old saved data may be before the update job (and the scheduled workflow) fails: see freshness.py."""
+
+    max_price_age_days: dict[str, int] = field(default_factory=lambda: dict(DEFAULT_MAX_PRICE_AGE_DAYS))  # by market
+    max_fx_age_days: int = 7
+    max_filing_age_days: int = 200  # only a warning: companies publish at least every half year, and nobody fixes a late filing
+
+
 @dataclass(frozen=True)
 class Config:
     stocks: list[StockConfig]
     lookback_years: int = 10  # default selected lookback in years
     levels: list[Level] = field(default_factory=list)
     lookback_options: list[int] = field(default_factory=lambda: list(DEFAULT_LOOKBACK_OPTIONS))  # lookback years selectable on the web page
+    freshness: Freshness = field(default_factory=Freshness)
 
     @property
     def max_lookback(self) -> int:
@@ -124,4 +137,15 @@ def parse_config(raw: dict) -> Config:
     default = int(raw.get("lookback_years", options[0]))
     if default not in options:
         raise ValueError(f"lookback_years={default} must be one of lookback_options {options}")
-    return Config(stocks=stocks, lookback_years=default, levels=levels, lookback_options=options)
+    return Config(stocks=stocks, lookback_years=default, levels=levels, lookback_options=options, freshness=parse_freshness(raw.get("freshness") or {}))
+
+
+def parse_freshness(raw: dict) -> Freshness:
+    prices = {**DEFAULT_MAX_PRICE_AGE_DAYS, **{str(m).upper(): int(d) for m, d in (raw.get("max_price_age_days") or {}).items()}}
+    unknown = sorted(set(prices) - set(MARKETS))
+    if unknown:
+        raise ValueError(f"freshness.max_price_age_days: unknown market {unknown}; available markets: {sorted(MARKETS)}")
+    fx, filings = int(raw.get("max_fx_age_days", 7)), int(raw.get("max_filing_age_days", 200))
+    if min(prices.values()) < 1 or fx < 1 or filings < 1:
+        raise ValueError("The freshness limits must be positive numbers of days")
+    return Freshness(max_price_age_days=prices, max_fx_age_days=fx, max_filing_age_days=filings)

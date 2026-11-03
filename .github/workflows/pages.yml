@@ -31,6 +31,8 @@ jobs:
     needs: tests
     if: ${{ !cancelled() && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
+    outputs:
+      stale: ${{ steps.freshness.outputs.stale }} # "true" when a price or FX series has stopped updating (see the check below)
     env:
       TZ: Asia/Hong_Kong # the update time shown on the pages is in Hong Kong time
     steps:
@@ -73,6 +75,13 @@ jobs:
             git push origin "HEAD:${GITHUB_REF_NAME}"
           fi
 
+      # A price or FX source that silently stops delivering leaves the data on the same day. The site is still published (an old
+      # page beats none), and the run is failed at the end of the deploy job, which is what sends the failure email.
+      - name: Check that the data is fresh
+        id: freshness
+        run: |
+          if valuation-monitor-check; then echo "stale=false" >> "$GITHUB_OUTPUT"; else echo "stale=true" >> "$GITHUB_OUTPUT"; fi
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
@@ -86,3 +95,9 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Fail the run if the data is stale
+        if: needs.build.outputs.stale == 'true'
+        run: |
+          echo "::error::A price or FX series has not been updated for too long (see 'Check that the data is fresh' in the build job). The site was published anyway."
+          exit 1

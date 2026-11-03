@@ -437,6 +437,12 @@ Low priority, to be done when needed:
 
 - **Cross-check Hikvision's Chinese reports with the English versions**: CNINFO has English periodic reports since 2016, which can be a second source for checking the numbers.
 
+## Keeping it healthy
+
+Tests gate the publication, and a **data freshness check** fails the update job and the scheduled workflow when a price or FX series
+stops updating (limits per market in `config.yaml`; the data is still saved and the site still published, and the failure is what
+sends the email). What is in place and what is not yet: [docs/operations.md](docs/operations.md).
+
 ## Tests
 
 ```bash

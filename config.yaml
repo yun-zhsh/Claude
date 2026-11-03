@@ -14,6 +14,14 @@ levels:
   - { upper: 90, label: Overvalued }
   - { upper: 100, label: Deeply overvalued }
 
+# Data freshness: the update job and the scheduled workflow fail when the newest saved day is older than this many calendar days
+# (the data is still saved and the site still published; the failure is what tells someone to look). Prices by market,
+# long enough for weekends and holidays. Only the price and FX limits fail the run; an old newest filing is just a warning.
+freshness:
+  max_price_age_days: { HK: 5, US: 5, KR: 6, CN: 10 }
+  max_fx_age_days: 7
+  max_filing_age_days: 200
+
 # Available metrics:
 #   pe           PE (TTM), based on net profit attributable to owners under IFRS/GAAP
 #   pe_non_ifrs  PE Non-IFRS (TTM), based on the company's Non-IFRS profit, which excludes one-off items such as investment gains

@@ -35,3 +35,14 @@ def test_nothing_is_published_after_a_code_change_unless_the_tests_pass():
 def test_the_database_size_check_runs_before_the_data_is_committed():
     steps = [step.get("name", "") for step in load("pages.yml")["jobs"]["build"]["steps"]]
     assert steps.index("Check the size of the database") < steps.index("Commit the updated data")
+
+
+def test_stale_data_still_publishes_but_fails_the_run_at_the_end():
+    pages = load("pages.yml")
+    build_steps = [step.get("name", step.get("uses", "")) for step in pages["jobs"]["build"]["steps"]]
+    assert build_steps.index("Check that the data is fresh") < build_steps.index("actions/upload-pages-artifact@v3")
+    check = next(step for step in pages["jobs"]["build"]["steps"] if step.get("name") == "Check that the data is fresh")
+    assert "valuation-monitor-check" in check["run"] and "continue-on-error" not in check  # a stale series must not stop the publication...
+    assert pages["jobs"]["build"]["outputs"]["stale"] == "${{ steps.freshness.outputs.stale }}"
+    last = pages["jobs"]["deploy"]["steps"][-1]  # ...but after it has happened, the run fails
+    assert last["name"] == "Fail the run if the data is stale" and last["if"] == "needs.build.outputs.stale == 'true'" and "exit 1" in last["run"]
