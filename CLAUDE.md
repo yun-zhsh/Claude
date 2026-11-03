@@ -24,3 +24,4 @@
 - All saved data except the original filings lives in the SQLite database `data/valuation.db` (see `db.py`). Write only what changed, never rebuild or vacuum the file, and do not commit it from a local run: only the scheduled workflow does.
 - Run the tests with `.venv/bin/pytest` (offline).
 - Bump the layout's number in `PARSER_VERSIONS` (`filings.py`) whenever parsing rules or output text of a parser change.
+- The MCP server (`mcp_server.py`, docs/mcp-server.md) must stay read-only and offline. A new tool needs an `as_of` date, sources in its result, and no arithmetic outside Python, with tests in `tests/test_mcp_server.py`.

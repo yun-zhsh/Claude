@@ -79,11 +79,12 @@ class Monitor:
         refresh: bool = False,
         offline: bool = False,
         db_path: str | Path | None = None,
+        readonly: bool = False,
     ):
         self.config = config
         self.data_dir = Path(data_dir)
         http = HttpClient(cache_dir=cache_dir, refresh=refresh)
-        self.db = Database(db_path or self.data_dir / "valuation.db")  # the database may live outside the data directory (e.g. a local copy of a bucket object)
+        self.db = Database(db_path or self.data_dir / "valuation.db", readonly=readonly)  # the database may live outside the data directory (e.g. a local copy of a bucket object)
         self.prices = PriceStore(TencentQuoteProvider(http), YahooProvider(http), self.data_dir, self.db)
         self.earnings = EarningsStore(self.data_dir, self.db)
         try:

@@ -75,6 +75,12 @@ edits, which is fine here and would not be for many users. A managed database (C
 a service to run for no benefit at this size. How the repository grows, and when to change the storage, is measured in
 [docs/database-growth.md](docs/database-growth.md).
 
+**An AI assistant gets the same guardrails.** `valuation-monitor-mcp` is an [MCP server](docs/mcp-server.md) that lets an assistant such as
+Claude look up valuations. It is read-only (the database is opened in SQLite's read-only mode and the network is off), every result carries
+its sources (filing link, publication time, effective trading day and the written-out calculation), every tool takes an `as_of` date so only
+data that was public by then is used, and all arithmetic stays in Python so the model only calls tools and explains the result. The cost is
+that the assistant can only answer what the tools offer, in return a wrong or unsourced number is hard to produce and easy to catch.
+
 **Status:** v0.3.0. Project conventions (English-only code and output, tests, how the data is written) are in [CLAUDE.md](CLAUDE.md).
 
 ## What it tracks
@@ -200,6 +206,28 @@ Options:
 - `--plot DIR`: write the trend charts.
 - `--data-dir`: directory where data is saved (default `data`).
 - `--refresh`: ignore the 12-hour network request cache (the `.cache/` directory).
+
+## Using it from an AI assistant (MCP server)
+
+```bash
+pip install -e '.[mcp]'
+claude mcp add valuation-monitor -- valuation-monitor-mcp --data-dir /path/to/Watchlist-monitor/data
+```
+
+Then ask, for example, *"Where does Samsung's PB stand over the last ten years?"*. The assistant calls `get_valuation`, and the answer
+rests on a result like this (real output from the saved data, shortened):
+
+```
+PB = close / (per-share value x FX rate) = 229,000 KRW / (91,301.3691 KRW x 1) = 2.5082
+percentile 92.6 of 2,429 trading days (2016-11-02 to 2026-11-02), level "Deeply overvalued"
+earnings used: 2026Q3, published 2026-10-29 10:00 (Asia/Seoul), in effect from 2026-10-29
+source: https://images.samsung.com/is/content/samsung/assets/global/ir/docs/2026_3Q_conference_eng.pdf
+warning: the latest earnings used are preliminary (earnings call presentation, not yet the audited statements)
+```
+
+With `as_of="2025-03-31"` the same question gives PB 1.00 at the 4.1th percentile, from the 2024 Q4 statements published on 2025-01-31: nothing
+published later is used. The four rules (read-only, sourced, point in time, no model arithmetic), the tools, the setup for Claude Desktop and
+Claude Code, and the limits are in [docs/mcp-server.md](docs/mcp-server.md).
 
 ## Saved data
 
@@ -392,11 +420,12 @@ All of Tencent's earnings announcements since 2014 were published between 16:00 
 config.yaml                        watch list, lookback years (default and selectable), valuation levels
 CLAUDE.md                          working rules for Claude Code sessions (language rules)
 src/valuation_monitor/
-  cli.py                           command line entry points (valuation-monitor, valuation-monitor-update, valuation-monitor-check, valuation-monitor-db)
+  cli.py                           command line entry points (valuation-monitor, valuation-monitor-update, valuation-monitor-check, valuation-monitor-db; the MCP server is in mcp_server.py)
   config.py                        config parsing
   data.py                          gathers the data sources into what the metric calculations need
   db.py                            the SQLite database: tables, reading and writing only what changed
   freshness.py                     checks how old the newest saved price, FX rate and filing is (limits in config.yaml); fails the update when prices or FX rates are stale
+  mcp_server.py                    the MCP server: read-only, offline, sourced, point-in-time lookups for AI assistants (docs/mcp-server.md)
   cloud.py                         keeps the database in a Google Cloud Storage object (pull, push with a version check, start the update job)
   legacy.py                        import and export in the CSV/JSON layout used before the database (also the raw data download)
   store.py                         saving prices and earnings in the database, incremental updates

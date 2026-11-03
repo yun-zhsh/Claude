@@ -16,7 +16,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "mcp>=1.9,<2"]
+mcp = ["mcp>=1.9,<2"]  # the MCP server for AI assistants (docs/mcp-server.md)
 cloud = ["gunicorn>=22", "google-cloud-storage>=2.16"]  # serving the web page on a server (see docs/deploy-google-cloud.md)
 
 [project.scripts]
@@ -24,6 +25,7 @@ valuation-monitor = "valuation_monitor.cli:main"
 valuation-monitor-db = "valuation_monitor.legacy:main"
 valuation-monitor-check = "valuation_monitor.cli:check_main"
 valuation-monitor-update = "valuation_monitor.cli:update_main"
+valuation-monitor-mcp = "valuation_monitor.mcp_server:main"
 valuation-monitor-web = "valuation_monitor.web:main"
 valuation-monitor-export = "valuation_monitor.web:export_main"
 
