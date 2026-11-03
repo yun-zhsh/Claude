@@ -1,6 +1,6 @@
 [project]
 name = "valuation-monitor"
-version = "0.1.0"
+version = "0.2.0"
 description = "Monitor whether a stock's valuation (PE/PS/PB etc.) is high or low compared with its own history"
 readme = "README.md"
 requires-python = ">=3.10"

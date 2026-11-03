@@ -1,6 +1,6 @@
 # Stock Valuation Monitor
 
-Current version **v0.1.0** (MVP). Since the next release, the software shows English only at runtime, and all documentation and code comments are in English (see "Language rules").
+Current version **v0.2.0**: English-only software, documentation and code comments (see "Language rules"), and a Google Cloud Run deployment of the dynamic page (see [docs/deploy-google-cloud.md](docs/deploy-google-cloud.md)).
 
 It tells you whether a stock's current valuation (PE, PS, PB, ...) is high or low compared with its own history.
 
