@@ -273,3 +273,150 @@ def test_a_tool_call_through_the_protocol_returns_the_sources(service):
     content = asyncio.run(server.call_tool("get_valuation", {"symbol": "0700.HK", "metric": "pe", "years": 1, "as_of": "2025-05-05"}))
     text = content[0].text if isinstance(content, (list, tuple)) and hasattr(content[0], "text") else json.dumps(content)
     assert "https://filings.example/2025Q1.pdf" in text and "2025-05-05" in text
+
+
+# ---- keeping up with a database in a bucket ---------------------------------------------------------------------------------------
+
+
+def test_the_copy_is_checked_for_a_newer_database_at_most_every_interval(tmp_path, config):
+    service = build_service(tmp_path, config)
+    now = [1000.0]
+    calls = []
+    service._sync, service._sync_every, service._clock = (lambda: calls.append(now[0])), 600.0, (lambda: now[0])
+    service.list_stocks()
+    service.valuation("0700.HK", "pe")
+    assert calls == [1000.0]  # once, not on every call
+    now[0] += 599
+    service.filings("0700.HK")
+    assert len(calls) == 1
+    now[0] += 2
+    service.filings("0700.HK")
+    assert len(calls) == 2
+
+
+def test_a_failing_check_keeps_the_copy_that_is_on_disk(tmp_path, config, capsys):
+    service = build_service(tmp_path, config)
+
+    def broken():
+        raise RuntimeError("bucket unreachable")
+
+    service._sync = broken
+    assert service.valuation("0700.HK", "pe")["value"]
+    assert "bucket unreachable" in capsys.readouterr().err
+
+
+def test_open_service_downloads_the_object_first(tmp_path):
+    from valuation_monitor.cloud import RemoteDatabase
+
+    source = tmp_path / "source"
+    Database(source / "valuation.db")
+    store = FakeStore()
+    store.put("gs://bucket/valuation.db", (source / "valuation.db").read_bytes())
+    remote = RemoteDatabase("gs://bucket/valuation.db", tmp_path / "serving" / "valuation.db", store)
+    service = open_service("config.yaml", str(tmp_path / "serving"), remote=remote)
+    assert (tmp_path / "serving" / "valuation.db").exists() and service.monitor.db.readonly
+    assert service._sync == remote.pull
+
+
+class FakeStore:
+    """A bucket in memory (see test_cloud_sync.py)."""
+
+    def __init__(self):
+        self.objects, self.next = {}, 1000
+
+    def put(self, uri, data):
+        self.next += 1
+        self.objects[uri] = (data, self.next)
+
+    def generation(self, uri):
+        return self.objects[uri][1] if uri in self.objects else 0
+
+    def download(self, uri, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(self.objects[uri][0])
+        return self.objects[uri][1]
+
+
+# ---- serving over HTTP ------------------------------------------------------------------------------------------------------------
+
+
+def call_asgi(app, headers=(), path="/mcp", method="POST", client=("203.0.113.9", 1234)):
+    import asyncio
+
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"{}", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    scope = {"type": "http", "method": method, "path": path, "headers": [(k.encode(), v.encode()) for k, v in headers], "client": client}
+    asyncio.run(app(scope, receive, send))
+    return sent[0]["status"], dict(sent[0]["headers"]), sent[1].get("body", b"")
+
+
+def ok_app():
+    async def app(scope, receive, send):
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    return app
+
+
+def test_rate_limit_counts_per_client_over_a_sliding_minute():
+    from valuation_monitor.mcp_http import RateLimit
+
+    now = [0.0]
+    app = RateLimit(ok_app(), per_client=3, total=100, clock=lambda: now[0])
+    assert [call_asgi(app)[0] for _ in range(4)] == [200, 200, 200, 429]
+    assert call_asgi(app, client=("198.51.100.1", 1))[0] == 200  # somebody else is not affected
+    status, headers, body = call_asgi(app)
+    assert status == 429 and int(headers[b"retry-after"]) >= 1 and b"Too many requests" in body
+    now[0] += 61
+    assert call_asgi(app)[0] == 200
+
+
+def test_rate_limit_has_a_global_cap_too():
+    from valuation_monitor.mcp_http import RateLimit
+
+    app = RateLimit(ok_app(), per_client=100, total=3, clock=lambda: 0.0)
+    codes = [call_asgi(app, client=(f"198.51.100.{i}", 1))[0] for i in range(5)]
+    assert codes == [200, 200, 200, 429, 429]
+
+
+def test_the_client_is_the_address_cloud_run_added_not_one_the_caller_forged():
+    from valuation_monitor.mcp_http import RateLimit
+
+    app = RateLimit(ok_app(), per_client=1, total=100, clock=lambda: 0.0)
+    assert call_asgi(app, [("x-forwarded-for", "1.1.1.1, 203.0.113.50")])[0] == 200
+    assert call_asgi(app, [("x-forwarded-for", "2.2.2.2, 203.0.113.50")])[0] == 429  # same real address, different forged first entry
+    assert call_asgi(app, [("x-forwarded-for", "2.2.2.2, 203.0.113.51")])[0] == 200
+
+
+def test_request_log_hides_the_address(caplog):
+    import logging
+
+    from valuation_monitor.mcp_http import RateLimit
+
+    with caplog.at_level(logging.INFO, logger="valuation_monitor.mcp"):
+        call_asgi(RateLimit(ok_app(), clock=lambda: 0.0), client=("203.0.113.77", 1))
+    assert "status=200" in caplog.text and "203.0.113.77" not in caplog.text
+
+
+def test_a_tool_call_over_http_returns_the_sources(service):
+    from starlette.testclient import TestClient
+
+    from valuation_monitor.mcp_http import build_app
+
+    app = build_app(create_server(service, http=True, host="0.0.0.0"))  # as on Cloud Run
+    headers = {"Accept": "application/json, text/event-stream", "Content-Type": "application/json"}
+    with TestClient(app) as client:
+        call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "get_valuation", "arguments": {"symbol": "0700.HK", "metric": "pe", "years": 1, "as_of": "2025-05-05"}}}
+        response = client.post("/mcp", json=call, headers=headers)
+        assert response.status_code == 200
+        text = response.json()["result"]["content"][0]["text"]
+        assert "https://filings.example/2025Q1.pdf" in text
+        assert client.get("/mcp", headers=headers).status_code == 405  # no stream can be held open
+        big = client.post("/mcp", content=b" " * 70_000, headers=headers)
+        assert big.status_code == 413  # larger than any real request

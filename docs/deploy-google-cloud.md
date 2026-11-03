@@ -239,13 +239,21 @@ This runs at 01:47, 05:47, ... UTC like the GitHub workflow. To test it right aw
 gcloud scheduler jobs run valuation-update-every-4h --location=$REGION
 ```
 
+## Optional: a public, read-only MCP service for AI assistants
+
+`scripts/deploy-cloud.sh mcp` deploys a third service, `valuation-mcp`, that lets AI assistants look up valuations by its address (see
+[mcp-server.md](mcp-server.md)). It is **public on purpose** (no sign-in) and is never part of `all`, so it appears only when you ask for it. It
+runs as its own service account that can only read the bucket, mounts the bucket read-only, scales to zero, and has request limits. To switch
+it off: `gcloud run services remove-iam-policy-binding valuation-mcp --region=$REGION --member=allUsers --role=roles/run.invoker`.
+If your organization forbids public services, the deployment is refused; keep using the local (stdio) server then.
+
 ## Updating later
 
 After code or `config.yaml` changes are merged, in Cloud Shell:
 
 ```bash
 cd ~/Watchlist-monitor && git pull origin main
-scripts/deploy-cloud.sh          # or: scripts/deploy-cloud.sh job   /   scripts/deploy-cloud.sh web
+scripts/deploy-cloud.sh          # or: scripts/deploy-cloud.sh job   /   scripts/deploy-cloud.sh web   /   scripts/deploy-cloud.sh mcp
 ```
 
 The script builds the container image **once** and deploys the update job and the web page from it (the commands of steps 5 and 6 build

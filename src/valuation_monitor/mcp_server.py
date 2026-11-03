@@ -23,6 +23,8 @@ import contextlib
 import io
 import os
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -30,6 +32,7 @@ from typing import Any
 
 import pandas as pd
 
+from valuation_monitor.cloud import RemoteDatabase
 from valuation_monitor.analysis import BAND_PERCENTILES, evaluate
 from valuation_monitor.audit import explain, num
 from valuation_monitor.config import Config, StockConfig, load_config
@@ -97,12 +100,24 @@ class Loaded:
 class ValuationService:
     """The tools. `today` is only used to tell how old the newest price is; it never decides which data is used."""
 
-    def __init__(self, monitor: Monitor, today: date | None = None):
+    def __init__(
+        self,
+        monitor: Monitor,
+        today: date | None = None,
+        sync: Callable[[], object] | None = None,
+        sync_every: float = 600.0,
+        clock: Callable[[], float] = time.monotonic,
+    ):
+        """`sync` brings the local database up to date (on Cloud Run: download the newest bucket object); it runs at most every `sync_every` seconds."""
         if not monitor.db.readonly:
             raise ValueError("The MCP server only works on a read-only database")
         self.monitor = monitor
         self.config: Config = monitor.config
         self._today = today
+        self._sync = sync
+        self._sync_every = sync_every
+        self._clock = clock
+        self._synced_at: float | None = None
         self._cache: dict[str, tuple[float, Loaded]] = {}
 
     # ---- loading (always from the saved data) ---------------------------------------------------------------------------------
@@ -114,7 +129,20 @@ class ValuationService:
         known = ", ".join(s.symbol for s in self.config.stocks)
         raise RequestError(f"Unknown symbol {symbol!r}. Available: {known}")
 
+    def _maybe_sync(self) -> None:
+        if self._sync is None:
+            return
+        now = self._clock()
+        if self._synced_at is not None and now - self._synced_at < self._sync_every:
+            return
+        self._synced_at = now
+        try:
+            self._sync()
+        except Exception as e:  # keep answering from the copy already on disk
+            print(f"Could not check for a newer database: {e}", file=sys.stderr)
+
     def _load(self, stock: StockConfig) -> Loaded:
+        self._maybe_sync()
         mtime = self.monitor.db.path.stat().st_mtime  # the file is replaced when the update job uploads a new version
         cached = self._cache.get(stock.symbol)
         if cached and cached[0] == mtime:
@@ -385,20 +413,30 @@ class ValuationService:
         return out
 
 
-def open_service(config_path: str, data_dir: str, db_path: str | None = None, today: date | None = None) -> ValuationService:
-    """A service on the saved data: database read-only, network off, nothing written (the request cache directory is never created)."""
+def open_service(config_path: str, data_dir: str, db_path: str | None = None, today: date | None = None, remote: RemoteDatabase | None = None) -> ValuationService:
+    """A service on the saved data: database read-only, network off, nothing written (the request cache directory is never created).
+
+    With `remote` (a bucket object, VALUATION_DB_URI on Cloud Run) the local copy is downloaded first and checked for a newer version every few minutes.
+    """
     config = load_config(config_path)
-    monitor = Monitor(config, data_dir, Path(os.devnull), offline=True, db_path=db_path, readonly=True)
-    return ValuationService(monitor, today)
+    local = Path(db_path) if db_path else Path(data_dir) / "valuation.db"
+    if remote is None:
+        remote = RemoteDatabase.from_env(local)
+    if remote is not None:
+        remote.pull()
+    monitor = Monitor(config, data_dir, Path(os.devnull), offline=True, db_path=local, readonly=True)
+    return ValuationService(monitor, today, sync=remote.pull if remote else None)
 
 
-def create_server(service: ValuationService):
-    """Wrap the tools for the MCP library (installed with the `mcp` extra)."""
+def create_server(service: ValuationService, http: bool = False, host: str = "127.0.0.1", port: int = 8000):
+    """Wrap the tools for the MCP library (installed with the `mcp` extra). http=True: requests are stateless and small, for serving on Cloud Run (see mcp_http.py)."""
     from mcp.server.fastmcp import FastMCP
     from mcp.types import ToolAnnotations
 
+    http_options = {"host": host, "port": port, "stateless_http": True, "json_response": True, "max_request_body_size": 64 * 1024} if http else {}
     server = FastMCP(
         "valuation-monitor",
+        **http_options,
         instructions=(
             "Look up how expensive a stock is compared with its own history (PE, PS, PB). Read-only and offline: the data is what the "
             "scheduled update saved from original filings and prices. "
@@ -438,17 +476,27 @@ def create_server(service: ValuationService):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="valuation-monitor-mcp", description="MCP server (stdio): read-only, offline, sourced and point-in-time valuation lookups")
+    parser = argparse.ArgumentParser(prog="valuation-monitor-mcp", description="MCP server: read-only, offline, sourced and point-in-time valuation lookups")
     parser.add_argument("-c", "--config", default=os.environ.get("VALUATION_CONFIG", "config.yaml"), help="Path to the config file")
     parser.add_argument("--data-dir", default=os.environ.get("VALUATION_DATA_DIR", "data"), help="Directory with valuation.db and filings/")
     parser.add_argument("--db", default=os.environ.get("VALUATION_DB_PATH") or None, help="Path of the SQLite database (default: valuation.db in the data directory)")
+    parser.add_argument("--transport", choices=["stdio", "streamable-http"], default="stdio", help="stdio: started by the client on the same machine (default); streamable-http: a web service, for Cloud Run")
+    parser.add_argument("--host", default="127.0.0.1", help="streamable-http only: address to listen on (0.0.0.0 on Cloud Run)")
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8000")), help="streamable-http only: port (default: $PORT or 8000)")
+    parser.add_argument("--per-client-limit", type=int, default=int(os.environ.get("VALUATION_MCP_PER_CLIENT_LIMIT", "60")), help="streamable-http only: requests per minute from one address")
+    parser.add_argument("--total-limit", type=int, default=int(os.environ.get("VALUATION_MCP_TOTAL_LIMIT", "600")), help="streamable-http only: requests per minute from everyone")
     args = parser.parse_args(argv)
     try:
         service = open_service(args.config, args.data_dir, args.db)
     except FileNotFoundError as e:
-        print(f"ERROR: {e}. Run valuation-monitor-update first, or point --data-dir / --db at a database.", file=sys.stderr)
+        print(f"ERROR: {e}. Run valuation-monitor-update first, or point --data-dir / --db at a database (or set VALUATION_DB_URI).", file=sys.stderr)
         return 2
-    create_server(service).run()
+    if args.transport == "stdio":
+        create_server(service).run()
+    else:
+        from valuation_monitor.mcp_http import serve
+
+        serve(create_server(service, http=True, host=args.host, port=args.port), args.host, args.port, args.per_client_limit, args.total_limit)
     return 0
 
 

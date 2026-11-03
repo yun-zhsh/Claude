@@ -12,7 +12,7 @@ WORKDIR /app
 #    build leftovers removed) so that editing the code does not reinstall pandas, matplotlib and the rest.
 COPY pyproject.toml ./
 RUN mkdir -p src/valuation_monitor && touch src/valuation_monitor/__init__.py README.md \
-    && pip install --no-cache-dir '.[cloud]' \
+    && pip install --no-cache-dir '.[cloud,mcp]' \
     && rm -rf build src/*.egg-info
 
 # 2. The code (changes often): installed on top without touching the dependencies.

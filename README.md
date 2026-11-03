@@ -227,7 +227,8 @@ warning: the latest earnings used are preliminary (earnings call presentation, n
 
 With `as_of="2025-03-31"` the same question gives PB 1.00 at the 4.1th percentile, from the 2024 Q4 statements published on 2025-01-31: nothing
 published later is used. The four rules (read-only, sourced, point in time, no model arithmetic), the tools, the setup for Claude Desktop and
-Claude Code, and the limits are in [docs/mcp-server.md](docs/mcp-server.md).
+Claude Code, running it as a **public read-only Cloud Run service** (`scripts/deploy-cloud.sh mcp`, so an assistant anywhere can use it by a
+URL; rate-limited, a service account that can only read the bucket), and the limits are in [docs/mcp-server.md](docs/mcp-server.md).
 
 ## Saved data
 
@@ -426,6 +427,7 @@ src/valuation_monitor/
   db.py                            the SQLite database: tables, reading and writing only what changed
   freshness.py                     checks how old the newest saved price, FX rate and filing is (limits in config.yaml); fails the update when prices or FX rates are stale
   mcp_server.py                    the MCP server: read-only, offline, sourced, point-in-time lookups for AI assistants (docs/mcp-server.md)
+  mcp_http.py                      serving it over HTTP on Cloud Run: rate limit, POST only, request log
   cloud.py                         keeps the database in a Google Cloud Storage object (pull, push with a version check, start the update job)
   legacy.py                        import and export in the CSV/JSON layout used before the database (also the raw data download)
   store.py                         saving prices and earnings in the database, incremental updates
