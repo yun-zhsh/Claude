@@ -1,0 +1,22 @@
+{
+  "displayName": "Watchlist monitor: update job failed",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "An execution of the Cloud Run job **valuation-update** failed. A failure means a crash, a version conflict when uploading the database, or data that is stale (see the `STALE` lines in the job log). The data that could be saved was saved first.\n\nWhat to do: open the failed execution (Cloud Run > Jobs > valuation-update > Executions > Logs) and see docs/operations.md in the repository."
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "An execution of valuation-update failed",
+      "conditionThreshold": {
+        "filter": "metric.type=\"run.googleapis.com/job/completed_execution_count\" AND resource.type=\"cloud_run_job\" AND resource.label.job_name=\"valuation-update\" AND metric.label.result=\"failed\"",
+        "comparison": "COMPARISON_GT",
+        "thresholdValue": 0,
+        "duration": "0s",
+        "aggregations": [{"alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_DELTA"}],
+        "trigger": {"count": 1}
+      }
+    }
+  ],
+  "alertStrategy": {"autoClose": "3600s"}
+}
