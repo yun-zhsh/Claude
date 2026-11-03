@@ -1,10 +1,83 @@
 # Stock Valuation Monitor
 
-Current version **v0.2.0**: English-only software, documentation and code comments (see "Language rules"), and a Google Cloud Run deployment of the dynamic page (see [docs/deploy-google-cloud.md](docs/deploy-google-cloud.md)).
+A personal research tool that answers one question: **is a stock's valuation (PE, PS, PB) high or low compared with its own history?**
+For five companies in four markets (Hong Kong, US, Korea, China A-shares) it reads the numbers from the companies' own
+earnings filings, joins them with daily prices, and shows today's multiple as a percentile of the last 1 to 10 years.
+Every number can be traced back to the filing it came from, and the page shows the exact calculation behind any day on a chart.
 
-It tells you whether a stock's current valuation (PE, PS, PB, ...) is high or low compared with its own history.
+**Live demo** (read-only, refreshed every 4 hours): https://yun-zhsh.github.io/Watchlist-monitor/
 
-**Current scope**: two Hong Kong stocks, one US stock (a Chinese ADR), one Korean stock and one A-share, each with its own set of metrics:
+![A stock page: percentile cards, a PE trend chart and the calculation behind one day](docs/stock-page.png)
+
+*Hovering over a day on a trend chart shows the whole calculation: close price, FX rate, and the quarterly EPS it was built from.*
+
+## Architecture
+
+The same Python package runs in two places: on GitHub (a public static site) and on Google Cloud (a private dynamic page that only the
+owner can sign in to, so the diagram is how everyone else sees it).
+
+```mermaid
+flowchart LR
+  subgraph SRC["Public sources"]
+    F["Company filings<br/>HKEXnews, SEC EDGAR,<br/>Samsung IR, CNINFO"]
+    P["Prices and FX<br/>Yahoo Finance, Tencent"]
+  end
+
+  subgraph GH["GitHub (public)"]
+    A["GitHub Actions<br/>every 4 hours"]
+    R[("Repository<br/>data/valuation.db<br/>and original filings")]
+    S["GitHub Pages<br/>static site"]
+  end
+
+  subgraph GCP["Google Cloud (private)"]
+    SCH["Cloud Scheduler<br/>every 4 hours"]
+    J["Cloud Run job<br/>update"]
+    B[("Cloud Storage<br/>valuation.db")]
+    W["Cloud Run service<br/>web page behind IAP<br/>(owner only)"]
+  end
+
+  F --> A
+  P --> A
+  A -- commit --> R
+  A -- export --> S
+
+  F --> J
+  P --> J
+  SCH --> J
+  J <-- "download, upload with version check" --> B
+  B -- "read a copy" --> W
+  W -. "Update data button starts" .-> J
+```
+
+## Design decisions and trade-offs
+
+**Original filings, not a data vendor.** The numbers come straight from the exchange and regulator filings (HKEXnews, SEC EDGAR,
+Samsung's investor site, CNINFO), parsed by this project. That makes every figure verifiable, gives the exact publication time of
+each one, and costs nothing. The price is one parser per filing layout (five so far) and maintenance when a layout changes.
+This is a personal research project: prices come from free sources such as Yahoo Finance (cross-checked against Tencent for Hong Kong
+stocks), whereas a production system would use licensed vendor data. All multiples are trailing, built from reported history. Forward
+multiples need analyst estimates, which only professional data providers license; once such a series exists it should slot in as
+one more per-share metric, because the percentile, charts and audit trail work on any per-share series.
+
+**No look-ahead.** A reported figure is used only from the first trading day on which the market could have seen it: the publication time
+(to the minute where the source gives it) is compared with each exchange's closing time, half days included, and the effective day is
+taken from the days that actually traded. The cost is a calendar and a time rule per source, kept in `market_calendar.py` and the providers.
+
+**Fail loudly rather than guess.** A filing that cannot be parsed raises an error instead of producing a best-effort number. The same
+value is cross-checked across every filing that repeats it, a disagreement is reported, and the first published value is the one used.
+The cost is that a new company or layout shows nothing until its parser exists; the benefit is that a wrong number is much harder to miss.
+
+**SQLite in a bucket object, not a managed database.** The workload is one batch writer every few hours and a few MB of data (about 0.8 MB
+per company). A SQLite file fits that, and the same code runs unchanged on a laptop, in GitHub Actions and on Cloud Run. In the cloud the
+update job downloads the file from Cloud Storage, updates it and uploads it only if nobody else uploaded in between (a generation
+precondition), so two runs can never overwrite each other; the web page reads a copy. The trade-offs: a single writer and no concurrent
+edits, which is fine here and would not be for many users. A managed database (Cloud SQL, Postgres) would cost money every month and add
+a service to run for no benefit at this size. How the repository grows, and when to change the storage, is measured in
+[docs/database-growth.md](docs/database-growth.md).
+
+**Status:** v0.2.0. Project conventions (English-only code and output, tests, how the data is written) are in [CLAUDE.md](CLAUDE.md).
+
+## What it tracks
 
 | Stock | Metrics | Earnings filings |
 | --- | --- | --- |
@@ -14,15 +87,8 @@ It tells you whether a stock's current valuation (PE, PS, PB, ...) is high or lo
 | Samsung Electronics 005930.KS | PE, PS, PB (price and financials are both in KRW; no Non-GAAP data) | Quarterly, English consolidated financial statements on the Samsung IR website, `kifrs_statements` layout |
 | Hikvision 002415.SZ | PE, PS, PB (A-share, RMB; the company discloses no Non-GAAP data) | Quarterly, Chinese periodic reports and annual express reports on CNINFO, `cn_report` layout |
 
+
 The code is designed around "many stocks x many metrics": to add a stock, edit the config; to add a metric, write a metric class (see "Extending").
-
-## Language rules (important)
-
-- **The working language of this project is English.** Discussion with the maintainer may happen in Chinese, but everything that lands in the repository (code, comments, docstrings, tests, README and other docs, commit messages, PR text, config, generated data) is in English, so that any developer opening the project sees English only.
-- **The software is English-only at runtime**: anyone running it sees English only, **no Chinese anywhere**, including stock names (use English names in `config.yaml`, e.g. Tencent Holdings, Hikvision).
-- "Runtime-visible" covers: web pages (text, buttons, tooltips, charts), CLI output and errors, downloaded files (file names, CSV column names and contents, zip), generated data files (CSV and JSON under `data/`, including filing titles and source notes), GitHub Actions step names, and everything in `config.yaml`.
-- The only exceptions are things that are Chinese by nature: `src/valuation_monitor/cn_patterns.py` (the patterns used to *read* Chinese-language A-share filings; never displayed), the Chinese strings in `tests/test_cn.py` (fixtures imitating those filings), and the saved original Chinese PDFs under `data/filings/002415.SZ/` (source documents).
-- `tests/test_english_only.py` enforces this for string literals, comments and docstrings in `src/` and `tests/`, templates, static files, config, workflow, README and other docs, `data/` text files, and the rendered pages and downloads. Keep it green.
 
 ## Quick start
 
@@ -360,7 +426,7 @@ tests/                             unit tests (offline, no network access)
 - **Add a US stock** (foreign private issuer whose results are filed on 6-K): add an entry to `config.yaml` (symbol, English name, `market: US`, `cik`, `metrics`); the `cik` can be found on the company's EDGAR page. The rest is as above: check the parse results the first time, and compare with the full-year figures of the company's 20-F annual report.
 - **Add an A-share**: add an entry to `config.yaml` (symbol such as `600036.SS`, English name, `market: CN`, `metrics`); the program downloads periodic and express reports from CNINFO automatically; the Chinese report layout is basically the same across companies (uniform CSRC format); check the parse results the first time.
 - **Add a Korean stock**: only Samsung has a dedicated downloader (`providers/samsung.py`) at present; other Korean companies need a downloader for their own IR websites, or a connection to DART (see "To do").
-- **Always keep the software English-only** (see "Language rules"): English stock names, English labels, and no Chinese in anything displayed or generated.
+- **Always keep the software English-only** (see [CLAUDE.md](CLAUDE.md)): English stock names, English labels, and no Chinese in anything displayed or generated.
 
 ## To do
 
