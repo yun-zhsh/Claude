@@ -62,10 +62,20 @@ def _python(value):
 
 
 class Database:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, readonly: bool = False):
+        """readonly=True opens an existing file that can only be read: SQLite itself refuses every write (used by the MCP server)."""
         self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.readonly = readonly
         self._lock = threading.RLock()
+        if readonly:
+            if not self.path.exists():
+                raise FileNotFoundError(f"No database at {self.path}")
+            with self.connect() as conn:
+                version = conn.execute("PRAGMA user_version").fetchone()[0]
+                if version > SCHEMA_VERSION:
+                    raise RuntimeError(f"{self.path} was written by a newer version of the program (schema {version}, this one knows {SCHEMA_VERSION})")
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as conn:
             version = conn.execute("PRAGMA user_version").fetchone()[0]
             if version > SCHEMA_VERSION:
@@ -77,6 +87,10 @@ class Database:
 
     def connect(self) -> sqlite3.Connection:
         """A new connection (cheap); `with db.connect() as conn` commits or rolls back the transaction."""
+        if self.readonly:
+            conn = sqlite3.connect(f"{self.path.resolve().as_uri()}?mode=ro", uri=True, timeout=30)
+            conn.execute("PRAGMA query_only = ON")  # a second lock: even a bug cannot write through this connection
+            return conn
         conn = sqlite3.connect(self.path, timeout=30)
         conn.execute("PRAGMA journal_mode = DELETE")
         return conn
