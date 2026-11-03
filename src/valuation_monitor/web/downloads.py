@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from valuation_monitor.legacy import export_files
 from valuation_monitor.service import PRICE_STATUS_LABELS, Monitor
 
 PRICE_COLUMNS = {
@@ -102,36 +103,34 @@ def drop_empty_series(df: pd.DataFrame) -> pd.DataFrame:
 
 def build(monitor: Monitor, symbol: str, name: str, report=None) -> bytes:
     if name == "prices.csv":
-        df = pd.read_csv(monitor.prices.final_path(symbol)).dropna(axis=1, how="all")  # only Hong Kong stocks have Tencent data
+        df = monitor.prices.final(symbol).rename_axis("date").reset_index().dropna(axis=1, how="all")  # only Hong Kong stocks have Tencent data
+        df["date"] = df["date"].dt.strftime("%Y-%m-%d")
         df["status"] = df["status"].map(PRICE_STATUS_LABELS)
         df["source"] = df["source"].map(SOURCE_LABELS)
         return to_csv_bytes(df.rename(columns=PRICE_COLUMNS))
     if name == "eps.csv":
-        df = drop_empty_series(pd.read_csv(monitor.earnings.paths(symbol)["periods"]))
+        df = drop_empty_series(monitor.earnings.periods(symbol))
         return to_csv_bytes(df.rename(columns=PERIOD_COLUMNS))
     if name == "ttm.csv":
-        df = pd.read_csv(monitor.earnings.paths(symbol)["ttm"]).dropna(axis=1, how="all")
+        df = monitor.earnings.ttm(symbol).dropna(axis=1, how="all")
         return to_csv_bytes(df.rename(columns=TTM_COLUMNS))
     if name == "valuation.csv":
         return to_csv_bytes(valuation_frame(monitor, symbol, report))
     if name == "raw.zip":
-        return raw_zip(monitor.data_dir, symbol)
+        return raw_zip(monitor, symbol)
     raise KeyError(name)
 
 
-def raw_zip(data_dir: Path, symbol: str) -> bytes:
-    """The raw data files of this stock in data/ (the original filings are left out; only their index is included)."""
-    files = [
-        *sorted((data_dir / "prices" / symbol).glob("*")),
-        *sorted((data_dir / "eps").glob(f"{symbol}_*")),
-        *sorted((data_dir / "fx").glob("*")),
-        data_dir / "filings" / symbol / "index.json",
-    ]
+def raw_zip(monitor: Monitor, symbol: str) -> bytes:
+    """The saved data of this stock as CSV and JSON files (the layout of legacy.py); the original filings are left out, only their index is included."""
+    files = export_files(monitor.db, symbol)
+    index = monitor.data_dir / "filings" / symbol / "index.json"
+    if index.is_file():
+        files[f"filings/{symbol}/index.json"] = index.read_bytes()
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in files:
-            if f.is_file():
-                zf.write(f, f.relative_to(data_dir).as_posix())
+        for name, content in sorted(files.items()):
+            zf.writestr(name, content)
     return buf.getvalue()
 
 
@@ -144,9 +143,8 @@ def valuation_frame(monitor: Monitor, symbol: str, report) -> pd.DataFrame:
     data = report.data
     earnings = data.earnings
     out = pd.DataFrame({"Date": data.close.index, "Close (price currency)": data.close.to_numpy()})
-    final_path = monitor.prices.final_path(symbol)
-    if final_path.exists():
-        final = pd.read_csv(final_path, index_col="date", parse_dates=True)
+    final = monitor.prices.final(symbol)
+    if final is not None:
         out["Price source"] = final["source"].map(SOURCE_LABELS).reindex(data.close.index).to_numpy()
     out["FX rate (1 unit of reporting currency = ? price currency)"] = data.fx.to_numpy()
     for r in report.metrics:

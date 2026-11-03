@@ -43,6 +43,15 @@ jobs:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: valuation-monitor-export --out _site --base-path "/${{ github.event.repository.name }}"
 
+      - name: Check the size of the database
+        run: |
+          size=$(stat -c %s data/valuation.db)
+          echo "data/valuation.db is $size bytes"
+          if [ "$size" -gt 52428800 ]; then
+            echo "::error::data/valuation.db is over 50 MB: it is time to stop keeping it in git (see the README)"
+            exit 1
+          fi
+
       - name: Commit the updated data
         run: |
           git config user.name "github-actions[bot]"

@@ -33,14 +33,13 @@ def monitor(tmp_path):
     monitor.loader.load = lambda stock: data
     monitor.price_check = lambda symbol: {"agree": 299, "tencent_only": 1}
 
-    prices = monitor.prices.final_path("0700.HK")
-    prices.parent.mkdir(parents=True)
-    prices.write_text("date,close,source,status,tencent_close,yahoo_close_unadjusted,yahoo_factor\n"
-                      "2024-01-01,300.0,tencent,agree,300.0,300.0,1.0\n")
-    paths = monitor.earnings.paths("0700.HK")
-    paths["periods"].parent.mkdir(parents=True)
-    paths["periods"].write_text(earnings.periods_frame().to_csv(index=False))
-    paths["ttm"].write_text(earnings.ttm_frame().to_csv(index=False))
+    final = pd.DataFrame(
+        {"close": [300.0], "source": ["tencent"], "status": ["agree"], "tencent_close": [300.0], "yahoo_close_unadjusted": [300.0], "yahoo_factor": [1.0]},
+        index=pd.DatetimeIndex(["2024-01-01"], name="date"),
+    )
+    monitor.db.write_series("prices_final", {"symbol": "0700.HK"}, final)
+    monitor.db.write_frame("periods", "0700.HK", earnings.periods_frame())
+    monitor.db.write_frame("ttm", "0700.HK", earnings.ttm_frame(), date_format="%Y-%m-%d")
 
     return monitor
 

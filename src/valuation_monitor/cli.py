@@ -43,12 +43,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         for issue in report.discrepancies:
             print(f"  ⚠ {issue}")
-        print(f"  Earnings detail  {monitor.earnings.paths(stock.symbol)['periods']}")
+        print(f"  Earnings detail  table periods in {monitor.db.path}")
         if stock.cross_checks_prices:
             checks = ", ".join(f"{PRICE_STATUS_LABELS[k]} {n} days" for k, n in report.price_check.items())
-            print(f"  Price check  Tencent vs Yahoo (after undoing Yahoo's adjustments): {checks} (details in {monitor.prices.final_path(stock.symbol)})")
+            print(f"  Price check  Tencent vs Yahoo (after undoing Yahoo's adjustments): {checks} (details: table prices_final in {monitor.db.path})")
         else:
-            print(f"  Price source  Yahoo Finance only, no second source to cross-check (details in {monitor.prices.final_path(stock.symbol)})")
+            print(f"  Price source  Yahoo Finance only, no second source to cross-check (details: table prices_final in {monitor.db.path})")
         print()
 
         for result in report.metrics:

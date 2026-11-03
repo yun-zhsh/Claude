@@ -15,11 +15,12 @@
   Chinese-language A-share filings; never displayed), the Chinese string fixtures in `tests/test_cn.py`, and the saved
   original Chinese PDFs under `data/filings/002415.SZ/`.
 - `tests/test_english_only.py` enforces this (string literals, comments and docstrings in `src/` and `tests/`,
-  templates, static files, config, workflow, README/docs, `data/` text files, rendered pages and downloads).
+  templates, static files, config, workflow, README/docs, `data/` text files and the text cells of `data/valuation.db`, rendered pages and downloads).
   Keep it green; extend it when adding new output channels or file types.
 - Secrets such as `SEC_USER_AGENT` are provided through environment variables only; never commit them.
 
 ## Workflow notes
 
+- All saved data except the original filings lives in the SQLite database `data/valuation.db` (see `db.py`). Write only what changed, never rebuild or vacuum the file, and do not commit it from a local run: only the scheduled workflow does.
 - Run the tests with `.venv/bin/pytest` (offline).
 - Bump the layout's number in `PARSER_VERSIONS` (`filings.py`) whenever parsing rules or output text of a parser change.

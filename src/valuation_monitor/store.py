@@ -1,11 +1,7 @@
-"""Save downloaded and extracted data in data/ (committed with the code) so the next run reuses it.
+"""Save downloaded and extracted data in data/valuation.db (a SQLite file committed with the code) so the next run reuses it.
 
+  data/valuation.db                     prices of each source, FX rates, final prices, parsed filings, per-period earnings and TTM data (see db.py)
   data/filings/<symbol>/                downloaded original filings (or relevant pages) and index.json (written by each source's downloader, see providers/)
-  data/prices/<symbol>/                 raw daily data of each source, and the combined final closing price (see PriceStore)
-  data/fx/<pair>.csv, <pair>.json       FX rates
-  data/eps/<symbol>_announcements.csv   parse result of every earnings filing (numbers as in the filing)
-  data/eps/<symbol>_periods.csv         earnings per period (quarter or half year; EPS adjusted for splits), with cross-check information
-  data/eps/<symbol>_ttm.csv             the per-share data used for valuation after each filing, with the values of each period and the formulas (see audit.py)
 
 Prices are downloaded only for trading days after the last saved one. Raw traded prices and FX rates are never changed once saved; Yahoo's
 ex-rights adjusted prices change retroactively with new ex-rights events, and when a change is found the whole history is downloaded again. Today's prices can still change before the close, so they are not saved.
@@ -13,7 +9,6 @@ ex-rights adjusted prices change retroactively with new ex-rights events, and wh
 
 from __future__ import annotations
 
-import json
 import sys
 from collections.abc import Callable
 from datetime import datetime
@@ -21,6 +16,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from valuation_monitor.db import FINAL_COLUMNS, Database
 from valuation_monitor.filings import (
     PARSER_VERSIONS,
     EarningsHistory,
@@ -40,22 +36,6 @@ OVERLAP_DAYS = 7  # days of overlap with the saved data on incremental downloads
 MISMATCH_TOLERANCE = 1e-4  # relative difference
 
 
-def write_if_changed(path: Path, text: str) -> None:
-    """Do not write when the content is unchanged, so the file does not show up in git changes for nothing."""
-    if path.exists() and path.read_text(encoding="utf-8") == text:
-        return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
-
-def read_meta(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
-
-
-def write_meta(path: Path, meta: dict) -> None:
-    write_if_changed(path, json.dumps(meta, ensure_ascii=False, indent=2) + "\n")
-
-
 def split_adjust(close: pd.Series, splits: pd.Series) -> pd.Series:
     """Convert prices before a split to the current share basis (consistent with the split-adjusted EPS)."""
     out = close.copy()
@@ -71,19 +51,22 @@ YAHOO_DECIMALS = {"open": 4, "high": 4, "low": 4, "close": 4, "adjclose": 4, "vo
 class PriceStore:
     """Raw data of each source is saved separately, then the final closing price is decided:
 
-    data/prices/<symbol>/tencent.csv   Tencent daily bars (unadjusted actual traded price)
-    data/prices/<symbol>/yahoo.csv     Yahoo daily bars (close is ex-rights adjusted, adjclose further adjusted for dividends)
-    data/prices/<symbol>/yahoo.json    includes Yahoo's split records
-    data/prices/<symbol>/final.csv     combined result: price used each day, source, cross-check status
+    price_bars (source tencent)   Tencent daily bars (unadjusted actual traded price)
+    price_bars (source yahoo)     Yahoo daily bars (close is ex-rights adjusted, adjclose further adjusted for dividends)
+    meta prices/<symbol>/yahoo    includes Yahoo's split records and the currency
+    prices_final                  combined result: price used each day, source, cross-check status
     """
 
-    def __init__(self, quotes: TencentQuoteProvider, yahoo: YahooProvider, root: str | Path = "data"):
+    def __init__(self, quotes: TencentQuoteProvider, yahoo: YahooProvider, root: str | Path = "data", db: Database | None = None):
         self.quotes = quotes
         self.yahoo = yahoo
         self.root = Path(root)
+        self.db = db or Database(self.root / "valuation.db")
 
-    def final_path(self, symbol: str) -> Path:
-        return self.root / "prices" / symbol / "final.csv"
+    def final(self, symbol: str) -> pd.DataFrame | None:
+        """The final prices of one symbol (FINAL_COLUMNS, indexed by date), or None if nothing is saved yet."""
+        df = self.db.read_series("prices_final", {"symbol": symbol}, FINAL_COLUMNS)
+        return None if df.empty else df
 
     def prices(self, symbol: str, start: datetime, market: Market = HK) -> PriceHistory:
         """The final closing price (converted to the current share basis for splits) and the split records.
@@ -91,11 +74,11 @@ class PriceStore:
         HK stocks have two sources, Tencent (actual traded price) and Yahoo, which are cross-checked; US and KR stocks use Yahoo only,
         whose closing price is already split-adjusted and is not adjusted again.
         """
-        folder = self.root / "prices" / symbol
         if market.cross_checks_prices:
             tencent = self._frame(
-                folder / "tencent.csv",
-                folder / "tencent.json",
+                "price_bars",
+                {"symbol": symbol, "source": "tencent"},
+                f"prices/{symbol}/tencent",
                 source=f"Tencent quote API {symbol} (unadjusted)",
                 fetch=lambda since: self.quotes.daily_bars(symbol, since),
                 start=start,
@@ -117,8 +100,9 @@ class PriceStore:
 
         try:
             yahoo = self._frame(
-                folder / "yahoo.csv",
-                folder / "yahoo.json",
+                "price_bars",
+                {"symbol": symbol, "source": "yahoo"},
+                f"prices/{symbol}/yahoo",
                 source=f"Yahoo Finance {symbol}",
                 fetch=fetch_yahoo,
                 start=start,
@@ -132,22 +116,23 @@ class PriceStore:
             print(f"Yahoo Finance {symbol}: unavailable ({e}); using Tencent data only", file=sys.stderr)
             yahoo = pd.DataFrame(columns=list(YAHOO_DECIMALS))
 
-        yahoo_meta = read_meta(folder / "yahoo.json")
+        yahoo_scope = f"prices/{symbol}/yahoo"
+        yahoo_meta = self.db.read_meta(yahoo_scope)
         if found_currency and not market.cross_checks_prices:
             yahoo_meta["currency"] = found_currency[-1]
-            write_meta(folder / "yahoo.json", yahoo_meta)
+            self.db.write_meta(yahoo_scope, yahoo_meta)
         splits = {pd.Timestamp(d): r for d, r in yahoo_meta.get("splits", {}).items()}
         for found in found_splits:
             splits.update(found.to_dict())
         if found_splits:
             yahoo_meta["splits"] = {f"{d:%Y-%m-%d}": r for d, r in sorted(splits.items())}
-            write_meta(folder / "yahoo.json", yahoo_meta)
+            self.db.write_meta(yahoo_scope, yahoo_meta)
         splits = pd.Series(splits, dtype=float).sort_index()
 
         final = consolidate(tencent, yahoo)
         today = pd.Timestamp.now(tz=market.timezone).tz_localize(None).normalize()
         saved = final[final.index < today]
-        write_if_changed(self.final_path(symbol), saved.to_csv(index_label="date", date_format="%Y-%m-%d"))
+        self.db.write_series("prices_final", {"symbol": symbol}, saved[FINAL_COLUMNS], prune=True)
         close = split_adjust(final["close"], splits) if market.cross_checks_prices else final["close"]
         currency = self.quotes.currency if market.cross_checks_prices else yahoo_meta["currency"]
         return PriceHistory(close[close.index >= pd.Timestamp(start).normalize()], splits, currency, market.timezone)
@@ -155,10 +140,10 @@ class PriceStore:
     def fx(self, from_ccy: str, to_ccy: str, start: datetime) -> pd.Series:
         """Daily series of how many to_ccy 1 unit of from_ccy is worth."""
         pair = f"{from_ccy}{to_ccy}"
-        folder = self.root / "fx"
         rate = self._frame(
-            folder / f"{pair}.csv",
-            folder / f"{pair}.json",
+            "fx_rates",
+            {"pair": pair},
+            f"fx/{pair}",
             source=f"Yahoo Finance {pair}=X",
             fetch=lambda since: self.yahoo.price_history(f"{pair}=X", since).close.to_frame("rate"),
             start=start,
@@ -170,8 +155,9 @@ class PriceStore:
 
     def _frame(
         self,
-        csv_path: Path,
-        meta_path: Path,
+        table: str,
+        keys: dict[str, str],
+        scope: str,
         source: str,
         fetch: Callable[[datetime], pd.DataFrame],
         start: datetime,
@@ -187,10 +173,9 @@ class PriceStore:
         """
         columns = list(decimals)
         check = "close" if "close" in decimals else columns[0]
-        stored = pd.read_csv(csv_path, index_col="date", parse_dates=True) if csv_path.exists() else None
-        if stored is None or set(columns) - set(stored.columns):  # no data or the format changed
-            stored = pd.DataFrame(columns=columns, dtype=float)
-        meta = read_meta(meta_path)
+        stored = self.db.read_series(table, keys, columns)
+        meta = self.db.read_meta(scope)
+        rewrite = False  # True when the saved rows are replaced as a whole
         start = pd.Timestamp(start).normalize()
         today = pd.Timestamp.now(tz=timezone).tz_localize(None).normalize()
 
@@ -210,6 +195,7 @@ class PriceStore:
                 live = fetch(fetch_from.to_pydatetime())
                 completed = live[live.index < today][columns].round(decimals)
                 stored = stored.iloc[0:0]
+                rewrite = True
         except Exception as e:
             if stored.empty:
                 raise
@@ -220,21 +206,26 @@ class PriceStore:
         for col, places in decimals.items():
             if places == 0:
                 merged[col] = merged[col].round().astype("Int64")
-        write_if_changed(csv_path, merged.to_csv(index_label="date", date_format="%Y-%m-%d"))
+        self.db.write_series(table, keys, merged[columns], replace=rewrite)
         meta["source"] = source
         meta["fetched_from"] = f"{fetch_from:%Y-%m-%d}"
-        write_meta(meta_path, meta)
+        self.db.write_meta(scope, meta)
 
         result = pd.concat([merged.astype(float), live[live.index >= today][columns]])  # add today's live prices (not saved)
         return result
 
 
 class EarningsStore:
-    def __init__(self, root: str | Path = "data"):
-        self.folder = Path(root) / "eps"
+    def __init__(self, root: str | Path = "data", db: Database | None = None):
+        self.db = db or Database(Path(root) / "valuation.db")
 
-    def paths(self, symbol: str) -> dict[str, Path]:
-        return {kind: self.folder / f"{symbol}_{kind}.csv" for kind in ("announcements", "periods", "ttm")}
+    def periods(self, symbol: str) -> pd.DataFrame | None:
+        """The saved per-period earnings of one symbol (as written by EarningsHistory.periods_frame)."""
+        return self.db.read_frame("periods", symbol)
+
+    def ttm(self, symbol: str) -> pd.DataFrame | None:
+        """The saved per-share data of one symbol (as written by EarningsHistory.ttm_frame)."""
+        return self.db.read_frame("ttm", symbol)
 
     def load(
         self,
@@ -250,10 +241,9 @@ class EarningsStore:
         trading_days is used to list in the saved detail the trading day each value actually starts to be used; fmt is the layout of the filings.
         """
         version = PARSER_VERSIONS[fmt]
-        paths = self.paths(symbol)
         saved = {}
-        if paths["announcements"].exists():
-            df = pd.read_csv(paths["announcements"], dtype=str)
+        df = self.db.read_frame("announcements", symbol, text=True)
+        if df is not None:
             df = df[df["parser_version"].astype(int) == version]
             saved = {a.url: a for a in announcements_from_frame(df, market)}
 
@@ -267,7 +257,7 @@ class EarningsStore:
                 print(f"{symbol}: cannot parse the provisional data {f.url} ({e}); waiting for the official report", file=sys.stderr)
         history = build_history(adjust_for_splits(parsed, splits), splits)
 
-        write_if_changed(paths["announcements"], announcements_to_frame(parsed, version).to_csv(index=False))
-        write_if_changed(paths["periods"], history.periods_frame(trading_days).to_csv(index=False))
-        write_if_changed(paths["ttm"], history.ttm_frame(trading_days).to_csv(index=False, date_format="%Y-%m-%d"))
+        self.db.write_frame("announcements", symbol, announcements_to_frame(parsed, version), text=True)
+        self.db.write_frame("periods", symbol, history.periods_frame(trading_days))
+        self.db.write_frame("ttm", symbol, history.ttm_frame(trading_days), date_format="%Y-%m-%d")
         return history

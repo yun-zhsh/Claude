@@ -21,6 +21,7 @@ cloud = ["gunicorn>=22"]  # serving the web page on a server (see docs/deploy-go
 
 [project.scripts]
 valuation-monitor = "valuation_monitor.cli:main"
+valuation-monitor-db = "valuation_monitor.legacy:main"
 valuation-monitor-update = "valuation_monitor.cli:update_main"
 valuation-monitor-web = "valuation_monitor.web:main"
 valuation-monitor-export = "valuation_monitor.web:export_main"
