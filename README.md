@@ -81,7 +81,7 @@ its sources (filing link, publication time, effective trading day and the writte
 data that was public by then is used, and all arithmetic stays in Python so the model only calls tools and explains the result. The cost is
 that the assistant can only answer what the tools offer, in return a wrong or unsourced number is hard to produce and easy to catch.
 
-**Status:** v0.3.0. Project conventions (English-only code and output, tests, how the data is written) are in [CLAUDE.md](CLAUDE.md).
+**Status:** v0.4.0. Project conventions (English-only code and output, tests, how the data is written) are in [CLAUDE.md](CLAUDE.md).
 
 ## What it tracks
 

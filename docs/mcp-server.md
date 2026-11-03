@@ -56,7 +56,7 @@ gcloud run services remove-iam-policy-binding valuation-mcp --region=$REGION --m
 | --- | --- |
 | `list_stocks` | Symbols, metrics, how far the saved data reaches and how old the newest price is, the valuation levels. |
 | `get_valuation(symbol, metric, years, as_of)` | The value, its percentile and level, the statistics of the window, sources and calculation, and **warnings**. |
-| `get_history(symbol, metric, years, as_of, points)` | Values over the window, thinned to at most 240 dates, with minimum and maximum. |
+| `get_history(symbol, metric, years, as_of, points)` | Values over the window, thinned to at most 240 dates, with the minimum and maximum **and the days they happened** (thinning can skip a peak). |
 | `get_filings(symbol, as_of, limit)` | The earnings filings in effect on that day, newest first, with publication time, effective trading day and link. |
 
 All four are declared `readOnlyHint`, non-destructive and closed-world in the protocol, so a client can show them as safe to auto-approve.
