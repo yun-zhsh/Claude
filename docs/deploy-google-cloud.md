@@ -1,10 +1,7 @@
 # Running the web page on Google Cloud
 
-> **Important: the data now lives in a SQLite database (`data/valuation.db`).** This guide was written for the earlier CSV files,
-> which a mounted bucket handles well. A SQLite file does not work reliably on a mounted bucket (it needs file locking), so
-> **do not redeploy the Cloud Run job or service from a version with the database until the cloud part is adapted**
-> (the plan: the update job downloads the database from the bucket, updates it locally and uploads it back with a version check;
-> the page reads a downloaded copy). Services deployed earlier keep running on the CSV files already in the bucket.
+> **Already deployed with the earlier CSV version?** See "Upgrading an existing deployment" at the end: the data moved into a
+> SQLite database (`data/valuation.db`), which is kept in a bucket object instead of a mounted folder.
 
 This runs the dynamic page (the one with the "Update data" button) on Google Cloud, visible only to your Google account.
 The GitHub Pages site and its 4-hourly workflow are untouched and keep working side by side.
@@ -15,20 +12,24 @@ The GitHub Pages site and its 4-hourly workflow are untouched and keep working s
 Cloud Scheduler (every 4 hours)
         |  starts
         v
-Cloud Run job  "valuation-update"   runs `valuation-monitor-update`, fetches prices and filings
-        |  writes                                   ^ reads / writes (Update data button)
-        v                                           |
-Cloud Storage bucket  (mounted at /data)  <---- Cloud Run service "valuation-web"  (the web page)
-                                                    ^
-                                           Identity-Aware Proxy: only your Google account
+Cloud Run job  "valuation-update"   pulls the database, fetches prices and filings, pushes the database back
+        |  downloads / uploads                        ^ starts it ("Update data" button)
+        v                                             |
+Cloud Storage bucket:  valuation.db (object)  ---->  Cloud Run service "valuation-web"  (the web page, reads a downloaded copy)
+                       filings/ (mounted at /data)                  ^
+                                                       Identity-Aware Proxy: only your Google account
 ```
 
 - **One image, two uses.** The same container image serves the page (default command) and runs the update job
   (command `valuation-monitor-update`).
-- **The data is not in the image.** It lives in a Cloud Storage bucket mounted as a folder at `/data`, so it survives
-  restarts. The page rebuilds itself from the saved data every 10 minutes (`VALUATION_RELOAD_SECONDS`), so what the job
-  saved shows up without redeploying. The page itself never fetches in the background; only the job and the
-  "Update data" button do.
+- **The data is not in the image.** The database lives in the bucket as the object `valuation.db`. A SQLite file cannot sit on a
+  mounted folder (it needs file locking), so the job and the page each work on a copy on their own disk (`cloud.py`):
+  the job downloads it, updates it and uploads it again only if it changed, and only if nobody else uploaded a newer version
+  in the meantime (so two jobs at once cannot overwrite each other: the second one fails and nothing is lost). The page
+  downloads a newer version when there is one, checked every 10 minutes (`VALUATION_RELOAD_SECONDS`). The original filings
+  are plain files in the same bucket, mounted at `/data`.
+- **The "Update data" button** starts the update job (it does not fetch by itself) and the page says so; the new data appears
+  after about a minute plus the page's own 10-minute check. The page never uploads anything.
 - **Login** is handled by Identity-Aware Proxy (IAP): visitors sign in with a Google account, and only accounts you
   list can get in.
 - **Secrets**: `SEC_USER_AGENT` (your contact for SEC EDGAR) is kept in Secret Manager, never in the repository.
@@ -93,7 +94,8 @@ JSON
 gcloud storage buckets update gs://$BUCKET --lifecycle-file=/tmp/lifecycle.json
 ```
 
-Copy the repository's `data/` folder into the bucket (this is the starting point; after that the job keeps it up to date):
+Copy the repository's `data/` folder into the bucket: this puts the database at `gs://$BUCKET/valuation.db` and the original
+filings under `filings/` (this is the starting point; after that the job keeps the database up to date):
 
 ```bash
 git clone https://github.com/yun-zhsh/Watchlist-monitor.git
@@ -134,6 +136,7 @@ gcloud run jobs deploy valuation-update \
   --service-account=$SA \
   --command=valuation-monitor-update \
   --set-secrets=SEC_USER_AGENT=sec-user-agent:latest \
+  --set-env-vars=VALUATION_DB_URI=gs://$BUCKET/valuation.db \
   --add-volume=name=data,type=cloud-storage,bucket=$BUCKET \
   --add-volume-mount=volume=data,mount-path=/data \
   --task-timeout=30m --max-retries=1
@@ -152,17 +155,26 @@ After a minute or two read the log:
 gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="valuation-update" AND textPayload:("Data directory" OR "updated" OR "ERROR" OR "cannot")' --limit=30 --format="value(timestamp,textPayload)" --freshness=1h --order=asc
 ```
 
-The first line must be `Data directory: /data` (the mounted bucket), followed by one "updated" line per stock. If you see
-dozens of "new results release" lines instead, the job is not using the bucket data. If one stock fails, the message says why
+The first lines must be `Data directory: /data` and `Database: gs://.../valuation.db ...: downloaded`, then one "updated" line per stock,
+then `Database uploaded` (or `Database unchanged` when nothing new came in). If you see
+dozens of "new results release" lines instead, the job is not using the saved data. If one stock fails, the message says why
 (a network problem, a changed filing layout, ...). A normal run takes about a minute.
 
 ## 6. Deploy the web page, visible only to you
+
+The page's "Update data" button starts the update job, so its service account (the same one) needs the Run Invoker role on the job:
+
+```bash
+gcloud run jobs add-iam-policy-binding valuation-update --region=$REGION \
+  --member=serviceAccount:$SA --role=roles/run.invoker
+```
 
 ```bash
 gcloud run deploy valuation-web \
   --source . --region=$REGION \
   --service-account=$SA \
   --set-secrets=SEC_USER_AGENT=sec-user-agent:latest \
+  --set-env-vars=VALUATION_DB_URI=gs://$BUCKET/valuation.db,VALUATION_UPDATE_JOB=projects/$PROJECT_ID/locations/$REGION/jobs/valuation-update \
   --add-volume=name=data,type=cloud-storage,bucket=$BUCKET \
   --add-volume-mount=volume=data,mount-path=/data \
   --iap --no-allow-unauthenticated \
@@ -232,12 +244,19 @@ gcloud scheduler jobs run valuation-update-every-4h --location=$REGION
 After code or `config.yaml` changes are merged, run steps 5 and 6 again (the `gcloud run ... deploy --source .` commands)
 from an up-to-date clone (`git pull`). The data in the bucket is not touched.
 
-## Moving to a database later
+## Upgrading an existing deployment (from the CSV version)
 
-When the saved data moves from CSV/JSON files to SQLite, the bucket mount is not the right place for the database file
-(SQLite needs file locking, which a mounted bucket does not provide). The plan then is to keep the database file on the
-container's own disk and replicate it to the bucket with Litestream; the original filings stay as files in the bucket.
-Only the data access code in `store.py` changes, and the page and parsers stay as they are.
+If the job and page were deployed before the database existed, they keep running on the CSV files in the bucket. To switch
+(variables from "Before you start" must be set; `$SA` is the service account of step 4):
+
+1. In the clone: `git pull origin main`.
+2. Put the database into the bucket: `gcloud storage cp data/valuation.db gs://$BUCKET/valuation.db`
+   (the job catches up with the days that are missing on its next run).
+3. Redeploy the job with the command of step 5 and the page with the command of step 6 (both now carry `VALUATION_DB_URI`;
+   the page also `VALUATION_UPDATE_JOB`), and give the service account the Run Invoker role on the job (first command of step 6).
+4. Run the job once (step 5) and check the log for `Database: ... downloaded` and `Database uploaded`, then open the page.
+5. Optional clean-up of the old CSV files in the bucket: `gcloud storage rm -r gs://$BUCKET/prices gs://$BUCKET/fx gs://$BUCKET/eps`
+   (the bucket keeps old versions for 30 days).
 
 ## Troubleshooting
 
@@ -246,6 +265,11 @@ Only the data access code in `store.py` changes, and the page and parsers stay a
   different Google account.
 - **The page is empty or an old date shows:** check that the job ran (`gcloud run jobs executions list --job=valuation-update --region=$REGION`)
   and wait up to 10 minutes for the page to reload, or press "Update data".
-- **"Update data" times out or fails:** read the service log: Cloud Run -> `valuation-web` -> Logs.
+- **"The update could not be started" after pressing "Update data":** the service account lacks the Run Invoker role on the job
+  (step 6), or `VALUATION_UPDATE_JOB` is wrong; the service log has the exact error (Cloud Run -> `valuation-web` -> Logs).
+- **The job fails with "was changed by someone else since it was downloaded":** two executions overlapped (for example the schedule
+  and a manual run); the one that finished first kept its data. Run the job again.
+- **The page keeps an old version of the data:** it downloads a newer database at most every 10 minutes; check that the job
+  uploaded one (`gcloud storage ls -l gs://$BUCKET/valuation.db`).
 - **SEC messages about `SEC_USER_AGENT`:** the secret in step 3 is missing or the service account cannot read it.
 - **Remove everything:** `gcloud projects delete $PROJECT_ID` removes the project and all its resources.

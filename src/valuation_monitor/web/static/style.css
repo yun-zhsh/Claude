@@ -124,3 +124,6 @@ h2 { font-size: 1.1rem; margin: 0 0 0.75rem; }
 .audit-calc { font-weight: 600; color: var(--accent); }
 .audit-src { margin-top: 4px; color: var(--muted); }
 .audit-line { color: var(--muted); font-size: 0.75rem; }
+
+.notice { margin: 12px 0; padding: 10px 14px; border: 1px solid var(--accent); border-radius: 8px; background: var(--card); }
+.notice-error { border-color: #dc2626; color: #dc2626; }

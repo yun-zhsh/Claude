@@ -24,6 +24,8 @@
     </div>
   </header>
   <main class="container">
+    {% if request.args.get("updating") %}<div class="notice">Update started. It takes about a minute; reload this page afterwards (new data appears within a few minutes).</div>{% endif %}
+    {% if request.args.get("update_failed") %}<div class="notice notice-error">The update could not be started. Check the server log.</div>{% endif %}
     {% block content %}{% endblock %}
   </main>
   <footer class="container footer">
