@@ -392,10 +392,11 @@ All of Tencent's earnings announcements since 2014 were published between 16:00 
 config.yaml                        watch list, lookback years (default and selectable), valuation levels
 CLAUDE.md                          working rules for Claude Code sessions (language rules)
 src/valuation_monitor/
-  cli.py                           command line entry points (valuation-monitor, valuation-monitor-update)
+  cli.py                           command line entry points (valuation-monitor, valuation-monitor-update, valuation-monitor-check, valuation-monitor-db)
   config.py                        config parsing
   data.py                          gathers the data sources into what the metric calculations need
   db.py                            the SQLite database: tables, reading and writing only what changed
+  freshness.py                     checks how old the newest saved price, FX rate and filing is (limits in config.yaml); fails the update when prices or FX rates are stale
   cloud.py                         keeps the database in a Google Cloud Storage object (pull, push with a version check, start the update job)
   legacy.py                        import and export in the CSV/JSON layout used before the database (also the raw data download)
   store.py                         saving prices and earnings in the database, incremental updates
