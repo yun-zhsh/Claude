@@ -420,3 +420,11 @@ def test_a_tool_call_over_http_returns_the_sources(service):
         assert client.get("/mcp", headers=headers).status_code == 405  # no stream can be held open
         big = client.post("/mcp", content=b" " * 70_000, headers=headers)
         assert big.status_code == 413  # larger than any real request
+
+
+def test_history_gives_the_extremes_with_their_dates_even_when_thinning_skips_them(service):
+    result = service.history("0700.HK", "pe", 2, points=2)
+    detail = service._load(service._stock("0700.HK")).details["pe"]["ratio"].dropna()
+    window = detail[detail.index >= detail.index[-1] - pd.DateOffset(years=2)]
+    assert result["max"] == {"value": round(float(window.max()), 4), "date": f"{window.idxmax():%Y-%m-%d}"}
+    assert result["min"]["date"] == f"{window.idxmin():%Y-%m-%d}"

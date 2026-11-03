@@ -330,9 +330,9 @@ class ValuationService:
             "as_of": _day(cutoff),
             "window": {"start": _day(window.index[0]), "end": _day(window.index[-1]), "trading_days": len(window), "every_n_trading_days": step},
             "values": [{"date": _day(d), "value": _float(v)} for d, v in thinned.items()],
-            "min": _float(window.min()),
-            "max": _float(window.max()),
-            "note": RULES + " Use get_valuation for the sources and the calculation of any single day.",
+            "min": {"value": _float(window.min()), "date": _day(window.idxmin())},
+            "max": {"value": _float(window.max()), "date": _day(window.idxmax())},  # the thinned values can skip the peak, so it is given here with its date
+            "note": RULES + " The values are thinned and can miss the highest and lowest days: quote min and max from the fields of that name. Use get_valuation for the sources and the calculation of any single day.",
         }
 
     def filings(self, symbol: str, as_of: str | None = None, limit: int = 8) -> dict:
