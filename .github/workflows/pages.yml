@@ -48,7 +48,7 @@ jobs:
           size=$(stat -c %s data/valuation.db)
           echo "data/valuation.db is $size bytes"
           if [ "$size" -gt 52428800 ]; then
-            echo "::error::data/valuation.db is over 50 MB: it is time to stop keeping it in git (see the README)"
+            echo "::error::data/valuation.db is over 50 MB: it is time to review how the data is stored (see docs/database-growth.md)"
             exit 1
           fi
 
