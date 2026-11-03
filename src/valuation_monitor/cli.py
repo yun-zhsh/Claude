@@ -7,6 +7,9 @@ from pathlib import Path
 
 from valuation_monitor.cloud import ConcurrentUpdate, RemoteDatabase
 from valuation_monitor.config import load_config
+from valuation_monitor.db import Database
+from valuation_monitor.freshness import check as check_freshness
+from valuation_monitor.freshness import report as report_freshness
 from valuation_monitor.report import format_text, plot
 from valuation_monitor.service import PRICE_STATUS_LABELS, Monitor
 
@@ -97,4 +100,21 @@ def update_main(argv: list[str] | None = None) -> int:
         except ConcurrentUpdate as e:
             print(f"ERROR: {e}", file=sys.stderr)
             return 1
-    return 1 if failed else 0
+    # last, after the data has been saved and uploaded: a price or FX source that silently stopped delivering fails the job
+    stale = report_freshness(check_freshness(monitor.db, monitor.config))
+    if stale:
+        print("ERROR: some price or FX data is stale (see the STALE lines above)", file=sys.stderr)
+    return 1 if failed or stale else 0
+
+
+def check_main(argv: list[str] | None = None) -> int:
+    """Check the saved data for freshness without fetching anything: exit 1 if a price or FX series is stale, 2 if there is no database."""
+    parser = argparse.ArgumentParser(prog="valuation-monitor-check", description="Check that the saved prices and FX rates are fresh")
+    add_common_args(parser)
+    args = parser.parse_args(argv)
+    db_path = Path(args.db) if args.db else Path(args.data_dir) / "valuation.db"
+    if not db_path.exists():
+        print(f"No database at {db_path}", file=sys.stderr)
+        return 2
+    stale = report_freshness(check_freshness(Database(db_path), load_config(args.config)))
+    return 1 if stale else 0

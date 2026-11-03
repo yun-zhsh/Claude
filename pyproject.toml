@@ -22,6 +22,7 @@ cloud = ["gunicorn>=22", "google-cloud-storage>=2.16"]  # serving the web page o
 [project.scripts]
 valuation-monitor = "valuation_monitor.cli:main"
 valuation-monitor-db = "valuation_monitor.legacy:main"
+valuation-monitor-check = "valuation_monitor.cli:check_main"
 valuation-monitor-update = "valuation_monitor.cli:update_main"
 valuation-monitor-web = "valuation_monitor.web:main"
 valuation-monitor-export = "valuation_monitor.web:export_main"

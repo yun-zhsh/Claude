@@ -49,3 +49,4 @@ jobs:
           print('package and dependencies are in the image, version', valuation_monitor.__version__)"
           docker run --rm valuation-monitor:ci valuation-monitor-update --help > /dev/null
           docker run --rm valuation-monitor:ci valuation-monitor-db --help > /dev/null
+          docker run --rm valuation-monitor:ci valuation-monitor-check --help > /dev/null

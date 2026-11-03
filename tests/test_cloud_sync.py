@@ -113,6 +113,7 @@ def test_update_job_downloads_updates_and_uploads(monitor, tmp_path, monkeypatch
 
     monkeypatch.setattr(cli, "Monitor", fake_monitor)
     monkeypatch.setattr(cli, "load_config", lambda path: monitor.config)
+    monkeypatch.setattr(cli, "check_freshness", lambda db, config: [])  # the fixture's old price would be stale: freshness has its own tests
     assert cli.update_main(["--db", str(local), "--data-dir", str(tmp_path / "data")]) == 0
     out = capsys.readouterr().out
     assert "Database uploaded" in out and "downloaded" in out and "Tencent Holdings (0700.HK): updated" in out
@@ -135,6 +136,7 @@ def test_update_job_fails_loudly_when_another_job_uploaded_first(monitor, tmp_pa
 
     monkeypatch.setattr(cli, "Monitor", fake_monitor)
     monkeypatch.setattr(cli, "load_config", lambda path: monitor.config)
+    monkeypatch.setattr(cli, "check_freshness", lambda db, config: [])  # the fixture's old price would be stale: freshness has its own tests
     assert cli.update_main(["--db", str(local), "--data-dir", str(tmp_path)]) == 1
     assert "changed by someone else" in capsys.readouterr().err and store.objects[URI][0] == b"theirs"
 
@@ -145,6 +147,7 @@ def test_update_job_without_a_bucket_works_on_a_local_file(monitor, tmp_path, mo
     monkeypatch.delenv("VALUATION_DB_URI", raising=False)
     monkeypatch.setattr(cli, "Monitor", lambda *a, **k: monitor)
     monkeypatch.setattr(cli, "load_config", lambda path: monitor.config)
+    monkeypatch.setattr(cli, "check_freshness", lambda db, config: [])  # the fixture's old price would be stale: freshness has its own tests
     assert cli.update_main(["--db", str(tmp_path / "valuation.db")]) == 0
     assert "Database" not in capsys.readouterr().out.replace("Data directory", "")
 
