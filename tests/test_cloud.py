@@ -3,7 +3,6 @@
 import pytest
 import requests
 
-from tests.test_web import monitor  # noqa: F401  (fixture)
 from valuation_monitor.providers.http import HttpClient
 from valuation_monitor.web import create_app
 
@@ -20,7 +19,7 @@ def test_offline_http_client_serves_the_cache_but_never_fetches(tmp_path):
         http.post_json(key_url, {"a": 1})
 
 
-def test_monitor_offline_switch_reaches_every_http_client(monitor):  # noqa: F811
+def test_monitor_offline_switch_reaches_every_http_client(monitor):
     assert monitor._clients and not any(c.offline for c in monitor._clients)
     monitor.offline = True
     assert all(c.offline for c in monitor._clients)
@@ -28,7 +27,7 @@ def test_monitor_offline_switch_reaches_every_http_client(monitor):  # noqa: F81
     assert not any(c.offline for c in monitor._clients)
 
 
-def test_page_reloads_from_saved_data_when_it_gets_old(monitor):  # noqa: F811
+def test_page_reloads_from_saved_data_when_it_gets_old(monitor):
     calls = []
     original = monitor.analyze_all
     monitor.analyze_all = lambda: calls.append(monitor.offline) or original()
@@ -51,7 +50,7 @@ def test_page_reloads_from_saved_data_when_it_gets_old(monitor):  # noqa: F811
     assert calls == [True, False, True]
 
 
-def test_update_command_saves_data_and_reports_each_stock(monitor, capsys, monkeypatch):  # noqa: F811
+def test_update_command_saves_data_and_reports_each_stock(monitor, capsys, monkeypatch):
     from valuation_monitor import cli
 
     monkeypatch.setattr(cli, "Monitor", lambda *a, **k: monitor)

@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_web import client, monitor  # noqa: F401  (fixtures)
 from valuation_monitor.web import export_site
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -118,7 +117,7 @@ def test_saved_database_has_no_cjk():
     assert not offenders, offenders
 
 
-def test_rendered_pages_and_downloads_have_no_cjk(client, monitor, tmp_path):  # noqa: F811
+def test_rendered_pages_and_downloads_have_no_cjk(client, monitor, tmp_path):
     pages = ["/", "/stock/0700.HK/"] + [f"/stock/0700.HK/download/{n}" for n in ("prices.csv", "eps.csv", "ttm.csv", "valuation.csv")]
     for url in pages:
         r = client.get(url)
