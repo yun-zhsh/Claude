@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_web import monitor  # noqa: F401  (fixture)
 from valuation_monitor import cloud
 from valuation_monitor.cloud import ConcurrentUpdate, RemoteDatabase
 from valuation_monitor.web import create_app
@@ -98,7 +97,7 @@ def test_from_env_is_off_without_a_uri(monkeypatch, tmp_path):
         RemoteDatabase("not-a-uri", tmp_path / "x.db")
 
 
-def test_update_job_downloads_updates_and_uploads(monitor, tmp_path, monkeypatch, capsys):  # noqa: F811
+def test_update_job_downloads_updates_and_uploads(monitor, tmp_path, monkeypatch, capsys):
     from valuation_monitor import cli
 
     store = FakeStore()
@@ -120,7 +119,7 @@ def test_update_job_downloads_updates_and_uploads(monitor, tmp_path, monkeypatch
     assert store.objects[URI][0] == b"the updated database"
 
 
-def test_update_job_fails_loudly_when_another_job_uploaded_first(monitor, tmp_path, monkeypatch, capsys):  # noqa: F811
+def test_update_job_fails_loudly_when_another_job_uploaded_first(monitor, tmp_path, monkeypatch, capsys):
     from valuation_monitor import cli
 
     store = FakeStore()
@@ -140,7 +139,7 @@ def test_update_job_fails_loudly_when_another_job_uploaded_first(monitor, tmp_pa
     assert "changed by someone else" in capsys.readouterr().err and store.objects[URI][0] == b"theirs"
 
 
-def test_update_job_without_a_bucket_works_on_a_local_file(monitor, tmp_path, monkeypatch, capsys):  # noqa: F811
+def test_update_job_without_a_bucket_works_on_a_local_file(monitor, tmp_path, monkeypatch, capsys):
     from valuation_monitor import cli
 
     monkeypatch.delenv("VALUATION_DB_URI", raising=False)
@@ -150,7 +149,7 @@ def test_update_job_without_a_bucket_works_on_a_local_file(monitor, tmp_path, mo
     assert "Database" not in capsys.readouterr().out.replace("Data directory", "")
 
 
-def test_page_syncs_before_each_rebuild_and_never_while_reading_a_fresh_page(monitor):  # noqa: F811
+def test_page_syncs_before_each_rebuild_and_never_while_reading_a_fresh_page(monitor):
     calls = []
     app = create_app(monitor, reload_seconds=3600, cached_load_offline=True, sync=lambda: calls.append("sync"))
     client = app.test_client()
@@ -168,7 +167,7 @@ def test_page_syncs_before_each_rebuild_and_never_while_reading_a_fresh_page(mon
     assert calls == ["sync", "sync"]
 
 
-def test_update_button_starts_the_job_instead_of_fetching(monitor):  # noqa: F811
+def test_update_button_starts_the_job_instead_of_fetching(monitor):
     started = []
     app = create_app(monitor, update_remotely=lambda: started.append(1))
     client = app.test_client()
@@ -178,7 +177,7 @@ def test_update_button_starts_the_job_instead_of_fetching(monitor):  # noqa: F81
     assert "Update started" in page and "Update started" not in client.get("/").get_data(as_text=True)
 
 
-def test_update_button_reports_a_job_that_could_not_be_started(monitor, capsys):  # noqa: F811
+def test_update_button_reports_a_job_that_could_not_be_started(monitor, capsys):
     def boom():
         raise PermissionError("no run.jobs.run")
 

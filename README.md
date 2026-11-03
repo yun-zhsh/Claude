@@ -376,6 +376,7 @@ All of Tencent's earnings announcements since 2014 were published between 16:00 
 
 ## Known limitations
 
+- For the markets that have only Yahoo as a price source (US, Korea, China A-shares), the newest trading day can arrive late: after the close, Yahoo creates that day's daily bar with an empty close, sometimes for many hours. The program skips a bar without a close (it never saves incomplete data) and fills the day in on a later run, so those stocks can lag the real close by about half a day to a day. Hong Kong stocks are not affected, because Tencent's quote API is a second source.
 - The parsing rules were written for the filing layouts of Tencent (`highlights`), Sunny Optical (`statements`), JD (`press_release`), Samsung (`kifrs_statements`) and Hikvision (`cn_report`), and verified on all of their filings since 2014. Other companies' layouts may differ and need a new parse function, or a check of whether an existing layout applies (see "Extending").
 - The TTM from adding 4 single-quarter EPS differs slightly from "TTM profit / current shares" (Tencent keeps buying back shares, and the two differ by about 1%).
 - Only the "own historical percentile" is used; changes in the interest rate environment and growth expectations are not considered, and there is no comparison with peers.
@@ -441,3 +442,8 @@ Low priority, to be done when needed:
 ```bash
 .venv/bin/pytest
 ```
+
+Continuous integration (`.github/workflows/ci.yml`): every pull request runs the tests on the oldest and the newest supported Python
+(3.10 and 3.12) and builds the container image used on Cloud Run, with a smoke test of the image. The publishing workflow
+(`pages.yml`) calls the same tests after every code change and **publishes nothing if they fail**; its scheduled data updates
+skip them, because the code has not changed since it last passed. `tests/test_workflows.py` guards that wiring.

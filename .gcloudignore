@@ -1,0 +1,16 @@
+# What "gcloud builds submit" uploads: only what the image needs. Keep in step with .dockerignore (a test checks it).
+.git
+.github
+.venv
+.cache
+__pycache__
+*.egg-info
+.pytest_cache
+charts
+site
+_site
+data
+tests
+docs
+tools
+scripts

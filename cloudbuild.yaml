@@ -1,0 +1,13 @@
+# Build the image for Cloud Run and reuse the layers of the previous build, so a code-only change does not reinstall the dependencies.
+# Used by scripts/deploy-cloud.sh:  gcloud builds submit --config cloudbuild.yaml --substitutions=_IMAGE=...,_TAG=...
+steps:
+  - name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args: ["-c", "docker pull ${_IMAGE}:latest || true"]  # the first build has nothing to pull
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "--cache-from", "${_IMAGE}:latest", "-t", "${_IMAGE}:${_TAG}", "-t", "${_IMAGE}:latest", "."]
+images:
+  - ${_IMAGE}:${_TAG}
+  - ${_IMAGE}:latest
+options:
+  logging: CLOUD_LOGGING_ONLY

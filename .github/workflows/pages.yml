@@ -21,7 +21,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # After a code change (a push or a manual run) the tests must pass before anything is published. The scheduled runs only
+  # update data with the code that already passed, so they skip the tests.
+  tests:
+    if: github.event_name != 'schedule'
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: tests
+    if: ${{ !cancelled() && (needs.tests.result == 'success' || needs.tests.result == 'skipped') }}
     runs-on: ubuntu-latest
     env:
       TZ: Asia/Hong_Kong # the update time shown on the pages is in Hong Kong time

@@ -1,0 +1,51 @@
+# Tests and a build of the container image. Runs on every pull request, and is called by pages.yml before anything is
+# published after a code change (a failing test stops the publication).
+name: Tests
+
+on:
+  pull_request:
+  workflow_call: # called by pages.yml
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12"] # the oldest and the newest the project supports (pyproject.toml: >=3.10)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e '.[dev,cloud]'
+
+      - name: Run the tests (offline, nothing here touches the network)
+        run: pytest -q
+
+  image:
+    name: container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image used on Cloud Run
+        run: docker build -t valuation-monitor:ci .
+
+      - name: Smoke test the image
+        run: |
+          docker run --rm valuation-monitor:ci python -c "
+          import gunicorn, google.cloud.storage, importlib.resources as r, valuation_monitor
+          assert r.files('valuation_monitor.web').joinpath('templates/base.html').is_file()
+          print('package and dependencies are in the image, version', valuation_monitor.__version__)"
+          docker run --rm valuation-monitor:ci valuation-monitor-update --help > /dev/null
+          docker run --rm valuation-monitor:ci valuation-monitor-db --help > /dev/null

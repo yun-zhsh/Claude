@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_web import client, monitor  # noqa: F401  (fixtures)
 from valuation_monitor.web import export_site
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -57,7 +56,8 @@ def test_python_comments_and_docstrings_have_no_cjk():
 
 
 def test_documentation_has_no_cjk():
-    docs = [ROOT / "README.md", ROOT / "CLAUDE.md", ROOT / "pyproject.toml", ROOT / "Dockerfile", ROOT / ".dockerignore", *sorted((ROOT / "docs").glob("*.md"))]
+    docs = [ROOT / "README.md", ROOT / "CLAUDE.md", ROOT / "pyproject.toml", ROOT / "Dockerfile", ROOT / ".dockerignore", ROOT / ".gcloudignore", ROOT / "cloudbuild.yaml",
+            *sorted((ROOT / "docs").glob("*.md")), *sorted((ROOT / "scripts").glob("*"))]
     offenders = [f"{p.relative_to(ROOT)}:{n}" for p in docs if p.exists() for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1) if CJK.search(line)]
     assert not offenders, offenders
 
@@ -79,7 +79,7 @@ def test_python_string_literals_have_no_cjk():
 @pytest.mark.parametrize(
     "path",
     [*sorted(SRC.glob("web/templates/*.html")), *sorted(SRC.glob("web/static/*.js")), *sorted(SRC.glob("web/static/*.css")),
-     ROOT / "config.yaml", ROOT / ".github" / "workflows" / "pages.yml"],
+     ROOT / "config.yaml", ROOT / ".github" / "workflows" / "pages.yml", ROOT / ".github" / "workflows" / "ci.yml"],
     ids=lambda p: str(p.relative_to(ROOT)),
 )
 def test_templates_static_files_and_config_have_no_cjk(path):
@@ -117,7 +117,7 @@ def test_saved_database_has_no_cjk():
     assert not offenders, offenders
 
 
-def test_rendered_pages_and_downloads_have_no_cjk(client, monitor, tmp_path):  # noqa: F811
+def test_rendered_pages_and_downloads_have_no_cjk(client, monitor, tmp_path):
     pages = ["/", "/stock/0700.HK/"] + [f"/stock/0700.HK/download/{n}" for n in ("prices.csv", "eps.csv", "ttm.csv", "valuation.csv")]
     for url in pages:
         r = client.get(url)
