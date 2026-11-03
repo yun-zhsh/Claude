@@ -96,3 +96,14 @@ failed-execution alert has been fired on purpose. The silent-job alert has not b
 Notes from the first alert: the email's subject says "No severity", because the policy sets none (a `severity` field could be added to
 the policy files; existing policies are not changed by running the script again, so they would have to be deleted and created again).
 The incident closes by itself an hour after the last failure.
+
+## To do: checks that have not been done yet
+
+Things that are configured or tested only in part. Tick one off by doing it and writing the result in the table of its section.
+
+| What | Why it is open | How |
+| --- | --- | --- |
+| Fire the **data freshness failure** in the real GitHub workflow | Only the case "data is fresh" has run there (the failure step was skipped, as it should). That a stale series still publishes the site, then turns the run red and sends the email, is tested in `tests/test_workflows.py` and `tests/test_freshness.py` but has not happened for real. | Commit a throwaway change on `main` that sets every limit in `config.yaml` `freshness.max_price_age_days` to `0` (a stock whose newest day is yesterday is then stale), let the workflow run (or start it by hand), and check three things: the site is still updated, the run ends red at "Fail the run if the data is stale", and GitHub sends the failure email. **Then revert the commit at once**: until then every scheduled run is red. |
+| Fire the **silent job** alert (no successful update for 12 hours) | Created, never fired: it needs 12 hours without a success. | `gcloud scheduler jobs pause valuation-update-every-4h --location=$REGION`, wait for the email (about 12 hours), then `gcloud scheduler jobs resume valuation-update-every-4h --location=$REGION`. Do it on a day when nothing depends on fresh data. |
+| Measure the **effect of the build cache** of `scripts/deploy-cloud.sh` | The first build had nothing to reuse: 97 s for the build, 126 s in all (2026-11-03). The point of the cache is the next code-only deploy. | Deploy again after a code-only change and write the two figures the script prints ("the build took ...s", "Done in ...s") here, next to the first ones. |
+| Add a **severity** to the alert policies | The email subject says "No severity". Cosmetic. | Add `"severity": "ERROR"` to the files in `ops/alerts/`, delete the two policies in Cloud Monitoring and run `scripts/setup-alerts.sh` again (it leaves existing policies as they are). |

@@ -75,7 +75,7 @@ edits, which is fine here and would not be for many users. A managed database (C
 a service to run for no benefit at this size. How the repository grows, and when to change the storage, is measured in
 [docs/database-growth.md](docs/database-growth.md).
 
-**Status:** v0.2.0. Project conventions (English-only code and output, tests, how the data is written) are in [CLAUDE.md](CLAUDE.md).
+**Status:** v0.3.0. Project conventions (English-only code and output, tests, how the data is written) are in [CLAUDE.md](CLAUDE.md).
 
 ## What it tracks
 
