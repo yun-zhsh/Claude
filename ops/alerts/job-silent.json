@@ -1,0 +1,20 @@
+{
+  "displayName": "Watchlist monitor: no successful update for 12 hours",
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "The Cloud Run job **valuation-update** has not completed successfully for 12 hours, although it is scheduled every 4 hours. Either it fails every time (the other alert should have fired), or it is not starting at all: check that the Cloud Scheduler job **valuation-update-every-4h** is enabled and that its service account still has the Run Invoker role on the job.\n\nSee docs/operations.md in the repository."
+  },
+  "combiner": "OR",
+  "conditions": [
+    {
+      "displayName": "No successful execution of valuation-update for 12 hours",
+      "conditionAbsent": {
+        "filter": "metric.type=\"run.googleapis.com/job/completed_execution_count\" AND resource.type=\"cloud_run_job\" AND resource.label.job_name=\"valuation-update\" AND metric.label.result=\"succeeded\"",
+        "duration": "43200s",
+        "aggregations": [{"alignmentPeriod": "3600s", "perSeriesAligner": "ALIGN_DELTA"}],
+        "trigger": {"count": 1}
+      }
+    }
+  ],
+  "alertStrategy": {"autoClose": "3600s"}
+}

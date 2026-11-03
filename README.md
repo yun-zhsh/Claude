@@ -441,7 +441,8 @@ Low priority, to be done when needed:
 
 Tests gate the publication, and a **data freshness check** fails the update job and the scheduled workflow when a price or FX series
 stops updating (limits per market in `config.yaml`; the data is still saved and the site still published, and the failure is what
-sends the email). What is in place and what is not yet: [docs/operations.md](docs/operations.md).
+sends the email). The repository also holds the Cloud Monitoring alert policies for a failed or missing update job and the script that
+sets them up (`scripts/setup-alerts.sh`). What is in place, what is tested and what is not yet: [docs/operations.md](docs/operations.md).
 
 ## Tests
 

@@ -50,7 +50,43 @@ the source in a browser (Yahoo Finance's chart for that symbol, for example) to 
 caught by this check; the GitHub side runs independently and would still fail, and an alert on "no successful execution for a long
 time" is part of step 3.
 
-## 3. Alerts when a Cloud Run job fails (not set up yet)
+## 3. Alerts when the Cloud Run job fails (the files are in place; you run the setup once)
 
-Planned: an email from Cloud Monitoring when an execution of `valuation-update` fails, plus one for "no successful execution for
-12 hours", tested by making a job fail on purpose before it is relied on.
+Two email alerts from Cloud Monitoring, defined in `ops/alerts/` and created by `scripts/setup-alerts.sh`:
+
+| Alert | Fires when | Catches |
+| --- | --- | --- |
+| `Watchlist monitor: update job failed` | an execution of `valuation-update` ends in failure (within about 5 minutes) | a crash, a version conflict when uploading the database, stale data (section 2) |
+| `Watchlist monitor: no successful update for 12 hours` | no execution has succeeded for 12 hours (the schedule is every 4 hours) | the job not starting at all: the schedule disabled, a permission removed; the gap of section 2 |
+
+**Set up** (Cloud Shell, once; the address is given to Cloud Monitoring only, it is not stored in the repository):
+
+```bash
+cd ~/Watchlist-monitor && git pull origin main
+export ALERT_EMAIL=you@example.com
+scripts/setup-alerts.sh
+```
+
+The script first checks that the metric the alerts watch (`run.googleapis.com/job/completed_execution_count`, with a `result` label)
+exists, so that a wrong name cannot produce an alert that never fires; then it creates the email channel and the two policies. Running it
+again changes nothing. Alerting is billed per condition: two policies are cents a month at most (see the Cloud Monitoring pricing page).
+
+**Test it before relying on it** (the first alert; this execution fails before it touches any data, because the configuration file it
+is told to use does not exist):
+
+```bash
+gcloud run jobs execute valuation-update --region=$REGION --update-env-vars=VALUATION_CONFIG=/nonexistent.yaml --wait
+```
+
+An email should arrive within about ten minutes (look in the spam folder the first time); the incident is listed under Cloud Monitoring >
+Alerting > Incidents and closes by itself an hour after the last failure. The second alert is not tested this way (it needs 12 hours
+without a success); to see it work, pause the schedule for 12 hours (`gcloud scheduler jobs pause valuation-update-every-4h --location=$REGION`),
+wait for the email, and resume it (`gcloud scheduler jobs resume ...`).
+
+**Status of the verification:** the policy files are valid Cloud Monitoring alert policies (parsed with Google's own library) and
+the script's logic is tested against a fake `gcloud` and `curl` (`tests/test_alerts.py`). Neither has run against Google Cloud yet: the
+first run of the script and the test above are the verification, and the result belongs in this table.
+
+| Date | What was tested | Result |
+| --- | --- | --- |
+| (not done yet) | setup script; failed-execution alert; silent-job alert | |
