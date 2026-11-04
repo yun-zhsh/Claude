@@ -1,11 +1,12 @@
 """SEC EDGAR: search for and download the original quarterly earnings press releases of US-listed (foreign private issuer) companies.
 
-Foreign private issuers do not file 10-Q; earnings are furnished on Form 6-K, whose body is the press release in exhibit 99.1 (HTML).
-Flow: list all 6-Ks from the submissions API -> look at the file list of each 6-K and pick the press release exhibit of a plausible size ->
-only a title like "... Announces ... Results" is an earnings announcement.
+Earnings are furnished on Form 6-K by foreign private issuers (JD, ASML) and on Form 8-K item 2.02 by US companies (Meta, Cognizant);
+either way the press release is exhibit 99.1 (HTML).
+Flow: list the 6-Ks (or the 8-Ks with item 2.02) from the submissions API -> look at the file list of each and pick the press release exhibit of a plausible size ->
+only a title like "... Announces ... Results" or "... Reports ... Results" is an earnings announcement.
 
 Downloaded earnings filings are saved in data/filings/<symbol>/ (committed to the repository with the code); index.json there
-records every 6-K that has been checked (including those that are not earnings), so they are not checked again. When EDGAR cannot be reached the locally saved filings are used.
+records every filing that has been checked (including those that are not earnings), so they are not checked again. When EDGAR cannot be reached the locally saved filings are used.
 
 EDGAR requires every request to carry a User-Agent that identifies a contact, and allows at most 10 requests per second.
 The contact is not written in the code but provided through the SEC_USER_AGENT environment variable, e.g. "valuation-monitor your-email".
@@ -30,12 +31,12 @@ SUBMISSIONS_URL = "https://data.sec.gov/submissions/{name}"
 ARCHIVE_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{name}"
 REQUEST_INTERVAL = 0.2  # seconds; the official limit is 10 requests per second
 # Size of earnings press release exhibits: too small are notices, too large are annual reports or prospectuses (some 6-K exhibits exceed 15MB)
-MIN_EXHIBIT_BYTES = 100_000
+MIN_EXHIBIT_BYTES = 20_000
 MAX_EXHIBIT_BYTES = 3_000_000
-EXHIBIT_RE = re.compile(r"ex-?99", re.I)
+EXHIBIT_RE = re.compile(r"ex(?:hibit)?[-_ ]?99|press ?release", re.I)
 # Title at the start of the press release, e.g. "JD.com Announces Second Quarter 2026 Results", "... Announces Fourth Quarter and Full Year 2025 Results"
 EXHIBIT_LABEL_RE = re.compile(r"^.*?\bExhibi?t? ?99\.\d\s+", re.I)
-RESULTS_HEADLINE_RE = re.compile(r"\bannounces?\b.{0,80}?\bresults\b", re.I)
+RESULTS_HEADLINE_RE = re.compile(r"\b(?:announces?|reports?)\b.{0,120}?\b(?:results|net income|net sales)\b|\b(?:publishes|announces|reports) its\b.{0,60}?\bresults?\b", re.I)  # ASML's older releases say "today publishes its 2016 second-quarter results"
 
 
 class SecUserAgentMissing(RuntimeError):
@@ -73,8 +74,8 @@ class SecProvider:
         self.http = http
         self.archive_dir = Path(archive_dir)
 
-    def results_announcements(self, symbol: str, cik: int, since: datetime) -> list[Filing]:
-        """All earnings press releases published after `since`, in ascending order of publication time."""
+    def results_announcements(self, symbol: str, cik: int, since: datetime, form: str = "6-K") -> list[Filing]:
+        """All earnings press releases published after `since`, in ascending order of publication time. `form` is the SEC form that carries them: 6-K or 8-K (item 2.02)."""
         folder = self.archive_dir / symbol.upper()
         index_path = folder / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
@@ -83,7 +84,7 @@ class SecProvider:
         try:
             if self.http is None:
                 raise SecUserAgentMissing(f"The environment variable {USER_AGENT_ENV} is not set")
-            added = self._examine_new(symbol, cik, since, folder, index, known)
+            added = self._examine_new(symbol, cik, since, folder, index, known, form)
         except Exception as e:
             if not any(e_["results"] for e_ in index):
                 raise
@@ -101,21 +102,22 @@ class SecProvider:
             if e["results"] and pd.Timestamp(e["published"]) >= since_ts
         ]
 
-    def _six_k_list(self, cik: int) -> list[dict]:
+    def _filing_list(self, cik: int, form: str) -> list[dict]:
         data = self.http.get_json(SUBMISSIONS_URL.format(name=f"CIK{cik:010d}.json"))
         blocks = [data["filings"]["recent"]]
         for extra in data["filings"].get("files", []):  # older records are split into other files
             blocks.append(self.http.get_json(SUBMISSIONS_URL.format(name=extra["name"])))
         out = []
         for b in blocks:
-            for i, form in enumerate(b["form"]):
-                if form == "6-K":
+            items = b.get("items") or [""] * len(b["form"])
+            for i, kind in enumerate(b["form"]):
+                if kind == form and (form != "8-K" or "2.02" in items[i].split(",")):  # an 8-K is an earnings release only with item 2.02 (results of operations)
                     out.append({"accession": b["accessionNumber"][i], "published": to_new_york(b["acceptanceDateTime"][i])})
         return sorted(out, key=lambda x: x["published"])
 
-    def _examine_new(self, symbol, cik, since, folder, index, known) -> bool:
+    def _examine_new(self, symbol, cik, since, folder, index, known, form: str = "6-K") -> bool:
         added = False
-        for item in self._six_k_list(cik):
+        for item in self._filing_list(cik, form):
             if item["accession"] in known or item["published"] < pd.Timestamp(since):
                 continue
             entry = self._examine(cik, item, folder)

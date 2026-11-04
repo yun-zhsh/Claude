@@ -32,6 +32,7 @@ class StockConfig:
     filing_format: str = "highlights"  # layout of the earnings filings, see filings.FILING_FORMATS
     market: str = "HK"  # listing market: HK (HKEXnews), US (SEC EDGAR), KR (company IR website) or CN (A-shares, CNINFO)
     cik: int | None = None  # SEC Central Index Key of a US-listed company
+    sec_form: str = "6-K"  # the SEC form that carries the earnings press release: 6-K (foreign private issuers, e.g. JD, ASML) or 8-K item 2.02 (US companies, e.g. Meta)
 
     @property
     def filing_source(self) -> str:
@@ -107,12 +108,15 @@ def parse_config(raw: dict) -> Config:
         filing_format = str(s.get("filing_format", default_format))
         if filing_format not in FILING_FORMATS:
             raise ValueError(f"{symbol}: unknown filing format {filing_format}; available formats: {sorted(FILING_FORMATS)}")
-        foreign_formats = {"press_release": "US", "kifrs_statements": "KR", "cn_report": "CN"}  # non-HK formats only apply to their own market
+        foreign_formats = {"press_release": "US", "us_press_release": "US", "kifrs_statements": "KR", "cn_report": "CN"}  # non-HK formats only apply to their own market
         if foreign_formats.get(filing_format, "HK" if market == "HK" else None) != market:
             raise ValueError(f"{symbol}: filing format {filing_format} does not match market {market}")
         cik = int(s["cik"]) if s.get("cik") is not None else None
         if market == "US" and cik is None:
             raise ValueError(f"{symbol}: US stocks need a cik (the company's SEC Central Index Key)")
+        sec_form = str(s.get("sec_form", "6-K")).upper()
+        if sec_form not in ("6-K", "8-K"):
+            raise ValueError(f"{symbol}: sec_form must be 6-K or 8-K, got {sec_form}")
         stocks.append(
             StockConfig(
                 symbol=symbol,
@@ -121,6 +125,7 @@ def parse_config(raw: dict) -> Config:
                 filing_format=filing_format,
                 market=market,
                 cik=cik,
+                sec_form=sec_form,
             )
         )
     if not stocks:

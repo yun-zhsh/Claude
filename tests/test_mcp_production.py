@@ -53,15 +53,31 @@ def real_service(read_only_data):
     return open_service(str(ROOT / "config.yaml"), str(ROOT / "data"))
 
 
-def test_every_configured_stock_loads_without_a_secret_or_write_access(real_service):
+def saved_symbols(service) -> set[str]:
+    """The stocks whose prices the committed database holds. A stock added to config.yaml gets its data from the first scheduled update (the workflow commits the database), not from the pull request."""
+    return set(service.monitor.db.symbols("prices_final"))
+
+
+def test_every_stock_with_saved_data_loads_without_a_secret_or_write_access(real_service):
     result = real_service.list_stocks()
     assert [s["symbol"] for s in result["stocks"]] == [s.symbol for s in real_service.config.stocks]
-    failed = {s["symbol"]: s["error"] for s in result["stocks"] if "error" in s}
+    failed = {s["symbol"]: s["error"] for s in result["stocks"] if "error" in s and s["symbol"] in saved_symbols(real_service)}
     assert not failed, failed
+    assert len(saved_symbols(real_service)) >= 5
+
+
+def test_a_stock_without_saved_data_is_an_error_entry_not_a_crash(real_service):
+    """Right after a stock is added, before the first update has saved its prices, the other stocks still work and this one says why it cannot be answered."""
+    result = real_service.list_stocks()
+    for s in result["stocks"]:
+        if s["symbol"] not in saved_symbols(real_service):
+            assert "error" in s and "Saved data could not be read" in s["error"]
 
 
 def test_every_metric_of_every_stock_can_be_asked_for(real_service):
     for stock in real_service.config.stocks:
+        if stock.symbol not in saved_symbols(real_service):
+            continue
         for key in stock.metrics:
             result = real_service.valuation(stock.symbol, key, 5)
             assert result["sources"]["earnings_record"]["filing_url"], (stock.symbol, key)
@@ -129,6 +145,6 @@ def test_a_stale_saved_cache_is_recomputed_in_memory_and_never_written(tmp_path,
         conn.execute("DELETE FROM periods")
     before = hashlib.sha256(copy.read_bytes()).hexdigest()
     service = open_service(str(ROOT / "config.yaml"), str(ROOT / "data"), db_path=str(copy))
-    failed = {s["symbol"]: s["error"] for s in service.list_stocks()["stocks"] if "error" in s}
+    failed = {s["symbol"]: s["error"] for s in service.list_stocks()["stocks"] if "error" in s and s["symbol"] in saved_symbols(service)}
     assert not failed, failed
     assert hashlib.sha256(copy.read_bytes()).hexdigest() == before

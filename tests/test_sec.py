@@ -84,3 +84,60 @@ def test_provider_works_offline_from_the_archive(tmp_path):
     assert SecProvider(None, tmp_path).results_announcements("JD", 1549802, datetime(2026, 9, 1)) == []
     with pytest.raises(SecUserAgentMissing):
         SecProvider(None, tmp_path / "empty").results_announcements("JD", 1549802, datetime(2026, 1, 1))
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        ("EX-99.1 Exhibit 99.1 Meta Reports Third Quarter 2026 Results", "Meta Reports Third Quarter 2026 Results"),
+        ("Cognizant Reports Fourth Quarter and Full Year 2025 Results", "Cognizant Reports Fourth Quarter and Full Year 2025 Results"),
+        ("ASML reports EUR 2.6 billion sales at 43.0% gross margin in Q2 Stronger Logic compensates for Memory weakness VELDHOVEN, July 17, 2019 - today ASML Holding N.V. (ASML) publishes its 2019 second-quarter results.", None),
+        ("Notice of Annual General Meeting", None),
+    ],
+)
+def test_headline_for_other_companies(text, expected):
+    html = f"<html><body><p>{text}</p>".encode() + b"<p>x</p>" * 5000 + b"</body></html>"
+    found = headline(html)
+    if expected is None and "ASML" not in text:
+        assert found is None
+    elif expected is None:
+        assert found is not None and "second-quarter results" in found  # "today ... publishes its 2019 second-quarter results" counts as a results announcement
+    else:
+        assert found == expected
+
+
+SUBMISSIONS_8K = {
+    "filings": {
+        "recent": {
+            "form": ["8-K", "8-K", "6-K"],
+            "items": ["2.02,9.01", "5.02,9.01", ""],
+            "accessionNumber": ["0001326801-26-000001", "0001326801-26-000002", "0001326801-26-000003"],
+            "acceptanceDateTime": ["2026-07-29T20:03:23.000Z", "2026-08-02T20:00:00.000Z", "2026-08-03T20:00:00.000Z"],
+        },
+        "files": [],
+    }
+}
+RELEASE_8K = b"<html><body><p>EX-99.1 Exhibit 99.1</p><h1>Meta Reports Second Quarter 2026 Results</h1>" + b"<p>x</p>" * 20000 + b"</body></html>"
+
+
+class Fake8kHttp:
+    def __init__(self):
+        self.requests = []
+
+    def get_json(self, url, params=None):
+        return SUBMISSIONS_8K
+
+    def get_bytes(self, url, **kwargs):
+        self.requests.append(url)
+        if url.endswith("/000132680126000001/index.json"):
+            return listing(("meta-20260729.htm", 40_000), ("meta-06302026xexhibit991.htm", 300_000))
+        if url.endswith("/000132680126000001/meta-06302026xexhibit991.htm"):
+            return RELEASE_8K
+        raise AssertionError(f"unexpected request: {url}")  # the 8-K without item 2.02 and the 6-K must not be looked at
+
+
+def test_an_8k_counts_only_with_item_2_02_and_exhibit_names_like_exhibit991_are_found(tmp_path):
+    http = Fake8kHttp()
+    found = SecProvider(http, tmp_path).results_announcements("META", 1326801, datetime(2026, 1, 1), "8-K")
+    assert [(f.title, f.published) for f in found] == [("Meta Reports Second Quarter 2026 Results", pd.Timestamp("2026-07-29 16:03:23"))]
+    assert len(http.requests) == 2  # the file list of the one earnings 8-K and its exhibit: nothing else was opened

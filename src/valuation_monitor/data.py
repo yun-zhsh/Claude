@@ -44,7 +44,7 @@ class DataLoader:
         prices = self.prices.prices(stock.symbol, now - pd.DateOffset(years=self.config.max_lookback + 1), market)
         since = now - pd.DateOffset(years=self.config.max_lookback + 2)
         if stock.market == "US":
-            filings = self.sec.results_announcements(stock.symbol, stock.cik, since)
+            filings = self.sec.results_announcements(stock.symbol, stock.cik, since, stock.sec_form)
         elif stock.market == "KR":
             filings = self.samsung.results_announcements(stock.symbol, since)
         elif stock.market == "CN":

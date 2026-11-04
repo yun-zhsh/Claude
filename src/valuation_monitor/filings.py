@@ -40,6 +40,7 @@ from valuation_monitor.cn_report import parse_cn_express, parse_cn_report
 from valuation_monitor.audit import Component, num, shares_formula, split_notes, sum_formula
 from valuation_monitor.kifrs import parse_kifrs, parse_kifrs_deck
 from valuation_monitor.press_release import parse_press_release
+from valuation_monitor.us_release import parse_us_release
 from valuation_monitor.providers.base import Filing
 
 MONTH_TO_QUARTER = {"MARCH": 1, "JUNE": 2, "SEPTEMBER": 3, "DECEMBER": 4}
@@ -96,7 +97,7 @@ SERIES_LABELS = {
     "equity": "Equity attributable to owners",
     "wa_shares": "Weighted average shares",
 }
-PARSER_VERSIONS = {"highlights": 5, "statements": 3, "press_release": 3, "kifrs_statements": 4, "cn_report": 3}  # add 1 when the parsing rules change; saved parse results are then re-parsed automatically
+PARSER_VERSIONS = {"highlights": 5, "statements": 3, "press_release": 3, "us_press_release": 1, "kifrs_statements": 4, "cn_report": 3}  # add 1 when the parsing rules change; saved parse results are then re-parsed automatically
 PER_SHARE_TOLERANCE = 0.005  # allowed difference of the same value between filings: per-share data (rounding, subtraction of cumulative figures)
 PER_SHARE_RELATIVE_TOLERANCE = 5e-4
 AMOUNT_TOLERANCE = 0.001  # amounts: relative difference
@@ -325,7 +326,7 @@ def parse_statements(pages: Pages) -> tuple[str, dict[str, list[float]]]:
 
 
 FORMATS = {"highlights": parse_highlights, "statements": parse_statements}  # HKEX PDF announcements
-FILING_FORMATS = {*FORMATS, "press_release", "kifrs_statements", "cn_report"}  # plus US HTML press releases, Samsung English financial statements and A-share reports
+FILING_FORMATS = {*FORMATS, "press_release", "us_press_release", "kifrs_statements", "cn_report"}  # plus US HTML press releases (6-K of JD; 8-K of US companies), Samsung English financial statements and A-share reports
 
 
 def parse_announcement(filing: Filing, fmt: str = "highlights", market: Market = HK) -> Announcement:
@@ -336,9 +337,11 @@ def parse_announcement(filing: Filing, fmt: str = "highlights", market: Market =
             parsed.period, filing.published, filing.url, parsed.currency, parsed.quarterly, parsed.values, market.key,
             filing.provisional, "", "period-end total shares", filing.note,
         )
-    if fmt in ("press_release", "kifrs_statements"):  # the parse result carries its own reporting period and whether it is a single quarter
+    if fmt in ("press_release", "us_press_release", "kifrs_statements"):  # the parse result carries its own reporting period and whether it is a single quarter
         if fmt == "press_release":
             parsed = parse_press_release(filing.content)
+        elif fmt == "us_press_release":
+            parsed = parse_us_release(filing.content)
         elif filing.provisional:
             parsed = parse_kifrs_deck(filing.title, filing.content, filing.attachments["previous_bs"])
         else:
