@@ -77,3 +77,12 @@ stocks:
     sec_form: 8-K
     filing_format: us_press_release
     metrics: [pe, ps, pb]
+  - symbol: ASML
+    name: ASML Holding (NY registry shares)
+    market: US   # the NASDAQ line; one NY registry share = one ordinary share, so price and EPS need no ADS ratio
+    cik: 937966
+    sec_form: 6-K   # a foreign private issuer: a 6-K every quarter
+    sec_exhibit: us_gaap_statements   # the press release has only a few figures; the quarterly US GAAP summary statements (EUR) have the rest
+    filing_format: us_gaap_statements   # price in USD, earnings in EUR: converted with the EURUSD rate of each day
+    metrics: [pe, ps, pb]
+

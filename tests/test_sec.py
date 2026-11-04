@@ -141,3 +141,39 @@ def test_an_8k_counts_only_with_item_2_02_and_exhibit_names_like_exhibit991_are_
     found = SecProvider(http, tmp_path).results_announcements("META", 1326801, datetime(2026, 1, 1), "8-K")
     assert [(f.title, f.published) for f in found] == [("Meta Reports Second Quarter 2026 Results", pd.Timestamp("2026-07-29 16:03:23"))]
     assert len(http.requests) == 2  # the file list of the one earnings 8-K and its exhibit: nothing else was opened
+
+
+STATEMENTS_HTML = b"<html><body><p>EX-99.3 4 financial_statementsxusx.htm EX-99.3 Exhibit 99.3 ASML - Summary US GAAP Consolidated Statements of Operations</p>" + b"<p>x</p>" * 20000 + b"</body></html>"
+IFRS_HTML = b"<html><body><p>EX-99.5 6 d854985dex995.htm EX-99.5 Exhibit 99.5 ASML - Summary IFRS Consolidated Statement of Profit or Loss</p>" + b"<p>x</p>" * 20000 + b"</body></html>"
+
+
+def test_statements_title_tells_the_us_gaap_summary_from_the_ifrs_one_and_a_press_release():
+    from valuation_monitor.providers.sec import statements_title
+
+    assert statements_title(STATEMENTS_HTML) == "Summary US GAAP financial statements"
+    assert statements_title(IFRS_HTML) is None
+    assert statements_title(RELEASE_8K) is None
+    assert statements_title(b"<html><body><p>ASML reports 6.2 billion sales. Reconciliation to US GAAP Consolidated Statements of Operations is in exhibit 99.3</p></body></html>" + b"x" * 40000) is None
+
+
+class FakeStatementsHttp:
+    def __init__(self):
+        self.requests = []
+
+    def get_json(self, url, params=None):
+        return {"filings": {"recent": {"form": ["6-K"], "accessionNumber": ["0000937966-26-000001"], "acceptanceDateTime": ["2026-10-14T10:01:18.000Z"]}, "files": []}}
+
+    def get_bytes(self, url, **kwargs):
+        self.requests.append(url)
+        if url.endswith("/index.json"):
+            return listing(("form6-kquarterlyfilings.htm", 11_000), ("pressreleasefinancialresul.htm", 41_000), ("financial_statementsxusx.htm", 28_000), ("presentationinvestorrela.htm", 20_600))
+        if url.endswith("financial_statementsxusx.htm"):
+            return STATEMENTS_HTML
+        raise AssertionError(f"unexpected request: {url}")  # the press release, the presentation and the form itself are not downloaded
+
+
+def test_the_statements_mode_keeps_the_us_gaap_summary_not_the_press_release(tmp_path):
+    http = FakeStatementsHttp()
+    found = SecProvider(http, tmp_path).results_announcements("ASML", 937966, datetime(2026, 1, 1), "6-K", "us_gaap_statements")
+    assert [(f.title, f.url.rsplit("/", 1)[-1]) for f in found] == [("Summary US GAAP financial statements", "financial_statementsxusx.htm")]
+    assert found[0].content == STATEMENTS_HTML and found[0].published == pd.Timestamp("2026-10-14 06:01:18")

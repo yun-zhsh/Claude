@@ -1,4 +1,4 @@
-"""Earnings press releases of US companies (8-K exhibit 99.1): Meta Platforms and Cognizant."""
+"""Condensed US GAAP statements in HTML: the press releases of Meta Platforms and Cognizant (8-K exhibit 99.1) and ASML's summary statements (6-K, in euros)."""
 
 import json
 from pathlib import Path
@@ -94,7 +94,7 @@ def saved(symbol):
     return {pd.Timestamp(e["published"]): parse_us_release((FILINGS / symbol / e["file"]).read_bytes()) for e in index}
 
 
-@pytest.mark.parametrize("symbol, restated", [("META", {"2016Q1", "2016Q2", "2016Q3"}), ("CTSH", set())])
+@pytest.mark.parametrize("symbol, restated", [("META", {"2016Q1", "2016Q2", "2016Q3"}), ("CTSH", set()), ("ASML", set())])
 def test_every_saved_release_parses_and_agrees_with_the_year_after(symbol, restated):
     """Each quarter appears in its own release and as the prior-year figure of the release four quarters later: they must agree.
 
@@ -121,3 +121,70 @@ def test_cognizants_2014_figures_are_in_millions_like_the_rest():
     parsed = saved("CTSH")
     first = min(parsed.values(), key=lambda p: p.period)
     assert 1_000 < first.values["revenue"][0] < 10_000 and 100 < first.values["wa_shares"][0] < 1_000  # thousands were converted
+
+
+# ---- ASML: summary US GAAP statements, in euros ----------------------------------------------------------------------------------------
+
+ASML_INCOME = table(
+    ["Three months ended,", "Six months ended,"],
+    ["Jul 4,", "Jul 3,", "Jul 4,", "Jul 3,"],
+    ["(unaudited, in millions €, except per share data)", "2021", "2022", "2021", "2022"],
+    ["Total net sales", "4,020.2", "5,430.5", "8,384.1", "8,964.9"],
+    ["Net income", "1,038.2", "1,410.9", "2,369.6", "2,106.2"],
+    ["Basic net income per ordinary share", "2.52", "3.54", "5.73", "5.29"],
+    ["Diluted net income per ordinary share 4", "2.52", "3.54", "5.72", "5.28"],
+    ["Weighted average number of ordinary shares used in computing per share amounts (in millions):"],
+    ["Basic", "411.5", "398.3", "413.4", "398.4"],
+)
+ASML_QUARTERLY = table(
+    ["Three months ended,"],
+    ["Jul 4,", "Oct 3,", "Dec 31,", "Apr 3,", "Jul 3,"],
+    ["(unaudited, in millions €, except per share data)", "2021", "2021", "2021", "2022", "2022"],
+    ["Total net sales", "4,020.2", "5,241.3", "4,985.6", "3,534.4", "5,430.5"],
+    ["Net income", "1,038.2", "1,740.2", "1,773.4", "695.3", "1,410.9"],
+    ["Basic net income per ordinary share", "2.52", "4.27", "4.39", "1.73", "3.54"],
+    ["Weighted average number of ordinary shares used in computing per share amounts (in millions):"],
+    ["Basic", "411.5", "407.9", "404.3", "401.1", "398.3"],
+)
+ASML_BALANCE = table(
+    ["Dec 31,", "Jul 3,"],
+    ["(unaudited, in millions €)", "2021", "2022"],
+    ["Total assets", "30,231.0", "31,912.6"],
+    ["Total shareholders' equity", "10,140.6", "7,648.6"],
+)
+
+
+def test_asml_layout_fiscal_quarter_ends_euros_and_the_year_end_listed_first():
+    p = parse_us_release(release(ASML_INCOME, ASML_BALANCE, "(unaudited, in millions €)"))
+    assert p.currency == "EUR" and p.period == pd.Period("2022Q2")  # July 3, 2022 is the end of the second quarter
+    assert p.values["revenue"] == [5430.5, 4020.2] and p.values["eps"] == [3.54, 2.52] and p.values["wa_shares"] == [398.3, 411.5]
+    assert p.values["equity"] == [7648.6, 10140.6]  # this quarter's end, then the year end, although the table lists the year end first
+
+
+def test_the_quarterly_summary_adds_the_previous_quarter_and_must_agree_with_the_first_table():
+    p = parse_us_release(release(ASML_INCOME + ASML_QUARTERLY, ASML_BALANCE, "(unaudited, in millions €)"))
+    assert p.values["revenue"] == [5430.5, 4020.2, 3534.4] and p.values["eps"] == [3.54, 2.52, 1.73]  # this quarter, last year's, the previous quarter
+    with pytest.raises(ValueError, match="disagree"):
+        parse_us_release(release(ASML_INCOME + ASML_QUARTERLY.replace("5,430.5", "5,999.9"), ASML_BALANCE, "(unaudited, in millions €)"))
+
+
+def test_a_footnote_number_after_the_year_is_ignored():
+    income = ASML_INCOME.replace("<td>2021</td>", "<td>2021 3</td>", 1)
+    assert parse_us_release(release(income, ASML_BALANCE, "(unaudited, in millions €)")).period == pd.Period("2022Q2")
+
+
+def test_asml_newest_statements_are_text_without_tables():
+    text = (
+        "<html><body><div>Contents Net system sales Consolidated Balance Sheets</div>"  # the table of contents does not have the numbers
+        "<div>Three months ended Six months ended Jun 30, Jun 29, Jun 30, Jun 29, (unaudited, in millions €, except per share data) 2024 2025 2024 2025 "
+        "Net system sales 4,760.9 5,596.1 8,726.8 11,336.5 Total net sales 6,242.8 7,691.7 11,532.8 15,433.2 Net income 1,577.9 2,290.3 2,801.7 4,645.3 "
+        "Basic net income per ordinary share 4.01 5.90 7.12 11.90 Diluted net income per ordinary share 4.01 5.90 7.12 11.90 "
+        "Weighted average number of ordinary shares used in computing per share amounts (in millions): Basic 393.2 388.2 393.3 390.2 Diluted 393.5 388.4 393.6 390.4</div>"
+        "<div>Total shareholders\u2019 equity 18,476.8 17,618.2 Total liabilities and shareholders\u2019 equity 48,589.6 44,000.0</div></body></html>"
+    ).encode()
+    p = parse_us_release(text)
+    assert p.currency == "EUR" and p.period == pd.Period("2025Q2")
+    assert p.values == {"revenue": [7691.7, 6242.8], "profit": [2290.3, 1577.9], "eps": [5.9, 4.01], "wa_shares": [388.2, 393.2], "equity": [17618.2, 18476.8]}
+    first_quarter = text.replace(b"Three months ended Six months ended Jun 30, Jun 29, Jun 30, Jun 29,", b"Three months ended Mar 30, Mar 29,").replace(b" 2024 2025 2024 2025 ", b" 2024 2025 ")
+    assert parse_us_release(first_quarter.replace(b"4,760.9 5,596.1 8,726.8 11,336.5", b"4,760.9 5,596.1").replace(b"6,242.8 7,691.7 11,532.8 15,433.2", b"6,242.8 7,691.7")
+                            .replace(b"1,577.9 2,290.3 2,801.7 4,645.3", b"1,577.9 2,290.3").replace(b"4.01 5.90 7.12 11.90", b"4.01 5.90").replace(b"393.2 388.2 393.3 390.2", b"393.2 388.2")).period == pd.Period("2025Q1")

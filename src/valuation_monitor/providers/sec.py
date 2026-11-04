@@ -57,6 +57,18 @@ def to_new_york(accepted: str) -> pd.Timestamp:
     return pd.Timestamp(accepted).tz_convert("America/New_York").tz_localize(None).floor("s")
 
 
+FINANCIAL_STATEMENTS_NAME_RE = re.compile(r"financial_?statements", re.I)  # ASML: financialstatementsusgaapq.htm, financialstatementsusg.htm, financial_statementsxusx.htm
+US_GAAP_STATEMENTS_RE = re.compile(r"Summary U\.?S\.? GAAP Consolidated Statements? of Operations|Financial Statements U\.?S\.? GAAP", re.I)  # the heading: at the very start of the exhibit
+
+
+def statements_title(html: bytes) -> str | None:
+    """"Summary US GAAP financial statements" if the exhibit is ASML's US GAAP summary (not the IFRS one, not a press release); None otherwise."""
+    from bs4 import BeautifulSoup
+
+    text = " ".join(BeautifulSoup(html[:200_000], "lxml").get_text(" ").split())[:500]
+    return "Summary US GAAP financial statements" if US_GAAP_STATEMENTS_RE.search(text) else None
+
+
 def headline(html: bytes) -> str | None:
     """The title at the start of the press release; None if it is not an earnings press release."""
     from bs4 import BeautifulSoup
@@ -74,8 +86,12 @@ class SecProvider:
         self.http = http
         self.archive_dir = Path(archive_dir)
 
-    def results_announcements(self, symbol: str, cik: int, since: datetime, form: str = "6-K") -> list[Filing]:
-        """All earnings press releases published after `since`, in ascending order of publication time. `form` is the SEC form that carries them: 6-K or 8-K (item 2.02)."""
+    def results_announcements(self, symbol: str, cik: int, since: datetime, form: str = "6-K", exhibit: str = "release") -> list[Filing]:
+        """All earnings releases published after `since`, in ascending order of publication time.
+
+        `form` is the SEC form that carries them: 6-K or 8-K (item 2.02). `exhibit` is what is kept of each: "release", the press release itself, or
+        "us_gaap_statements", the summary US GAAP financial statements exhibit (ASML: its press release has only a few figures, the statements have the rest).
+        """
         folder = self.archive_dir / symbol.upper()
         index_path = folder / "index.json"
         index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
@@ -84,7 +100,7 @@ class SecProvider:
         try:
             if self.http is None:
                 raise SecUserAgentMissing(f"The environment variable {USER_AGENT_ENV} is not set")
-            added = self._examine_new(symbol, cik, since, folder, index, known, form)
+            added = self._examine_new(symbol, cik, since, folder, index, known, form, exhibit)
         except Exception as e:
             if not any(e_["results"] for e_ in index):
                 raise
@@ -115,12 +131,12 @@ class SecProvider:
                     out.append({"accession": b["accessionNumber"][i], "published": to_new_york(b["acceptanceDateTime"][i])})
         return sorted(out, key=lambda x: x["published"])
 
-    def _examine_new(self, symbol, cik, since, folder, index, known, form: str = "6-K") -> bool:
+    def _examine_new(self, symbol, cik, since, folder, index, known, form: str = "6-K", exhibit: str = "release") -> bool:
         added = False
         for item in self._filing_list(cik, form):
             if item["accession"] in known or item["published"] < pd.Timestamp(since):
                 continue
-            entry = self._examine(cik, item, folder)
+            entry = self._examine(cik, item, folder, exhibit)
             index.append(entry)
             known.add(entry["accession"])
             added = True
@@ -128,23 +144,26 @@ class SecProvider:
                 print(f"{symbol}: new results release {entry['published']} {entry['title']}", file=sys.stderr)
         return added
 
-    def _examine(self, cik: int, item: dict, folder: Path) -> dict:
+    def _examine(self, cik: int, item: dict, folder: Path, exhibit: str = "release") -> dict:
         accession = item["accession"]
         folder_name = accession.replace("-", "")
         entry = {"accession": accession, "published": f"{item['published']:%Y-%m-%dT%H:%M:%S}", "results": False}
         listing = json.loads(
             self.http.get_bytes(ARCHIVE_URL.format(cik=cik, accession=folder_name, name="index.json"), immutable=True)
         )
-        for f in listing["directory"]["item"]:
+        files = listing["directory"]["item"]
+        if exhibit == "us_gaap_statements":
+            files = sorted(files, key=lambda f: not FINANCIAL_STATEMENTS_NAME_RE.search(f["name"]))  # the names say it from 2016 on (financialstatements...); before, the exhibits are numbered and are told apart by their content
+        for f in files:
             size = int(f["size"] or 0)
             name = f["name"]
-            if not (EXHIBIT_RE.search(name) and name.lower().endswith((".htm", ".html"))):
+            if not (name.lower().endswith((".htm", ".html")) and (EXHIBIT_RE.search(name) or (exhibit == "us_gaap_statements" and FINANCIAL_STATEMENTS_NAME_RE.search(name)))):
                 continue
             if not MIN_EXHIBIT_BYTES <= size <= MAX_EXHIBIT_BYTES:
                 continue
             url = ARCHIVE_URL.format(cik=cik, accession=folder_name, name=name)
             html = self.http.get_bytes(url, cache=False)
-            title = headline(html)
+            title = statements_title(html) if exhibit == "us_gaap_statements" else headline(html)
             if title:
                 file = f"{item['published']:%Y-%m-%d}_{name}"
                 folder.mkdir(parents=True, exist_ok=True)

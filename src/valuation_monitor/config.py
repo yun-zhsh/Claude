@@ -32,6 +32,7 @@ class StockConfig:
     filing_format: str = "highlights"  # layout of the earnings filings, see filings.FILING_FORMATS
     market: str = "HK"  # listing market: HK (HKEXnews), US (SEC EDGAR), KR (company IR website) or CN (A-shares, CNINFO)
     cik: int | None = None  # SEC Central Index Key of a US-listed company
+    sec_exhibit: str = "release"  # what is parsed: the earnings press release itself, or the summary US GAAP financial statements exhibit (ASML)
     sec_form: str = "6-K"  # the SEC form that carries the earnings press release: 6-K (foreign private issuers, e.g. JD, ASML) or 8-K item 2.02 (US companies, e.g. Meta)
 
     @property
@@ -108,7 +109,7 @@ def parse_config(raw: dict) -> Config:
         filing_format = str(s.get("filing_format", default_format))
         if filing_format not in FILING_FORMATS:
             raise ValueError(f"{symbol}: unknown filing format {filing_format}; available formats: {sorted(FILING_FORMATS)}")
-        foreign_formats = {"press_release": "US", "us_press_release": "US", "kifrs_statements": "KR", "cn_report": "CN"}  # non-HK formats only apply to their own market
+        foreign_formats = {"press_release": "US", "us_press_release": "US", "us_gaap_statements": "US", "kifrs_statements": "KR", "cn_report": "CN"}  # non-HK formats only apply to their own market
         if foreign_formats.get(filing_format, "HK" if market == "HK" else None) != market:
             raise ValueError(f"{symbol}: filing format {filing_format} does not match market {market}")
         cik = int(s["cik"]) if s.get("cik") is not None else None
@@ -117,6 +118,9 @@ def parse_config(raw: dict) -> Config:
         sec_form = str(s.get("sec_form", "6-K")).upper()
         if sec_form not in ("6-K", "8-K"):
             raise ValueError(f"{symbol}: sec_form must be 6-K or 8-K, got {sec_form}")
+        sec_exhibit = str(s.get("sec_exhibit", "release"))
+        if sec_exhibit not in ("release", "us_gaap_statements"):
+            raise ValueError(f"{symbol}: sec_exhibit must be release or us_gaap_statements, got {sec_exhibit}")
         stocks.append(
             StockConfig(
                 symbol=symbol,
@@ -126,6 +130,7 @@ def parse_config(raw: dict) -> Config:
                 market=market,
                 cik=cik,
                 sec_form=sec_form,
+                sec_exhibit=sec_exhibit,
             )
         )
     if not stocks:
