@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from valuation_monitor.providers.base import Filing
+from valuation_monitor.providers.base import Filing, save_index
 from valuation_monitor.providers.http import HttpClient
 
 BASE_URL = "https://www1.hkexnews.hk"
@@ -88,7 +88,7 @@ class HkexProvider:
 
         if added:
             index.sort(key=lambda e: e["published"])
-            index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            save_index(index_path, index)
         return sorted(filings, key=lambda f: f.published)
 
     def _search(self, symbol: str, since: datetime) -> list[dict]:

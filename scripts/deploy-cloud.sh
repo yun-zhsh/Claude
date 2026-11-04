@@ -82,7 +82,27 @@ if [ "$WHAT" = mcp ]; then
     --add-volume-mount volume=data,mount-path=/data \
     --allow-unauthenticated \
     --min-instances 0 --max-instances 2 --concurrency 20 --memory 1Gi --timeout 60
-  echo "MCP endpoint: $(gcloud run services describe valuation-mcp --region "$REGION" --format='value(status.url)')/mcp"
+  MCP_URL="$(gcloud run services describe valuation-mcp --region "$REGION" --format='value(status.url)')/mcp"
+  echo "MCP endpoint: ${MCP_URL}"
+
+  # The service is only as good as every stock it can load under its own conditions (no secret, read-only bucket): ask it for all of them.
+  phase "Check the deployed service (every stock must load)"
+  REPLY="$(mktemp)"
+  curl -sS -m 120 -X POST "$MCP_URL" -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' -o "$REPLY" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_stocks","arguments":{}}}' \
+    && python3 - "$REPLY" <<'PY' \
+    || { echo "The MCP service is deployed but NOT healthy: see above. To switch it off: gcloud run services remove-iam-policy-binding valuation-mcp --region=$REGION --member=allUsers --role=roles/run.invoker" >&2; exit 1; }
+import json, sys
+
+reply = json.load(open(sys.argv[1]))
+if "result" not in reply or reply["result"].get("isError"):
+    sys.exit(f"ERROR: list_stocks failed: {reply}")
+stocks = json.loads(reply["result"]["content"][0]["text"])["stocks"]
+failed = [f"{s['symbol']}: {s['error']}" for s in stocks if "error" in s]
+print(f"{len(stocks) - len(failed)} of {len(stocks)} stocks load")
+if failed:
+    sys.exit("ERROR: the deployed service cannot load " + "; ".join(failed))
+PY
 fi
 
 echo

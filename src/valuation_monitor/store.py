@@ -132,7 +132,8 @@ class PriceStore:
         final = consolidate(tencent, yahoo)
         today = pd.Timestamp.now(tz=market.timezone).tz_localize(None).normalize()
         saved = final[final.index < today]
-        self.db.write_series("prices_final", {"symbol": symbol}, saved[FINAL_COLUMNS], prune=True)
+        if not self.db.readonly:  # a read-only database (the MCP server) only reads what the update job saved
+            self.db.write_series("prices_final", {"symbol": symbol}, saved[FINAL_COLUMNS], prune=True)
         close = split_adjust(final["close"], splits) if market.cross_checks_prices else final["close"]
         currency = self.quotes.currency if market.cross_checks_prices else yahoo_meta["currency"]
         return PriceHistory(close[close.index >= pd.Timestamp(start).normalize()], splits, currency, market.timezone)
@@ -257,7 +258,8 @@ class EarningsStore:
                 print(f"{symbol}: cannot parse the provisional data {f.url} ({e}); waiting for the official report", file=sys.stderr)
         history = build_history(adjust_for_splits(parsed, splits), splits)
 
-        self.db.write_frame("announcements", symbol, announcements_to_frame(parsed, version), text=True)
-        self.db.write_frame("periods", symbol, history.periods_frame(trading_days))
-        self.db.write_frame("ttm", symbol, history.ttm_frame(trading_days), date_format="%Y-%m-%d")
+        if not self.db.readonly:  # the saved frames are a cache of what was just computed; a read-only database (the MCP server) keeps its copy as it is
+            self.db.write_frame("announcements", symbol, announcements_to_frame(parsed, version), text=True)
+            self.db.write_frame("periods", symbol, history.periods_frame(trading_days))
+            self.db.write_frame("ttm", symbol, history.ttm_frame(trading_days), date_format="%Y-%m-%d")
         return history

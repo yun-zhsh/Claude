@@ -226,7 +226,7 @@ warning: the latest earnings used are preliminary (earnings call presentation, n
 ```
 
 With `as_of="2025-03-31"` the same question gives PB 1.00 at the 4.1th percentile, from the 2024 Q4 statements published on 2025-01-31: nothing
-published later is used. The four rules (read-only, sourced, point in time, no model arithmetic), the tools, the setup for Claude Desktop and
+published later is used (where a later document replaced a first release, the answer says so). The four rules (read-only, sourced, point in time, no model arithmetic), the tools, the setup for Claude Desktop and
 Claude Code, running it as a **public read-only Cloud Run service** (`scripts/deploy-cloud.sh mcp`, so an assistant anywhere can use it by a
 URL; rate-limited, a service account that can only read the bucket), and the limits are in [docs/mcp-server.md](docs/mcp-server.md).
 

@@ -428,3 +428,51 @@ def test_history_gives_the_extremes_with_their_dates_even_when_thinning_skips_th
     window = detail[detail.index >= detail.index[-1] - pd.DateOffset(years=2)]
     assert result["max"] == {"value": round(float(window.max()), 4), "date": f"{window.idxmax():%Y-%m-%d}"}
     assert result["min"]["date"] == f"{window.idxmin():%Y-%m-%d}"
+
+
+# ---- figures that came from a document published later than the record's time ------------------------------------------------------
+
+
+def with_release(service, document_published="2025-08-20 12:00", first_url="https://filings.example/express-2025Q2.pdf"):
+    from valuation_monitor.providers.base import Release
+
+    published = None if document_published is None else pd.Timestamp(document_published)
+    public_by = published if published is not None else pd.Timestamp("2025-08-01 17:00") + pd.Timedelta(days=60)
+    release = Release(pd.Timestamp("2025-08-01 17:00"), "express report", first_url, published, public_by)
+    service._release_info = lambda stock: {"https://filings.example/2025Q2.pdf": release}
+    service._cache.clear()
+    return service
+
+
+def test_before_the_final_document_the_link_is_the_one_that_was_public(service):
+    with_release(service)
+    early = service.valuation("0700.HK", "pe", 1, "2025-08-12")
+    record = early["sources"]["earnings_record"]
+    assert record["period"] == "2025Q2" and record["preliminary"] is True
+    assert record["filing_url"] == "https://filings.example/express-2025Q2.pdf"  # not the document that did not exist yet
+    assert record["figures_document"] == {"url": "https://filings.example/2025Q2.pdf", "published": "2025-08-20 12:00", "public_by": "2025-08-20", "public_on_as_of": False}
+    assert record["first_release"]["kind"] == "express report"
+    assert any("may not have been public in their final form" in w and "2025-08-20" in w for w in early["warnings"])
+    assert all(c["filing_url"] != "https://filings.example/2025Q2.pdf" for c in early["sources"]["components"])
+    assert any(c["document_public_on_as_of"] is False for c in early["sources"]["components"])
+
+    late = service.valuation("0700.HK", "pe", 1, "2025-08-25")
+    assert late["sources"]["earnings_record"]["filing_url"] == "https://filings.example/2025Q2.pdf" and late["sources"]["earnings_record"]["preliminary"] is False
+    assert late["sources"]["earnings_record"]["figures_document"]["public_on_as_of"] is True
+    assert not [w for w in late["warnings"] if "final form" in w]
+
+
+def test_an_unrecorded_publication_day_counts_as_possibly_late_for_a_set_number_of_days(service):
+    with_release(service, document_published=None, first_url=None)
+    within = service.valuation("0700.HK", "pe", 1, "2025-09-15")
+    assert within["sources"]["earnings_record"]["preliminary"] is True and within["sources"]["earnings_record"]["filing_url"] is None
+    assert any("no recorded publication day" in w and "2025-09-30" in w for w in within["warnings"])
+    after = service.valuation("0700.HK", "pe", 1, "2025-10-05")
+    assert after["sources"]["earnings_record"]["preliminary"] is False and after["sources"]["earnings_record"]["filing_url"] == "https://filings.example/2025Q2.pdf"
+
+
+def test_the_filing_list_shows_the_same(service):
+    with_release(service)
+    rows = {f["period"]: f for f in service.filings("0700.HK", "2025-08-12")["filings"]}
+    assert rows["2025Q2"]["preliminary"] is True and rows["2025Q2"]["filing_url"] == "https://filings.example/express-2025Q2.pdf"
+    assert rows["2025Q1"]["preliminary"] is False and "figures_document" not in rows["2025Q1"]

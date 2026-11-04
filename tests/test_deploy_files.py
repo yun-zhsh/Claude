@@ -55,3 +55,9 @@ def test_the_public_mcp_service_is_separate_read_only_and_limited():
 
 def test_the_image_contains_the_mcp_library():
     assert "'.[cloud,mcp]'" in (ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+
+def test_the_deployment_fails_when_a_stock_cannot_be_loaded():
+    text = (ROOT / "scripts" / "deploy-cloud.sh").read_text(encoding="utf-8")
+    block = text[text.index('phase "Check the deployed service'):]
+    assert '"name":"list_stocks"' in block and '"error" in s' in block and "sys.exit" in block and "exit 1" in block

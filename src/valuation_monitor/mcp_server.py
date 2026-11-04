@@ -39,6 +39,7 @@ from valuation_monitor.config import Config, StockConfig, load_config
 from valuation_monitor.data import StockData
 from valuation_monitor.filings import effective_day, period_label
 from valuation_monitor.market_calendar import get_market
+from valuation_monitor.providers.base import Release
 from valuation_monitor.metrics import METRICS
 from valuation_monitor.service import Monitor
 
@@ -69,6 +70,20 @@ RULES = (
 )
 
 
+def release_warning(release: Release, cutoff: pd.Timestamp) -> str:
+    """Why a record asked for on `cutoff` links to an earlier document than the one its figures come from."""
+    link = "the link given" if release.first_url else "(no link to it is on record)"
+    if release.document_published is not None:
+        when = f"the document they come from was published only on {release.document_published:%Y-%m-%d %H:%M}"
+    else:
+        when = f"the document they come from has no recorded publication day and may have come out as late as {release.public_by:%Y-%m-%d}"
+    return (
+        f"On {_day(cutoff)} the figures of this record may not have been public in their final form: {when}. "
+        f"What was public from {release.first_published:%Y-%m-%d %H:%M} was the {release.first_kind} ({link}); its figures can differ slightly "
+        f"from the ones used here, which are those of the later document."
+    )
+
+
 class RequestError(ValueError):
     """A request that cannot be answered; the message says why and what can be asked instead."""
 
@@ -95,6 +110,7 @@ class Loaded:
     data: StockData
     details: dict[str, pd.DataFrame]  # metric key -> the metric's daily calculation (PriceMultiple.detail)
     final: pd.DataFrame | None  # prices_final: source and cross-check status of each day
+    releases: dict[str, Release]  # filing url -> what was public before that document (see providers/base.py)
 
 
 class ValuationService:
@@ -151,9 +167,27 @@ class ValuationService:
             data = self.monitor.loader.load(stock)
             details = {key: METRICS[key].detail(data) for key in stock.metrics}
             final = self.monitor.prices.final(stock.symbol)
-        loaded = Loaded(data, details, final)
+            releases = self._release_info(stock)
+        loaded = Loaded(data, details, final, releases)
         self._cache[stock.symbol] = (mtime, loaded)
         return loaded
+
+    def _release_info(self, stock: StockConfig) -> dict[str, Release]:
+        loader = self.monitor.loader
+        provider = {"CN": loader.cninfo, "KR": loader.samsung}.get(stock.market)
+        return provider.release_info(stock.symbol) if provider is not None else {}
+
+    @staticmethod
+    def _as_public(releases: dict[str, Release], url: str | None, cutoff: pd.Timestamp) -> tuple[str | None, Release | None]:
+        """The link to show for a filing on the cutoff day, and the Release if that day is before the filing's document was public.
+
+        A record keeps the time its figures first became public; when a later document (the annual report after the express report) supplied the
+        exact figures, the link to that document would point to a file that did not exist yet. Then the link shown is the one that was public.
+        """
+        release = releases.get(url) if url else None
+        if release is None or pd.Timestamp(cutoff).normalize() >= release.public_by.normalize():
+            return url, None
+        return release.first_url, release
 
     def _metric(self, stock: StockConfig, key: str):
         key = str(key).strip().lower()
@@ -253,6 +287,11 @@ class ValuationService:
         close_row = loaded.final.loc[value_day] if loaded.final is not None and value_day in loaded.final.index else None
         per_share, fx = float(row["per_share"]), float(row["fx"])
         market = get_market(stock.market)
+        record_url = self._filing_url(earnings, rec)
+        shown_url, early = self._as_public(loaded.releases, record_url, cutoff)
+        components = self._components(earnings, rec, m.column, cutoff, loaded.releases)
+        for release in {id(r): r for r in [early, *self._early_releases(components, loaded.releases, cutoff)] if r is not None}.values():
+            warnings.append(release_warning(release, cutoff))
 
         return {
             "symbol": stock.symbol,
@@ -291,10 +330,11 @@ class ValuationService:
                     "published": rec["published"],
                     "published_timezone": market.timezone,
                     "effective_trading_day": _day(effective_day(fundamentals["available_date"], data.close.index)),
-                    "filing_url": self._filing_url(earnings, rec),
-                    "preliminary": bool(rec.get("provisional")),
+                    "filing_url": shown_url,
+                    "preliminary": bool(rec.get("provisional")) or early is not None or any(c["document_public_on_as_of"] is False for c in components),
+                    **self._figures_document(loaded.releases, record_url, early),
                 },
-                "components": self._components(earnings, rec, m.column, cutoff),
+                "components": components,
                 "price": {
                     "day": _day(value_day),
                     "close": _float(row["close"], 3),
@@ -341,22 +381,27 @@ class ValuationService:
         asked = parse_date(as_of, "as_of")
         if not 1 <= int(limit) <= 50:
             raise RequestError("limit must be between 1 and 50")
-        data = self._load(stock).data
+        loaded = self._load(stock)
+        data = loaded.data
         earnings = data.earnings
+        cutoff = asked if asked is not None else data.close.index[-1]
         rows = []
         for i, rec in enumerate(earnings.ttm_detail):
             available = pd.Timestamp(data.fundamentals.iloc[i]["available_date"])  # the first calendar day whose close may use the filing
             if asked is not None and available > asked:
                 continue
             effective = effective_day(available, data.close.index)
+            url = self._filing_url(earnings, rec)
+            shown_url, early = self._as_public(loaded.releases, url, cutoff)
             rows.append(
                 {
                     "period": rec["period_label"],
                     "published": rec["published"],
                     "published_timezone": get_market(stock.market).timezone,
                     "effective_trading_day": None if effective is None else f"{effective:%Y-%m-%d}",
-                    "filing_url": self._filing_url(earnings, rec),
-                    "preliminary": bool(rec.get("provisional")),
+                    "filing_url": shown_url,
+                    "preliminary": bool(rec.get("provisional")) or early is not None,
+                    **self._figures_document(loaded.releases, url, early),
                 }
             )
         rows.sort(key=lambda r: (r["published"], r["period"]), reverse=True)
@@ -372,7 +417,29 @@ class ValuationService:
         return None
 
     @staticmethod
-    def _components(earnings, rec: dict, column: str, cutoff: pd.Timestamp) -> list[dict]:
+    def _figures_document(releases: dict[str, Release], url: str | None, early: Release | None) -> dict:
+        """When the figures of a record come from a document published after the record's own time: that document, and what was public first."""
+        release = releases.get(url) if url else None
+        if release is None:
+            return {}
+        out = {
+            "figures_document": {
+                "url": url,
+                "published": None if release.document_published is None else f"{release.document_published:%Y-%m-%d %H:%M}",
+                "public_by": f"{release.public_by:%Y-%m-%d}",
+                "public_on_as_of": early is None,
+            }
+        }
+        if early is not None:
+            out["first_release"] = {"kind": release.first_kind, "published": f"{release.first_published:%Y-%m-%d %H:%M}", "url": release.first_url}
+        return out
+
+    @staticmethod
+    def _early_releases(components: list[dict], releases: dict[str, Release], cutoff: pd.Timestamp) -> list[Release]:
+        return [r for c in components if c["document_public_on_as_of"] is False and (r := releases.get(c.get("figures_document_url"))) is not None]
+
+    @staticmethod
+    def _components(earnings, rec: dict, column: str, cutoff: pd.Timestamp, releases: dict[str, Release]) -> list[dict]:
         """For each value that went into the per-share figure: its period, value, when it was first published and in which filing.
 
         Later filings repeat earlier figures; only those already in effect on the cutoff day count as confirmations.
@@ -385,6 +452,8 @@ class ValuationService:
             quarter = next((q for p, q in earnings.quarters[series].items() if label_of(p) == label), None)
             if quarter is None:
                 return
+            url = quarter.observations[0].url
+            shown_url, early = ValuationService._as_public(releases, url, cutoff)
             out.append(
                 {
                     "item": item,
@@ -392,7 +461,9 @@ class ValuationService:
                     "value": _float(value if value is not None else quarter.value, 4),
                     "unit": UNITS[series],
                     "first_published": f"{quarter.published:%Y-%m-%d %H:%M}",
-                    "filing_url": quarter.observations[0].url,
+                    "filing_url": shown_url,
+                    "document_public_on_as_of": None if url not in releases else early is None,
+                    **({"figures_document_url": url} if url in releases else {}),
                     "confirming_filings": sum(1 for o in quarter.observations if o.url in known),
                     "derived_from_cumulative_figures": derived,
                 }

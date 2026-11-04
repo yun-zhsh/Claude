@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from valuation_monitor.providers.base import Filing
+from valuation_monitor.providers.base import Filing, save_index
 from valuation_monitor.providers.http import HttpClient
 
 USER_AGENT_ENV = "SEC_USER_AGENT"
@@ -92,8 +92,7 @@ class SecProvider:
 
         if added:
             index.sort(key=lambda e: e["published"])
-            folder.mkdir(parents=True, exist_ok=True)
-            index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            save_index(index_path, index)
 
         since_ts = pd.Timestamp(since)
         return [
