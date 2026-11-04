@@ -1,0 +1,736 @@
+[
+  {
+    "accession": "0001193125-14-406095",
+    "published": "2014-11-10T16:26:00",
+    "results": false
+  },
+  {
+    "accession": "0001193125-14-423554",
+    "published": "2014-11-24T17:18:15",
+    "results": false
+  },
+  {
+    "accession": "0001193125-14-453707",
+    "published": "2014-12-24T16:52:09",
+    "results": false
+  },
+  {
+    "accession": "0001193125-15-015629",
+    "published": "2015-01-21T10:05:38",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000119312515015629/d854985dex994.htm",
+    "file": "2015-01-21_d854985dex994.htm"
+  },
+  {
+    "accession": "0001193125-15-042625",
+    "published": "2015-02-11T06:10:08",
+    "results": false
+  },
+  {
+    "accession": "0001193125-15-060206",
+    "published": "2015-02-24T17:19:52",
+    "results": false
+  },
+  {
+    "accession": "0001193125-15-072221",
+    "published": "2015-03-02T10:48:29",
+    "results": false
+  },
+  {
+    "accession": "0001193125-15-121438",
+    "published": "2015-04-07T16:38:35",
+    "results": false
+  },
+  {
+    "accession": "0001193125-15-122967",
+    "published": "2015-04-08T17:14:00",
+    "results": false
+  },
+  {
+    "accession": "0001193125-15-130633",
+    "published": "2015-04-15T12:06:03",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000119312515130633/d909351dex993.htm",
+    "file": "2015-04-15_d909351dex993.htm"
+  },
+  {
+    "accession": "0001193125-15-141046",
+    "published": "2015-04-22T08:06:59",
+    "results": false
+  },
+  {
+    "accession": "0001193125-15-142080",
+    "published": "2015-04-22T16:46:01",
+    "results": false
+  },
+  {
+    "accession": "0000937966-15-000005",
+    "published": "2015-07-15T06:40:05",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796615000005/usgaapfinancialstatementsq.htm",
+    "file": "2015-07-15_usgaapfinancialstatementsq.htm"
+  },
+  {
+    "accession": "0000937966-15-000008",
+    "published": "2015-10-14T06:29:42",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796615000008/financialstatementsusgaapq.htm",
+    "file": "2015-10-14_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-16-423594",
+    "published": "2016-01-07T17:14:33",
+    "results": false
+  },
+  {
+    "accession": "0000937966-16-000010",
+    "published": "2016-01-20T06:07:26",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796616000010/financialstatementsusgaapq.htm",
+    "file": "2016-01-20_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-16-000015",
+    "published": "2016-02-05T06:08:07",
+    "results": false
+  },
+  {
+    "accession": "0001193125-16-483823",
+    "published": "2016-02-29T09:26:41",
+    "results": false
+  },
+  {
+    "accession": "0000937966-16-000020",
+    "published": "2016-04-20T07:28:02",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796616000020/financialstatementsusgaapq.htm",
+    "file": "2016-04-20_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-16-576173",
+    "published": "2016-05-04T07:17:11",
+    "results": false
+  },
+  {
+    "accession": "0001193125-16-622975",
+    "published": "2016-06-16T06:08:34",
+    "results": false
+  },
+  {
+    "accession": "0001341004-16-001535",
+    "published": "2016-07-05T11:50:44",
+    "results": false
+  },
+  {
+    "accession": "0000937966-16-000024",
+    "published": "2016-07-20T07:42:24",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796616000024/financialstatementsusgaapq.htm",
+    "file": "2016-07-20_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001341004-16-001589",
+    "published": "2016-08-03T13:24:34",
+    "results": false
+  },
+  {
+    "accession": "0000937966-16-000027",
+    "published": "2016-10-19T06:48:14",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796616000027/financialstatementsusgaapq.htm",
+    "file": "2016-10-19_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001341004-16-001720",
+    "published": "2016-10-31T11:02:20",
+    "results": false
+  },
+  {
+    "accession": "0001341004-16-001726",
+    "published": "2016-11-03T10:42:29",
+    "results": false
+  },
+  {
+    "accession": "0000937966-17-000003",
+    "published": "2017-01-18T07:59:24",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796617000003/financialstatementsusgaapq.htm",
+    "file": "2017-01-18_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-17-000005",
+    "published": "2017-02-08T06:13:29",
+    "results": false
+  },
+  {
+    "accession": "0001341004-17-000126",
+    "published": "2017-03-07T09:50:04",
+    "results": false
+  },
+  {
+    "accession": "0000937966-17-000010",
+    "published": "2017-04-19T06:17:22",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796617000010/financialstatementsusgaapq.htm",
+    "file": "2017-04-19_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001341004-17-000261",
+    "published": "2017-04-24T13:21:23",
+    "results": false
+  },
+  {
+    "accession": "0001341004-17-000278",
+    "published": "2017-04-28T16:05:25",
+    "results": false
+  },
+  {
+    "accession": "0001341004-17-000409",
+    "published": "2017-06-28T14:47:12",
+    "results": false
+  },
+  {
+    "accession": "0000937966-17-000014",
+    "published": "2017-07-19T07:26:56",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796617000014/financialstatementsusgaapq.htm",
+    "file": "2017-07-19_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001341004-17-000451",
+    "published": "2017-07-20T08:59:19",
+    "results": false
+  },
+  {
+    "accession": "0001341004-17-000483",
+    "published": "2017-08-01T10:58:30",
+    "results": false
+  },
+  {
+    "accession": "0001341004-17-000581",
+    "published": "2017-09-12T14:46:39",
+    "results": false
+  },
+  {
+    "accession": "0000937966-17-000017",
+    "published": "2017-10-18T07:08:47",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796617000017/financialstatementsusgaapq.htm",
+    "file": "2017-10-18_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001341004-17-000725",
+    "published": "2017-11-20T13:11:46",
+    "results": false
+  },
+  {
+    "accession": "0000937966-18-000003",
+    "published": "2018-01-17T07:10:38",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796618000003/financialstatementsusgaapq.htm",
+    "file": "2018-01-17_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001341004-18-000032",
+    "published": "2018-01-17T15:06:36",
+    "results": false
+  },
+  {
+    "accession": "0000937966-18-000008",
+    "published": "2018-02-07T06:27:41",
+    "results": false
+  },
+  {
+    "accession": "0001341004-18-000151",
+    "published": "2018-02-28T09:07:29",
+    "results": false
+  },
+  {
+    "accession": "0000937966-18-000011",
+    "published": "2018-04-18T06:12:15",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796618000011/financialstatementsusgaapq.htm",
+    "file": "2018-04-18_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001341004-18-000244",
+    "published": "2018-04-25T14:14:37",
+    "results": false
+  },
+  {
+    "accession": "0000937966-18-000014",
+    "published": "2018-07-18T06:13:20",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796618000014/financialstatementsusgaapq.htm",
+    "file": "2018-07-18_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001341004-18-000425",
+    "published": "2018-07-23T17:16:30",
+    "results": false
+  },
+  {
+    "accession": "0000937966-18-000019",
+    "published": "2018-10-17T06:29:36",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796618000019/financialstatementsusgaapq.htm",
+    "file": "2018-10-17_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-18-321882",
+    "published": "2018-11-08T07:41:01",
+    "results": false
+  },
+  {
+    "accession": "0001193125-18-323057",
+    "published": "2018-11-09T06:30:08",
+    "results": false
+  },
+  {
+    "accession": "0001193125-18-340472",
+    "published": "2018-12-03T08:40:07",
+    "results": false
+  },
+  {
+    "accession": "0000937966-19-000003",
+    "published": "2019-01-23T06:25:31",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796619000003/financialstatementsusgaapq.htm",
+    "file": "2019-01-23_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-19-014363",
+    "published": "2019-01-23T06:42:02",
+    "results": false
+  },
+  {
+    "accession": "0000937966-19-000009",
+    "published": "2019-02-06T06:17:44",
+    "results": false
+  },
+  {
+    "accession": "0000937966-19-000012",
+    "published": "2019-04-17T06:16:43",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796619000012/financialstatementsusgaapq.htm",
+    "file": "2019-04-17_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-19-130761",
+    "published": "2019-05-01T06:13:02",
+    "results": false
+  },
+  {
+    "accession": "0001193125-19-163369",
+    "published": "2019-06-03T07:05:04",
+    "results": false
+  },
+  {
+    "accession": "0000937966-19-000016",
+    "published": "2019-07-17T06:16:14",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796619000016/financialstatementsusgaapq.htm",
+    "file": "2019-07-17_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-19-000019",
+    "published": "2019-10-16T06:09:52",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796619000019/financialstatementsusgaapq.htm",
+    "file": "2019-10-16_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-20-000003",
+    "published": "2020-01-22T06:03:20",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796620000003/financialstatementsusgaapq.htm",
+    "file": "2020-01-22_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-20-000009",
+    "published": "2020-02-12T06:07:29",
+    "results": false
+  },
+  {
+    "accession": "0001193125-20-051179",
+    "published": "2020-02-27T08:50:03",
+    "results": false
+  },
+  {
+    "accession": "0001193125-20-089921",
+    "published": "2020-03-30T06:50:57",
+    "results": false
+  },
+  {
+    "accession": "0000937966-20-000014",
+    "published": "2020-04-15T06:03:58",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796620000014/financialstatementsusgaapq.htm",
+    "file": "2020-04-15_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-20-127508",
+    "published": "2020-04-30T06:26:03",
+    "results": false
+  },
+  {
+    "accession": "0000937966-20-000017",
+    "published": "2020-07-15T06:19:43",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796620000017/financialstatementsusgaapq.htm",
+    "file": "2020-07-15_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-20-197129",
+    "published": "2020-07-22T16:26:52",
+    "results": false
+  },
+  {
+    "accession": "0000937966-20-000020",
+    "published": "2020-10-14T06:02:20",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796620000020/financialstatementsusg.htm",
+    "file": "2020-10-14_financialstatementsusg.htm"
+  },
+  {
+    "accession": "0000937966-21-000003",
+    "published": "2021-01-20T06:03:15",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796621000003/financialstatementsusgaapq.htm",
+    "file": "2021-01-20_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-21-000009",
+    "published": "2021-02-10T06:17:20",
+    "results": false
+  },
+  {
+    "accession": "0000937966-21-000012",
+    "published": "2021-04-21T06:01:51",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796621000012/financialstatementsusgaapq.htm",
+    "file": "2021-04-21_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-21-156134",
+    "published": "2021-05-10T15:17:59",
+    "results": false
+  },
+  {
+    "accession": "0000937966-21-000016",
+    "published": "2021-07-21T06:04:06",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796621000016/financialstatementsusgaapq.htm",
+    "file": "2021-07-21_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-21-255123",
+    "published": "2021-08-24T16:39:59",
+    "results": false
+  },
+  {
+    "accession": "0001193125-21-285965",
+    "published": "2021-09-29T06:12:00",
+    "results": false
+  },
+  {
+    "accession": "0001193125-21-287742",
+    "published": "2021-09-30T13:51:57",
+    "results": false
+  },
+  {
+    "accession": "0000937966-21-000019",
+    "published": "2021-10-20T06:04:25",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796621000019/financialstatementsusgaapq.htm",
+    "file": "2021-10-20_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-21-314418",
+    "published": "2021-11-01T06:58:01",
+    "results": false
+  },
+  {
+    "accession": "0001193125-22-004166",
+    "published": "2022-01-07T10:33:58",
+    "results": false
+  },
+  {
+    "accession": "0000937966-22-000004",
+    "published": "2022-01-19T06:02:20",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796622000004/financialstatementsusgaapq.htm",
+    "file": "2022-01-19_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-22-011881",
+    "published": "2022-01-19T06:42:30",
+    "results": false
+  },
+  {
+    "accession": "0000937966-22-000011",
+    "published": "2022-02-09T06:08:18",
+    "results": false
+  },
+  {
+    "accession": "0001193125-22-076248",
+    "published": "2022-03-15T17:00:02",
+    "results": false
+  },
+  {
+    "accession": "0001193125-22-092693",
+    "published": "2022-04-01T06:22:00",
+    "results": false
+  },
+  {
+    "accession": "0000937966-22-000016",
+    "published": "2022-04-20T06:02:29",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796622000016/financialstatementsusgaapq.htm",
+    "file": "2022-04-20_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-22-130159",
+    "published": "2022-04-29T07:20:05",
+    "results": false
+  },
+  {
+    "accession": "0001193125-22-133140",
+    "published": "2022-04-29T15:05:01",
+    "results": false
+  },
+  {
+    "accession": "0000937966-22-000019",
+    "published": "2022-07-20T06:02:43",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796622000019/financialstatementsusgaapq.htm",
+    "file": "2022-07-20_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-22-205676",
+    "published": "2022-07-29T08:14:54",
+    "results": false
+  },
+  {
+    "accession": "0000937966-22-000022",
+    "published": "2022-10-19T06:02:41",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796622000022/financialstatementsusgaapq.htm",
+    "file": "2022-10-19_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001193125-22-282132",
+    "published": "2022-11-10T10:20:28",
+    "results": false
+  },
+  {
+    "accession": "0001193125-22-283523",
+    "published": "2022-11-14T06:13:51",
+    "results": false
+  },
+  {
+    "accession": "0000937966-23-000003",
+    "published": "2023-01-25T06:01:38",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796623000003/financialstatementsusgaapq.htm",
+    "file": "2023-01-25_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-23-000016",
+    "published": "2023-02-15T06:11:22",
+    "results": false
+  },
+  {
+    "accession": "0000937966-23-000019",
+    "published": "2023-04-19T06:01:42",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796623000019/financialstatementsusgaapq.htm",
+    "file": "2023-04-19_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-23-000026",
+    "published": "2023-07-19T06:01:43",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796623000026/financialstatementsusgaapq.htm",
+    "file": "2023-07-19_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-23-000029",
+    "published": "2023-10-18T06:01:10",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796623000029/financialstatementsusgaapq.htm",
+    "file": "2023-10-18_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-23-000031",
+    "published": "2023-11-30T06:09:11",
+    "results": false
+  },
+  {
+    "accession": "0000937966-24-000003",
+    "published": "2024-01-24T06:01:45",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796624000003/financialstatementsusgaapq.htm",
+    "file": "2024-01-24_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-24-000010",
+    "published": "2024-02-14T06:15:42",
+    "results": false
+  },
+  {
+    "accession": "0000937966-24-000013",
+    "published": "2024-04-17T06:01:20",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796624000013/financialstatementsusgaapq.htm",
+    "file": "2024-04-17_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-24-000019",
+    "published": "2024-07-17T06:02:09",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796624000019/financialstatementsusgaapq.htm",
+    "file": "2024-07-17_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-24-000022",
+    "published": "2024-10-15T11:34:59",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796624000022/financialstatementsusgaapq.htm",
+    "file": "2024-10-15_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-24-000024",
+    "published": "2024-11-14T06:05:00",
+    "results": false
+  },
+  {
+    "accession": "0000937966-24-000026",
+    "published": "2024-11-18T06:04:18",
+    "results": false
+  },
+  {
+    "accession": "0000937966-25-000003",
+    "published": "2025-01-29T06:02:42",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796625000003/financialstatementsusgaapq.htm",
+    "file": "2025-01-29_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0000937966-25-000011",
+    "published": "2025-03-05T08:15:50",
+    "results": false
+  },
+  {
+    "accession": "0000937966-25-000014",
+    "published": "2025-04-16T06:02:40",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000093796625000014/financialstatementsusgaapq.htm",
+    "file": "2025-04-16_financialstatementsusgaapq.htm"
+  },
+  {
+    "accession": "0001628280-25-034992",
+    "published": "2025-07-16T06:02:29",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000162828025034992/financialstatementsusgaa.htm",
+    "file": "2025-07-16_financialstatementsusgaa.htm"
+  },
+  {
+    "accession": "0001628280-25-045043",
+    "published": "2025-10-15T06:01:05",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000162828025045043/financialstatementsusgaa.htm",
+    "file": "2025-10-15_financialstatementsusgaa.htm"
+  },
+  {
+    "accession": "0001628280-26-003701",
+    "published": "2026-01-28T06:03:31",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026003701/financialstatementsusgaa.htm",
+    "file": "2026-01-28_financialstatementsusgaa.htm"
+  },
+  {
+    "accession": "0001628280-26-011377",
+    "published": "2026-02-25T06:04:21",
+    "results": false
+  },
+  {
+    "accession": "0001628280-26-016671",
+    "published": "2026-03-11T09:00:00",
+    "results": false
+  },
+  {
+    "accession": "0001628280-26-025147",
+    "published": "2026-04-15T06:02:24",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026025147/financialstatementsusgaa.htm",
+    "file": "2026-04-15_financialstatementsusgaa.htm"
+  },
+  {
+    "accession": "0001628280-26-026703",
+    "published": "2026-04-23T08:47:08",
+    "results": false
+  },
+  {
+    "accession": "0001628280-26-048235",
+    "published": "2026-07-15T06:05:47",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026048235/financialstatementsusgaa.htm",
+    "file": "2026-07-15_financialstatementsusgaa.htm"
+  },
+  {
+    "accession": "0001628280-26-065813",
+    "published": "2026-10-14T06:01:18",
+    "results": true,
+    "title": "Summary US GAAP financial statements",
+    "url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026065813/financial_statementsxusx.htm",
+    "file": "2026-10-14_financial_statementsxusx.htm"
+  }
+]
