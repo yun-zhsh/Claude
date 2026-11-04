@@ -61,3 +61,10 @@ def test_consolidate_ex_date_next_to_missing_day():
     out = consolidate(frame(raw), frame(yahoo, yahoo_vol))
     assert out["status"].value_counts().to_dict() == {"agree": 19, "tencent_only": 1}
     assert out["yahoo_factor"].iloc[10] == 1.0
+
+
+def test_consolidate_with_an_empty_source_keeps_a_date_index():
+    """US, Korean and A-share stocks have no Tencent prices; with pandas 2 the combined index became a plain object index and broke date merges."""
+    yahoo = pd.DataFrame({"open": [1.0], "high": [1.0], "low": [1.0], "close": [1.0], "adjclose": [1.0], "volume": [10]}, index=pd.DatetimeIndex(["2026-01-02"]))
+    out = consolidate(pd.DataFrame(columns=["open", "high", "low", "close", "volume"], dtype=float), yahoo)
+    assert isinstance(out.index, pd.DatetimeIndex) and out.index.dtype.kind == "M"

@@ -115,3 +115,20 @@ def test_providers_report_what_was_public_first(tmp_path):
     info = SamsungIrProvider(None, tmp_path / "filings").release_info("005930.KS")
     assert list(info) == ["https://x/q2.pdf"] and info["https://x/q2.pdf"].document_published is None
     assert (info["https://x/q2.pdf"].public_by - info["https://x/q2.pdf"].first_published).days == STATEMENTS_LAG_DAYS
+
+
+def test_a_stale_saved_cache_is_recomputed_in_memory_and_never_written(tmp_path, read_only_data):
+    """The saved per-share tables are a cache of what the loader computes; if they differ (older job, other library version) the read-only server must not try to fix them."""
+    import hashlib
+    import sqlite3
+
+    copy = tmp_path / "valuation.db"
+    copy.write_bytes((ROOT / "data" / "valuation.db").read_bytes())
+    with sqlite3.connect(copy) as conn:
+        conn.execute("DELETE FROM ttm")
+        conn.execute("DELETE FROM periods")
+    before = hashlib.sha256(copy.read_bytes()).hexdigest()
+    service = open_service(str(ROOT / "config.yaml"), str(ROOT / "data"), db_path=str(copy))
+    failed = {s["symbol"]: s["error"] for s in service.list_stocks()["stocks"] if "error" in s}
+    assert not failed, failed
+    assert hashlib.sha256(copy.read_bytes()).hexdigest() == before

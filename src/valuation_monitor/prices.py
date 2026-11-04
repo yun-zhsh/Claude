@@ -26,7 +26,7 @@ FINAL_COLUMNS = ["close", "source", "status", "tencent_close", "yahoo_close_unad
 
 def valid_close(bars: pd.DataFrame) -> pd.Series:
     if bars.empty:
-        return pd.Series(dtype=float)
+        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))  # an empty series still needs a date index: with pandas 2 the combined index would be of objects
     return bars.loc[bars["volume"] > 0, "close"]
 
 
