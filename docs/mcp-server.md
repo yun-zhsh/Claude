@@ -9,7 +9,7 @@ tests (`tests/test_mcp_server.py`), not just requested in a prompt.
 | --- | --- | --- |
 | **Read-only** | A tool call cannot change or download anything. | The database is opened with SQLite's `mode=ro` and `PRAGMA query_only` (`db.py`: `Database(readonly=True)`); the server refuses to start on a writable database; the network layer is switched off (`Monitor(offline=True)`) and the request cache directory is `/dev/null`. Tests: writes raise, no file changes (hashes), sockets are blocked and nothing connects. |
 | **Sourced** | Every number comes with where it came from. | Each result lists the earnings record used (period, **publication time** with its time zone, **effective trading day**, **link to the original filing**), every figure that went into the per-share value (period, value, unit, first publication, link, number of confirming filings), the price used (day, source, cross-check status) and the **calculation written out by `audit.py`**, the same text as the chart tooltips on the web page. |
-| **Point in time** | Asking about a past day gives the answer someone would have got on that day. | Every tool takes `as_of` (YYYY-MM-DD). Only prices up to that day and filings already in effect by then are used, and the percentile window ends there. The strongest test removes every filing published after the day and checks that the answer is identical. |
+| **Point in time** | Asking about a past day gives the answer someone would have got on that day. | Every tool takes `as_of` (YYYY-MM-DD). Only prices up to that day and filings already in effect by then are used, and the percentile window ends there. The strongest test removes every filing published after the day and checks that the answer is identical. It cannot see a record that carries an earlier publication time than its document, so those cases have their own tests on the real saved data. |
 | **No model arithmetic** | The assistant does not calculate. | Ratios, percentiles, levels and statistics are computed in Python by the same code as the web page (`metrics/`, `analysis.py`); a test compares the two. The server returns finished numbers and tells the assistant to quote them as given. |
 
 ## Running it in the cloud
@@ -63,7 +63,7 @@ All four are declared `readOnlyHint`, non-destructive and closed-world in the pr
 
 **Warnings are part of the answer.** They say when the history is shorter than the years asked for (the percentile is then within a
 shorter window), when the newest earnings are preliminary (an earnings call deck or express report, replaced when the official report
-is out), when the newest price is old, and when `as_of` is after the saved data. A request that cannot be answered (unknown symbol,
+is out), when the newest price is old, and when `as_of` is after the saved data, and when the figures come from a document published after `as_of` (see the limits below). A request that cannot be answered (unknown symbol,
 a metric the company does not have, a day before the first filing, a loss period) is an error that says why; it never returns a guess.
 
 ## Setting it up
@@ -138,9 +138,17 @@ Being honest about the limits is part of the design.
 - **The assistant can still misquote.** The server returns finished, sourced numbers and instructions to quote them as given, and the tool
   descriptions ask for the sources and warnings to be repeated; it cannot force a model to do so. The result is built so a reader can check
   every claim against the filing link.
-- **Point in time covers data, not corrections.** Filings and prices are used as they were published. One thing is applied with today's
-  knowledge, and it is shown in the calculation text: per-share figures and prices before a stock split are converted to the current share
-  basis. A restated figure is not used: the first published value stays, and disagreements between filings are flagged in the reports.
+- **Point in time covers data, not corrections, and one case needs care.** Filings and prices are used as they were published. Per-share figures
+  and prices before a stock split are converted to the current share basis (shown in the calculation text). A restated figure is not used: the
+  first published value stays, and disagreements between filings are flagged in the reports. The case that needs care: when an official
+  document replaces preliminary figures (Hikvision's annual report after its express report, Samsung's English statements after the earnings call),
+  the record keeps the time the figures first became public, so the question "what was public on day X" has an answer between the first release
+  and the official document that this data cannot give exactly. The server does not hide it: for such days the record is marked
+  `preliminary`, the link is the document that was public then (for Samsung none is on record), `figures_document` says which later
+  document the numbers come from and when it was published, and a warning says the figures can differ slightly (the later document wins in this data;
+  EPS differs by a cent or so). Hikvision's report dates are known; Samsung's upload day is not recorded, so the 60 days after the call count as
+  possibly early. Keeping the preliminary figures as a record of their own until the official document takes effect would remove the difference;
+  it is a change to how the history is built and is on the to-do list in [operations.md](operations.md).
 - **Yahoo-only markets can lag.** US, Korean and A-share prices come from one source, whose newest day can arrive about a day late
   (see Known limitations in the README). `list_stocks` and the warnings show how old the newest price is.
 - **Not investment advice.** A percentile of a company's own past says nothing about its future or about other companies.

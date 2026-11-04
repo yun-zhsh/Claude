@@ -21,7 +21,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 from valuation_monitor.kifrs import eps_note_pages
-from valuation_monitor.providers.base import Filing
+from valuation_monitor.providers.base import Filing, Release, save_index
 from valuation_monitor.providers.http import HttpClient
 
 BASE = "https://images.samsung.com/is/content/samsung/assets/global/ir/docs/"
@@ -35,6 +35,7 @@ CALL_RE = re.compile(r"^(?P<q>[1-4])Q ?(?:FY)?(?P<year>\d{2}|\d{4}) Earnings Con
 CALL_TIME_RE = re.compile(r"^(?P<date>[A-Z][a-z]+ \d{1,2}, \d{4})(?:, (?P<hour>\d{1,2}):(?P<minute>\d\d) a\.m\. KST)?")
 DECK_RE = re.compile(r"(?P<year>20\d\d)_(?P<q>[1-4])Q_conference_eng\w*\.pdf")
 DEFAULT_CALL_TIME = "10:00"
+STATEMENTS_LAG_DAYS = 60  # the English statements have been seen 2 to 5 weeks after the call; after this many days they are taken to be public
 
 
 def parse_calls(html: str) -> dict[tuple[int, int], pd.Timestamp]:
@@ -87,6 +88,22 @@ class SamsungIrProvider:
         self.http = http
         self.archive_dir = Path(archive_dir)
 
+    def release_info(self, symbol: str) -> dict[str, Release]:
+        """For each report of the English statements: the earnings call presentation was public first (url -> Release).
+
+        The statements are uploaded some time after the call and that day is not recorded (the file dates on the website are unreliable),
+        so the record keeps the call time and `public_by` is an upper bound: STATEMENTS_LAG_DAYS after the call. Reads only the saved index.
+        """
+        index_path = self.archive_dir / symbol.upper() / "index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
+        out = {}
+        for e in index:
+            if e.get("provisional"):
+                continue  # still the call presentation itself
+            called = pd.Timestamp(e["published"])
+            out[e["url"]] = Release(called, "earnings call presentation", None, None, called + pd.Timedelta(days=STATEMENTS_LAG_DAYS))
+        return out
+
     def results_announcements(self, symbol: str, since: datetime) -> list[Filing]:
         """All quarterly results whose call is after `since`, in ascending order of publication time."""
         folder = self.archive_dir / symbol.upper()
@@ -103,7 +120,7 @@ class SamsungIrProvider:
             added = False
         if added:
             index.sort(key=lambda e: e["published"])
-            index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            save_index(index_path, index)
 
         since_ts = pd.Timestamp(since)
         by_quarter = {(e["year"], e["quarter"]): e for e in index}

@@ -35,7 +35,7 @@ import pandas as pd
 from pypdf import PdfReader, PdfWriter
 
 from valuation_monitor import cn_patterns as cn
-from valuation_monitor.providers.base import Filing
+from valuation_monitor.providers.base import Filing, Release, save_index
 from valuation_monitor.providers.http import HttpClient
 
 BASE = "https://www.cninfo.com.cn"
@@ -124,7 +124,7 @@ class CninfoProvider:
             added = False
         if added:
             index.sort(key=lambda e: (e["published"], e["id"]))
-            index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            save_index(index_path, index)
 
         reports = {(e["year"], e["quarter"]): e for e in index if e["kind"] == "report"}
         since_ts = pd.Timestamp(since)
@@ -156,6 +156,22 @@ class CninfoProvider:
                 )
             )
         return sorted(filings, key=lambda f: f.published)
+
+    def release_info(self, symbol: str) -> dict[str, Release]:
+        """For each periodic report that replaced an earlier express report: what was public first and when the report itself came out (url -> Release).
+
+        Reads only the saved index; nothing is fetched or written.
+        """
+        index_path = self.archive_dir / symbol.upper() / "index.json"
+        index = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else []
+        out = {}
+        for e in index:
+            if e["kind"] != "report":
+                continue
+            express = next((x for x in index if x["kind"] == "express" and (x["year"], x["quarter"]) == (e["year"], e["quarter"])), None)
+            if express is not None and pd.Timestamp(express["published"]) < pd.Timestamp(e["published"]):
+                out[e["url"]] = Release(pd.Timestamp(express["published"]), "express report", express["url"], pd.Timestamp(e["published"]), pd.Timestamp(e["published"]))
+        return out
 
     def _org_id(self, code: str) -> str:
         for item in self.http.post_json(f"{BASE}/new/information/topSearch/query", {"keyWord": code, "maxNum": 10}):
