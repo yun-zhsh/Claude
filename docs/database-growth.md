@@ -14,7 +14,9 @@ when, and what to do if the repository gets too big. It is written for whoever d
 | `data/valuation.db` itself | 4.1 MB (about 0.8 MB per company) |
 
 **The original filings, not the database, are what fills the repository.** They are added once per filing and never change, but
-every new company brings its whole history (about 15 MB in the pack). The database is small and grows slowly.
+every new company brings its whole history (about 15 MB in the pack for companies whose filings are PDFs).
+HTML filings are far cheaper: Meta, Cognizant and ASML (2026-11-04) added 58 MB of HTML files that git packs into **1.3 MB** (the quarterly
+releases are similar to each other, so git stores them as differences). The size to watch is therefore the number of PDF companies, not the number of companies. The database is small and grows slowly.
 
 ## The simulation
 
