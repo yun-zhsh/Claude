@@ -81,19 +81,19 @@ its sources (filing link, publication time, effective trading day and the writte
 data that was public by then is used, and all arithmetic stays in Python so the model only calls tools and explains the result. The cost is
 that the assistant can only answer what the tools offer, in return a wrong or unsourced number is hard to produce and easy to catch.
 
-**Status:** v0.4.0. Project conventions (English-only code and output, tests, how the data is written) are in [CLAUDE.md](CLAUDE.md).
+**Status:** v0.4.1. Project conventions (English-only code and output, tests, how the data is written) are in [CLAUDE.md](CLAUDE.md).
 
 ## What it tracks
 
 | Stock | Metrics | Earnings filings |
 | --- | --- | --- |
-| Tencent Holdings 0700.HK | PE (IFRS), PE (Non-IFRS), PS, PB | Quarterly, `highlights` layout |
-| Sunny Optical Technology 2382.HK | PE, PS, PB (only HKFRS data is disclosed, no Non-IFRS) | Half-yearly (interim, annual), `statements` layout |
-| JD.com (ADR) JD | PE, PE (Non-GAAP), PS, PB; the price is USD per ADS, EPS is RMB per ADS | Quarterly, 6-K press releases on SEC EDGAR, `press_release` layout |
 | Meta Platforms META | PE, PS, PB (USD, US GAAP, basic EPS; no Non-GAAP EPS is used) | Quarterly, earnings press releases (exhibit 99.1 of Form 8-K item 2.02) on SEC EDGAR, `us_press_release` layout |
 | Cognizant Technology Solutions CTSH | PE, PS, PB (USD, US GAAP, basic EPS; the company's adjusted diluted EPS is not used) | Quarterly, the same, `us_press_release` layout |
 | ASML Holding ASML | PE, PS, PB; the price is USD per NY registry share (the NASDAQ line, one share = one ordinary share), earnings are in EUR and converted with each day's EURUSD rate | Quarterly, the summary US GAAP financial statements furnished with each 6-K on SEC EDGAR, `us_gaap_statements` layout |
 | Samsung Electronics 005930.KS | PE, PS, PB (price and financials are both in KRW; no Non-GAAP data) | Quarterly, English consolidated financial statements on the Samsung IR website, `kifrs_statements` layout |
+| JD.com (ADR) JD | PE, PE (Non-GAAP), PS, PB; the price is USD per ADS, EPS is RMB per ADS | Quarterly, 6-K press releases on SEC EDGAR, `press_release` layout |
+| Tencent Holdings 0700.HK | PE (IFRS), PE (Non-IFRS), PS, PB | Quarterly, `highlights` layout |
+| Sunny Optical Technology 2382.HK | PE, PS, PB (only HKFRS data is disclosed, no Non-IFRS) | Half-yearly (interim, annual), `statements` layout |
 | Hikvision 002415.SZ | PE, PS, PB (A-share, RMB; the company discloses no Non-GAAP data) | Quarterly, Chinese periodic reports and annual express reports on CNINFO, `cn_report` layout |
 
 
