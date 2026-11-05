@@ -472,6 +472,17 @@ tests/                             unit tests (offline, no network access)
 - **Add a Korean stock**: only Samsung has a dedicated downloader (`providers/samsung.py`) at present; other Korean companies need a downloader for their own IR websites, or a connection to DART (see "To do").
 - **Always keep the software English-only** (see [CLAUDE.md](CLAUDE.md)): English stock names, English labels, and no Chinese in anything displayed or generated.
 
+## Planned: trading calendar
+
+A calendar module is designed but not built yet: for any date and exchange it will say whether it is a trading day, why not (weekend, a named
+holiday, an unplanned closure such as a typhoon or a day of mourning, a government make-up working day on which the exchange stays closed), what
+kind of day it is if it trades (regular, half day, a special session) and what the sessions are. It starts with the exchanges of the stocks here
+(HKEX, Nasdaq, KRX, SZSE) plus India's NSE, from 2000 to two years ahead. It is generated outside the program from sources and curated corrections,
+committed as data and only read at run time; the saved prices and an index per exchange check it, so a day is "confirmed", "predicted" or in
+"conflict". It will be available through the MCP server and as CSV and ICS downloads, and the update job will use it to check the price data
+and to count staleness in trading days. The complete specification and the plan (four pull requests) are in
+[docs/trading-calendar.md](docs/trading-calendar.md).
+
 ## To do
 
 Low priority, to be done when needed:

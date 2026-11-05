@@ -25,3 +25,4 @@
 - Run the tests with `.venv/bin/pytest` (offline).
 - Bump the layout's number in `PARSER_VERSIONS` (`filings.py`) whenever parsing rules or output text of a parser change.
 - The MCP server (`mcp_server.py`, docs/mcp-server.md) must stay read-only and offline. A new tool needs an `as_of` date, sources in its result, and no arithmetic outside Python, with tests in `tests/test_mcp_server.py`. Test it on the real saved data of every configured stock with writes refused and no secrets (`tests/test_mcp_production.py`), not only on synthetic data.
+- The trading calendar module is specified in `docs/trading-calendar.md` (decisions, data files, rules, the four pull requests, golden dates). Build it as written there; if something in it turns out wrong, correct the document in the same pull request.
