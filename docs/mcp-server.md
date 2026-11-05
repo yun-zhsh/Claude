@@ -59,6 +59,8 @@ gcloud run services remove-iam-policy-binding valuation-mcp --region=$REGION --m
 | `get_history(symbol, metric, years, as_of, points)` | Values over the window, thinned to at most 240 dates, with the minimum and maximum **and the days they happened** (thinning can skip a peak). |
 | `get_filings(symbol, as_of, limit)` | The earnings filings in effect on that day, newest first, with publication time, effective trading day and link. |
 
+The trading calendar tools (`list_exchanges`, `get_trading_day`, `trading_days`, `next_trading_day`) are designed in [trading-calendar.md](trading-calendar.md) and not built yet.
+
 All four are declared `readOnlyHint`, non-destructive and closed-world in the protocol, so a client can show them as safe to auto-approve.
 
 **Warnings are part of the answer.** They say when the history is shorter than the years asked for (the percentile is then within a
